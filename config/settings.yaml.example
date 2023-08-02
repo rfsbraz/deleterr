@@ -1,0 +1,70 @@
+# Plex connection details
+plex:
+  url: "http://localhost:32400"  # Replace with your Plex server URL
+  token: "YOUR_PLEX_TOKEN"  # Replace with your Plex server token
+
+# Radarr connection details. You can add multiple instances.
+radarr:
+  - name: "Radarr1"  # This is an identifier for your Radarr instance
+    url: "http://localhost:7878"  # Replace with your Radarr server URL
+    api_key: "YOUR_RADARR_API_KEY1"  # Replace with your Radarr API key
+
+  - name: "Radarr2"  # Another Radarr instance
+    url: "http://localhost:7879"
+    api_key: "YOUR_RADARR_API_KEY2"
+
+# Sonarr connection details. You can add multiple instances.
+sonarr:
+  - name: "Sonarr1"  # This is an identifier for your Sonarr instance
+    url: "http://localhost:8989"  # Replace with your Sonarr server URL
+    api_key: "YOUR_SONARR_API_KEY1"  # Replace with your Sonarr API key
+
+  - name: "Sonarr2"  # Another Sonarr instance
+    url: "http://localhost:8990"
+    api_key: "YOUR_SONARR_API_KEY2"
+
+# Tautulli connection details
+tautulli:
+  url: "http://localhost:8181"  # Replace with your Tautulli server URL
+  api_key: "YOUR_TAUTULLI_API_KEY"  # Replace with your Tautulli API key
+
+# If true, Deleterr will only log what it would do but not perform the actions
+dry_run: true
+
+# Library configuration
+libraries:
+  - name: "Movies"  # The name of your Plex library
+    action_mode: "delete"  # Actions can be "delete" 
+    free_space_threshold: 10  # Space threshold in GB. Actions only performed if free space is below this value
+    last_watched_days: 30  # Time threshold in days. Media not watched in this period will be subject to actions
+    last_added_days: 90  # Media not added in this period will be subject to actions
+    radarr: "Radarr1"  # The Radarr instance to use for this library
+    exclude:  # Media matching these criteria will not be subject to actions
+      tags: ["children", "favorite"]
+      genres: ["horror", "thriller"]
+      collections: ["Marvel Cinematic Universe"]
+      release_years: 5  # Media released in the last 5 years will not be subject to actions
+      trakt_lists: ["https://trakt.tv/users/username/lists/list-name"]  # Media in these Trakt lists will not be subject to actions
+
+  - name: "TV Shows"  # Another library
+    action_mode: "delete"
+    sonarr: "Sonarr2"
+    last_watched_season_days: 60
+    last_watched_show_days: 180
+    exclude:
+      tags: ["children", "favorite"]
+      genres: ["horror", "thriller"]
+      collections: ["Marvel Cinematic Universe"]
+      release_years: 5
+      trakt_lists: ["https://trakt.tv/users/username/lists/list-name"]
+
+  - name: "Anime"  # An Anime library
+    action_mode: "delete"
+    sonarr: "Sonarr1"
+    last_watched_season_days: 90
+    last_watched_show_days: 270
+    exclude:
+      tags: ["favorite"]
+      genres: ["slice of life"]
+      release_years: 3
+      trakt_lists: ["https://trakt.tv/users/username/lists/list-name"]

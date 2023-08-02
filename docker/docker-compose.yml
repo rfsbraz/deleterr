@@ -1,0 +1,10 @@
+version: '3'
+services:
+  deleterr:
+    build: .
+    volumes:
+      - .:/app
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
