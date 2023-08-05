@@ -53,9 +53,9 @@ class Deleterr:
                             if self.config.get("interactive"):
                                 logger.info("Would you like to delete movie '%s' from radarr instance '%s'? (y/n)", radarr_movie['title'], name)
                                 if input().lower() == 'y':
-                                    radarr.del_movie(radarr_movie['id'])
+                                    radarr.del_movie(radarr_movie['id'], delete_files=True)
                             else:
-                                radarr.del_movie(radarr_movie['id'])
+                                radarr.del_movie(radarr_movie['id'], delete_files=True)
                         else:
                             logger.info("[DRY-RUN] Would have deleted  movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
             
