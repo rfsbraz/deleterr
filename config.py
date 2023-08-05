@@ -19,6 +19,10 @@ class Config:
                     self.config["dry_run"] = True
                     logger.info("Running in dry-run mode, no changes will be made.")
 
+                if args.interactive:
+                    self.config["interactive"] = True
+                    logger.info("Running in interactive mode, you will be prompted before any changes are made.")
+
         except FileNotFoundError:
             logger.error(
                 f"Configuration file {config_file} not found. Copy the example config and edit it to your needs."

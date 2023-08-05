@@ -49,13 +49,26 @@ class Deleterr:
                     for radarr_movie in movies_needing_action:
                         logger.info("Deleting movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
                         if not self.config.get("dry_run"):
-                            radarr.del_movie(radarr_movie['id'])
+                            if self.config.get("interactive"):
+                                logger.info("Would you like to delete movie '%s' from radarr instance '%s'? (y/n)", radarr_movie['title'], name)
+                                if input().lower() == 'y':
+                                    radarr.del_movie(radarr_movie['id'])
+                            else:
+                                radarr.del_movie(radarr_movie['id'])
                         else:
                             logger.info("[DRY-RUN] Would have deleted  movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
             
             if not self.config.get("dry_run"):
-                movies_library.update()
-                self.tautulli.refresh_library(movies_library.key)
+                if self.config.get("interactive"):
+                    logger.info("Would you like to refresh plex library '%s'? (y/n)", movies_library.title)
+                    if input().lower() == 'y':
+                        movies_library.refresh()
+                    logger.info("Would you like to refresh tautulli library '%s'? (y/n)", movies_library.title)
+                    if input().lower() == 'y':
+                        self.tautulli.refresh_library(movies_library.key)
+                else:
+                    movies_library.refresh()
+                    self.tautulli.refresh_library(movies_library.key)
             else:
                 logger.info("[DRY-RUN] Would have updated plex library")
                 logger.info("[DRY-RUN] Would have updated tautulli library")
@@ -183,7 +196,9 @@ def main():
     parser.add_argument(
         '-q', '--quiet', action='store_true', help='Turn off console logging')
     parser.add_argument(
-        '-d', '--dry-run', action='store_true', default=True, help='Do not perform any actions when running')
+        '-d', '--dry-run', action='store_true', help='Do not perform any actions when running')
+    parser.add_argument(
+        '-i', '--interactive', action='store_true', help='Run in interactive mode')
     
     args = parser.parse_args()
 

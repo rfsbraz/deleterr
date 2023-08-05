@@ -38,6 +38,7 @@ libraries:
     free_space_threshold: 10  # Space threshold in GB. Actions only performed if free space is below this value
     last_watched_days: 30  # Time threshold in days. Media not watched in this period will be subject to actions
     last_added_days: 90  # Media not added in this period will be subject to actions
+    max_actions_per_run: 10  # Maximum number of actions to perform per run
     radarr: "Radarr1"  # The Radarr instance to use for this library
     exclude:
       tags: ["children", "favorite"]

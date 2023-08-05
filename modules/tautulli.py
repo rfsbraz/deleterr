@@ -41,7 +41,7 @@ class Tautulli:
     def refresh_library(self, section_id):
         self.api.get_library_media_info(section_id=section_id, refresh=True)
 
-    def get_activity(self, media_type, length=100):
+    def get_activity(self, media_type, length=10):
         # load the data
         history = self.api.get_history(media_type=media_type, length=length)
 
