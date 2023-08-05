@@ -4,8 +4,9 @@ import sys
 import requests
 from tautulli import RawAPI
 
+
 class Config:
-    def __init__(self, config_file):
+    def __init__(self, config_file, args):
         try:
             with open(config_file, "r") as stream:
                 self.config = yaml.safe_load(stream)
@@ -13,6 +14,11 @@ class Config:
                 if not self.validate_config():
                     logger.error("Invalid configuration, exiting.")
                     exit(1)
+
+                if args.dry_run:
+                    self.config["dry_run"] = True
+                    logger.info("Running in dry-run mode, no changes will be made.")
+
         except FileNotFoundError:
             logger.error(
                 f"Configuration file {config_file} not found. Copy the example config and edit it to your needs."
@@ -44,8 +50,7 @@ class Config:
             if not tautulli:
                 raise KeyError
             api = RawAPI(base_url=tautulli["url"], api_key=tautulli["api_key"])
-            resp = api.status()
-            logger.debug(f"Response: {resp}")
+            api.status()
             response.raise_for_status()
         except KeyError:
             logger.error("Tautulli configuration not found, check your configuration.")
