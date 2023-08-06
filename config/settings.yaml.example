@@ -28,6 +28,11 @@ tautulli:
   url: "http://localhost:8181"  # Replace with your Tautulli server URL
   api_key: "YOUR_TAUTULLI_API_KEY"  # Replace with your Tautulli API key
 
+# Overserr connection details
+overserr:
+  url: "http://localhost:8183"  # Replace with your Overserr server URL
+  api_key: "YOUR_OVERSEERR_API_KEY"  # Replace with your Overserr API key
+
 # If true, Deleterr will only log what it would do but not perform the actions
 dry_run: true
 

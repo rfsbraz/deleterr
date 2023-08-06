@@ -66,6 +66,26 @@ class Config:
             logger.debug(f"Error: {err}")
             valid = False
 
+        try:
+            overseerr = self.config.get("overseerr")
+            if not overseerr:
+                raise KeyError
+            
+            response = requests.get(
+                    f"{overseerr['url']}/api/v1/settings/about",
+                    headers={"Content-Type": "application/json", "X-Api-Key": overseerr["api_key"]},
+                )
+            response.raise_for_status()
+        except KeyError:
+            logger.error("overseerr configuration not found, check your configuration.")
+            valid = False
+        except Exception as err:
+            logger.error(
+                f"Failed to connect to overseerr at {overseerr['url']}, check your configuration."
+            )
+            logger.debug(f"Error: {err}")
+            valid = False
+
         for library in self.config.get("libraries", []):
             if library["action_mode"] not in ["delete", "unmonitor"]:
                 print(

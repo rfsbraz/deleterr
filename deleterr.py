@@ -16,6 +16,7 @@ from modules.tautulli import Tautulli
 import logger
 from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound
+from pyoverseerr import Overseerr
 
 logging.basicConfig()
 
@@ -26,6 +27,7 @@ class Deleterr:
         # Setup connections
         self.tautulli = Tautulli(config)
         self.plex = PlexServer(config.get("plex", "url"), config.get("plex", "token"), timeout=120)
+        self.overseerr = Overseerr(url=config.get("overseerr", "url"), api_key=config.get("overseerr", "api_key"))
         self.sonarr = {connection['name']: SonarrAPI(connection["url"],connection["api_key"]) for connection in config.config.get("sonarr", [])}
         self.radarr = {connection['name']: RadarrAPI(connection["url"],connection["api_key"]) for connection in config.config.get("radarr", [])}
         self.plex_movie_map = self.plex_show_map = {}
