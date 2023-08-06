@@ -33,7 +33,6 @@ class Config:
             sys.exit(1)
 
     def validate_config(self):
-        valid = True
         for connection in self.config.get("sonarr") + self.config.get("radarr"):
             try:
                 response = requests.get(
@@ -47,7 +46,7 @@ class Config:
                     f"Failed to connect to {connection['name']} at {connection['url']}, check your configuration."
                 )
                 logger.debug(f"Error: {err}")
-                valid = False
+                return False
 
         try:
             tautulli = self.config.get("tautulli")
@@ -58,22 +57,22 @@ class Config:
             response.raise_for_status()
         except KeyError:
             logger.error("Tautulli configuration not found, check your configuration.")
-            valid = False
+            return False
         except Exception as err:
             logger.error(
                 f"Failed to connect to tautulli at {tautulli['url']}, check your configuration."
             )
             logger.debug(f"Error: {err}")
-            valid = False
+            return False
 
         for library in self.config.get("libraries", []):
             if library["action_mode"] not in ["delete", "unmonitor"]:
                 print(
                     f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete' or 'unmonitor'."
                 )
-                valid = False
+                return False
 
-        return valid
+        return True
 
     def get(self, *keys, default=None):
         """
