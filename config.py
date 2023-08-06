@@ -3,8 +3,7 @@ import logger
 import sys
 import requests
 from tautulli import RawAPI
-from trakt import Trakt
-
+from modules.trakt import Trakt
 
 class Config:
     def __init__(self, config_file, args):
@@ -37,13 +36,8 @@ class Config:
         trakt_configured = False
         if self.config.get("trakt"):
             try:
-                Trakt.configuration.defaults.client(
-                    id=self.config.get("trakt").get("client_id"),
-                    secret=self.config.get("trakt").get("client_secret"),
-                )
-
-                # Test connection
-                Trakt['lists'].trending(exceptions=True, per_page=1)
+                t = Trakt(self.config)
+                t.test_connection()
                 trakt_configured = True
             except Exception as err:
                 logger.error(
