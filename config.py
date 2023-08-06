@@ -3,6 +3,7 @@ import logger
 import sys
 import requests
 from tautulli import RawAPI
+from trakt import Trakt
 
 
 class Config:
@@ -33,6 +34,24 @@ class Config:
             sys.exit(1)
 
     def validate_config(self):
+        trakt_configured = False
+        if self.config.get("trakt"):
+            try:
+                Trakt.configuration.defaults.client(
+                    id=self.config.get("trakt").get("client_id"),
+                    secret=self.config.get("trakt").get("client_secret"),
+                )
+
+                # Test connection
+                Trakt['lists'].trending(exceptions=True, per_page=1)
+                trakt_configured = True
+            except Exception as err:
+                logger.error(
+                    f"Failed to connect to trakt, check your configuration."
+                )
+                logger.debug(f"Error: {err}")
+                return False
+
         for connection in self.config.get("sonarr") + self.config.get("radarr"):
             try:
                 response = requests.get(
@@ -66,6 +85,12 @@ class Config:
             return False
 
         for library in self.config.get("libraries", []):
+            if len(library.get("exclude", {}).get("trakt_lists", [])) > 0 and not trakt_configured:
+                logger.error(
+                    f"Trakt lists configured for {library['name']} but trakt is not configured, check your configuration."
+                )
+                return False
+        
             if library["action_mode"] not in ["delete", "unmonitor"]:
                 print(
                     f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete' or 'unmonitor'."
