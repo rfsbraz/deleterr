@@ -16,6 +16,7 @@ from modules.tautulli import Tautulli
 import logger
 from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound
+from modules.trakt import Trakt
 
 logging.basicConfig()
 
@@ -28,8 +29,10 @@ class Deleterr:
         self.plex = PlexServer(config.get("plex", "url"), config.get("plex", "token"), timeout=120)
         self.sonarr = {connection['name']: SonarrAPI(connection["url"],connection["api_key"]) for connection in config.config.get("sonarr", [])}
         self.radarr = {connection['name']: RadarrAPI(connection["url"],connection["api_key"]) for connection in config.config.get("radarr", [])}
+        self.trakt = Trakt(config)
         self.plex_movie_map = self.plex_show_map = {}
         self.watched_collections = set()
+
         self.process_radarr()
 
     def process_radarr(self):
@@ -40,13 +43,16 @@ class Deleterr:
             logger.debug("[%s] Got %s movies to process", name, len(all_movie_data))
 
             for library in self.config.config.get("libraries", []):
+                trakt_movies = self.trakt.get_all_movies_for_url(library.get("exclude", {}).get("trakt_lists", []))
+
                 movies_library = self.plex.library.section("Movies")
                 movie_activity = self.tautulli.get_last_movie_activity(library, movies_library.key)
 
+                
 
                 if library.get("radarr") == name:
                     logger.info("Processing library '%s'", library.get("name"))
-                    movies_needing_action = self.apply_library_rules(library, movies_library, all_movie_data, movie_activity)
+                    movies_needing_action = self.apply_library_rules(library, movies_library, all_movie_data, movie_activity, trakt_movies)
                     for radarr_movie in movies_needing_action:
                         logger.info("Deleting movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
                         if not self.config.get("dry_run"):
@@ -91,7 +97,7 @@ class Deleterr:
             except NotFound:
                 continue
                 
-    def apply_library_rules(self, library_config, plex_library, all_data, activity_data):
+    def apply_library_rules(self, library_config, plex_library, all_data, activity_data, trakt_movies):
         # get the time thresholds from the config
         last_watched_threshold = library_config.get('last_watched_threshold', None)
         added_at_threshold = library_config.get('added_at_threshold', None)
@@ -110,14 +116,14 @@ class Deleterr:
                     self.watched_collections = self.watched_collections | set([c.tag for c in plex_movie.collections])
         # store the shows that need action
         shows_needing_action = []
-
+        
         for movie_data in all_data:
             plex_movie = self.get_plex_item(plex_library, movie_data['title'], movie_data['year'], [t['title'] for t in movie_data['alternateTitles']])
             if plex_movie is None:
                 logger.warning(f"Movie {movie_data['title']} ({movie_data['year']}) not found in Plex, probably a mismatch in the release year metadata")
                 continue
 
-            if not self.is_movie_actionable(library_config, activity_data, movie_data, plex_movie, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):
+            if not self.is_movie_actionable(library_config, activity_data, movie_data, trakt_movies, plex_movie, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):
                 continue
             
             shows_needing_action.append(movie_data)
@@ -129,7 +135,7 @@ class Deleterr:
         logger.debug(f"Found {len(shows_needing_action)} movies needing action")
         return shows_needing_action
 
-    def is_movie_actionable(self, library, activity_data, movie_data, plex_movie, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):          
+    def is_movie_actionable(self, library, activity_data, movie_data, trakt_movies, plex_movie, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):          
         watched_data = find_watched_data(movie_data, activity_data)
         if watched_data:
             last_watched = (datetime.now() - watched_data['last_watched']).days
@@ -142,7 +148,12 @@ class Deleterr:
             if already_watched:
                 logger.debug(f"Movie {movie_data['title']} has watched collections ({already_watched}), skipping")
                 return False
-            
+        
+        # Check if the movie tmdb id is in the trakt watched list
+        if movie_data['tmdbId'] in trakt_movies:
+            logger.debug(f"Movie {movie_data['title']} found in trakt watched list {trakt_movies[movie_data['tmdbId']]['list']}, skipping")
+            return False
+
         # Days since added
         date_added = (datetime.now() - plex_movie.addedAt).days
         if added_at_threshold and date_added < added_at_threshold:
