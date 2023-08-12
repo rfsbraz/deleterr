@@ -69,8 +69,4 @@ def extract_info_from_url(url):
     if match:
         return match.group('username'), match.group('listname'), None
     
-    
-    
-   
-
-    return None, None
+    return None, None, None
