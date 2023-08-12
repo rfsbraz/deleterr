@@ -28,6 +28,11 @@ tautulli:
   url: "http://localhost:8181"  # Replace with your Tautulli server URL
   api_key: "YOUR_TAUTULLI_API_KEY"  # Replace with your Tautulli API key
 
+# Trakt application, created on https://trakt.tv/oauth/applications
+trakt:
+  client_id: "YOUR_TRAKT_CLIENT_ID"  # Replace with your Trakt client ID
+  client_secret: "YOUR_TRAKT_CLIENT_SECRET"  # Replace with your Trakt client secret
+
 # If true, Deleterr will only log what it would do but not perform the actions
 dry_run: true
 
@@ -50,4 +55,10 @@ libraries:
       writers: ["Steven Spielberg"]
       studios: ["Studio Ghibli"]
       release_years: 5  # Exclude media released in the last 5 years
-      trakt_lists: ["https://trakt.tv/users/username/lists/list-name"]
+      trakt_lists: [
+        "https://trakt.tv/movies/trending",
+        "https://trakt.tv/movies/popular",
+        "https://trakt.tv/movies/watched/yearly",
+        "https://trakt.tv/movies/collected/yearly",
+        "https://trakt.tv/users/justin/lists/imdb-top-rated-movies"
+      ]

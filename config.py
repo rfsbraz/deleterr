@@ -3,7 +3,7 @@ import logger
 import sys
 import requests
 from tautulli import RawAPI
-
+from modules.trakt import Trakt
 
 class Config:
     def __init__(self, config_file, args):
@@ -33,7 +33,19 @@ class Config:
             sys.exit(1)
 
     def validate_config(self):
-        valid = True
+        trakt_configured = False
+        if self.config.get("trakt"):
+            try:
+                t = Trakt(self.config)
+                t.test_connection()
+                trakt_configured = True
+            except Exception as err:
+                logger.error(
+                    f"Failed to connect to trakt, check your configuration."
+                )
+                logger.debug(f"Error: {err}")
+                return False
+
         for connection in self.config.get("sonarr") + self.config.get("radarr"):
             try:
                 response = requests.get(
@@ -47,7 +59,7 @@ class Config:
                     f"Failed to connect to {connection['name']} at {connection['url']}, check your configuration."
                 )
                 logger.debug(f"Error: {err}")
-                valid = False
+                return False
 
         try:
             tautulli = self.config.get("tautulli")
@@ -58,22 +70,28 @@ class Config:
             response.raise_for_status()
         except KeyError:
             logger.error("Tautulli configuration not found, check your configuration.")
-            valid = False
+            return False
         except Exception as err:
             logger.error(
                 f"Failed to connect to tautulli at {tautulli['url']}, check your configuration."
             )
             logger.debug(f"Error: {err}")
-            valid = False
+            return False
 
         for library in self.config.get("libraries", []):
+            if len(library.get("exclude", {}).get("trakt_lists", [])) > 0 and not trakt_configured:
+                logger.error(
+                    f"Trakt lists configured for {library['name']} but trakt is not configured, check your configuration."
+                )
+                return False
+        
             if library["action_mode"] not in ["delete", "unmonitor"]:
                 print(
                     f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete' or 'unmonitor'."
                 )
-                valid = False
+                return False
 
-        return valid
+        return True
 
     def get(self, *keys, default=None):
         """
