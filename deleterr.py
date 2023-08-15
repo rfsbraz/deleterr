@@ -54,8 +54,8 @@ class Deleterr:
                     logger.info("Processing library '%s'", library.get("name"))
                     movies_needing_action = self.apply_library_rules(library, movies_library, all_movie_data, movie_activity, trakt_movies)
                     for radarr_movie in movies_needing_action:
-                        logger.info("Deleting movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
                         if not self.config.get("dry_run"):
+                            logger.info("Deleting movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
                             if self.config.get("interactive"):
                                 logger.info("Would you like to delete movie '%s' from radarr instance '%s'? (y/n)", radarr_movie['title'], name)
                                 if input().lower() == 'y':
