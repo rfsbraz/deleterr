@@ -1,3 +1,5 @@
+# encoding: utf-8
+
 import yaml
 import logger
 import sys
@@ -8,7 +10,7 @@ from modules.trakt import Trakt
 class Config:
     def __init__(self, config_file, args):
         try:
-            with open(config_file, "r") as stream:
+            with open(config_file, "r", encoding="utf8") as stream:
                 self.config = yaml.safe_load(stream)
 
                 if not self.validate_config():
