@@ -58,7 +58,7 @@ class Deleterr:
                     logger.info("Got %s movies in tautulli activity", len(movie_activity))
                     
                     actions_performed = 0
-                    for radarr_movie in self.apply_library_rules(library, movies_library, all_movie_data, movie_activity, trakt_movies):
+                    for radarr_movie in self.process_library_rules(library, movies_library, all_movie_data, movie_activity, trakt_movies):
                         if library.get('max_actions_per_run') and actions_performed >= library.get('max_actions_per_run'):
                             logger.info(f"Reached max actions per run ({library.get('max_actions_per_run')}), stopping")
                             break
@@ -106,7 +106,7 @@ class Deleterr:
             except NotFound:
                 continue
                 
-    def apply_library_rules(self, library_config, plex_library, all_data, activity_data, trakt_movies):
+    def process_library_rules(self, library_config, plex_library, all_data, activity_data, trakt_movies):
         # get the time thresholds from the config
         last_watched_threshold = library_config.get('last_watched_threshold', None)
         added_at_threshold = library_config.get('added_at_threshold', None)
