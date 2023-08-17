@@ -72,6 +72,10 @@ class Deleterr:
                         else:
                             logger.info("[DRY-RUN] Would have deleted  movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
                         actions_performed += 1
+
+                        if library.get('action_delay'):
+                            # sleep in seconds
+                            time.sleep(library.get('action_delay'))
             
             if not self.config.get("dry_run"):
                 if self.config.get("interactive"):

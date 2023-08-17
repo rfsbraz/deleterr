@@ -36,6 +36,10 @@ trakt:
 # If true, Deleterr will only log what it would do but not perform the actions
 dry_run: true
 
+# Delay between actions in seconds
+# This is to prevent plex from getting overloaded
+action_delay: 25
+
 # Library configuration
 libraries:
   - name: "Movies"  # The name of your Plex library
