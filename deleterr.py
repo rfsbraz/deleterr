@@ -32,7 +32,6 @@ class Deleterr:
         self.sonarr = {connection['name']: SonarrAPI(connection["url"],connection["api_key"]) for connection in config.config.get("sonarr", [])}
         self.radarr = {connection['name']: RadarrAPI(connection["url"],connection["api_key"]) for connection in config.config.get("radarr", [])}
         self.trakt = Trakt(config)
-        self.plex_movie_map = self.plex_show_map = {}
         self.watched_collections = set()
 
         self.process_radarr()
@@ -93,19 +92,17 @@ class Deleterr:
     def get_library_config(self, config, show):
         return next((library for library in config.config.get("libraries", []) if library.get("name") == show), None)
     
-    def get_plex_item(self, plex_library, title, year, alternate_titles=[]):
-        if f"{title} ({year})" in self.plex_movie_map:
-            return self.plex_movie_map[f"{title} ({year})"]
-        
+    def get_plex_item(self, plex_library, title, year, alternate_titles=[], stop=False):
         # Plex may pick some different titles sometimes, and since we can't only fetch by title, we need to check all of them
         for title in [title] + alternate_titles:
             try:
-                pl_movie = plex_library.get(title, year=year)
-                self.plex_movie_map[f"{title} ({year})"] = pl_movie
-                return pl_movie
+                return plex_library.get(title, year=year)
             except NotFound:
                 continue
-                
+        
+        if not stop:
+            return self.get_plex_item(plex_library, title, year-1, alternate_titles, stop=True) or self.get_plex_item(plex_library, title, year+1, alternate_titles, stop=True)
+                    
     def process_library_rules(self, library_config, plex_library, all_data, activity_data, trakt_movies):
         # get the time thresholds from the config
         last_watched_threshold = library_config.get('last_watched_threshold', None)
@@ -124,7 +121,7 @@ class Deleterr:
                     logger.debug(f"Movie {watched_data['title']} watched {last_watched} days ago, adding collection {plex_movie.collections} to watched collections")
                     self.watched_collections = self.watched_collections | set([c.tag for c in plex_movie.collections])
 
-        for movie_data in all_data:
+        for movie_data in sorted(all_data, key=lambda k: k.get('inCinemas', k.get('physicalRelease', k.get('digitalRelease'))), reverse=True):
             plex_movie = self.get_plex_item(plex_library, movie_data['title'], movie_data['year'], [t['title'] for t in movie_data['alternateTitles']])
             if plex_movie is None:
                 logger.warning(f"Movie {movie_data['title']} ({movie_data['year']}) not found in Plex, probably a mismatch in the release year metadata")
