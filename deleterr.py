@@ -43,14 +43,13 @@ class Deleterr:
             logger.debug("[%s] Got %s movies to process", name, len(all_movie_data))
 
             for library in self.config.config.get("libraries", []):
-                trakt_movies = self.trakt.get_all_movies_for_url(library.get("exclude", {}).get("trakt_lists", []))
-
-                movies_library = self.plex.library.section("Movies")
-                movie_activity = self.tautulli.get_last_movie_activity(library, movies_library.key)
-
-                
-
                 if library.get("radarr") == name:
+                    trakt_movies = self.trakt.get_all_movies_for_url(library.get("exclude", {}).get("trakt_lists", []))
+                    logger.debug("Got %s trakt movies to exclude", len(trakt_movies))
+
+                    movies_library = self.plex.library.section("Movies")
+                    logger.debug("Got %s movies in plex library", movies_library.totalSize)
+
                     logger.info("Processing library '%s'", library.get("name"))
                     movies_needing_action = self.apply_library_rules(library, movies_library, all_movie_data, movie_activity, trakt_movies)
                     for radarr_movie in movies_needing_action:

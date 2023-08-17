@@ -17,7 +17,7 @@ class Trakt:
         items = {}
         for url in urls:
             username, listname, recurrence = extract_info_from_url(url)
-            logger.debug("Username: %s, Listname: %s", username, listname)
+
             if username and listname:
                 for m in trakt.Trakt['users/*/lists/*'].items(username, listname, media='movie', exceptions=True, per_page=1000):
                     items[int(m.get_key('tmdb'))] = {'trakt': m, "list": url}
@@ -39,7 +39,6 @@ class Trakt:
                     movies = trakt.Trakt['movies'].trending(exceptions=True, per_page=1000)
                 for m in movies:
                     items[int(m.get_key('tmdb'))] = {'trakt': m, "list": url}
-            logger.debug("Number of movies in list: %s", len(items))
         return items
 
 """
@@ -69,4 +68,6 @@ def extract_info_from_url(url):
     if match:
         return match.group('username'), match.group('listname'), None
     
+
+
     return None, None, None
