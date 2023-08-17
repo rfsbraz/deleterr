@@ -86,8 +86,10 @@ class Deleterr:
                     if input().lower() == 'y':
                         self.tautulli.refresh_library(movies_library.key)
                 else:
-                    movies_library.refresh()
-                    self.tautulli.refresh_library(movies_library.key)
+                    if self.config.get("plex_library_scan_after_actions"):
+                        movies_library.refresh()
+                    if self.config.get("tautulli_library_scan_after_actions"):
+                        self.tautulli.refresh_library(movies_library.key)
             else:
                 logger.info("[DRY-RUN] Would have updated plex library")
                 logger.info("[DRY-RUN] Would have updated tautulli library")

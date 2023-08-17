@@ -36,6 +36,12 @@ trakt:
 # If true, Deleterr will only log what it would do but not perform the actions
 dry_run: true
 
+# Trigger a Plex library scan after actions are performed
+plex_library_scan_after_actions: false
+
+# Trigger a Tautulli library scan after actions are performed
+tautulli_library_scan_after_actions: false
+
 # Delay between actions in seconds
 # This is to prevent plex from getting overloaded
 action_delay: 25
