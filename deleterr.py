@@ -240,7 +240,6 @@ def main():
     logger.initLogger(console=not args.quiet, log_dir="logs", verbose=args.verbose)
     
     config = Config('config/settings.yaml', args)
-    logger.info(config.config)
     deleterr = Deleterr(config)
 
 if __name__ == "__main__":
