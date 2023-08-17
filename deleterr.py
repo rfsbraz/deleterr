@@ -120,17 +120,17 @@ class Deleterr:
             for watched_data in activity_data:
                 plex_movie = self.get_plex_item(plex_library, watched_data['title'], watched_data['year'])
                 if plex_movie is None:
-                    logger.error(f"Movie {watched_data['title']} ({watched_data['year']}) not found in Plex: {watched_data}")
+                    logger.debug(f"Movie {watched_data['title']} ({watched_data['year']}) not found in Plex: {watched_data}")
                     continue
                 last_watched = (datetime.now() - watched_data['last_watched']).days
-                if last_watched_threshold and last_watched < last_watched_threshold:
+                if plex_movie.collections and last_watched_threshold and last_watched < last_watched_threshold:
                     logger.debug(f"Movie {watched_data['title']} watched {last_watched} days ago, adding collection {plex_movie.collections} to watched collections")
                     self.watched_collections = self.watched_collections | set([c.tag for c in plex_movie.collections])
 
-        for movie_data in sorted(all_data, key=lambda k: k.get('inCinemas', k.get('physicalRelease', k.get('digitalRelease'))), reverse=True):
+        for movie_data in sorted(all_data, key=lambda k: k.get('inCinemas', k.get('physicalRelease', k.get('digitalRelease', ''))), reverse=False):
             plex_movie = self.get_plex_item(plex_library, movie_data['title'], movie_data['year'], [t['title'] for t in movie_data['alternateTitles']])
             if plex_movie is None:
-                logger.warning(f"Movie {movie_data['title']} ({movie_data['year']}) not found in Plex, probably a mismatch in the release year metadata")
+                logger.debug(f"Movie {movie_data['title']} ({movie_data['year']}) not found in Plex, probably a mismatch in the release year metadata")
                 continue
 
             if not self.is_movie_actionable(library_config, activity_data, movie_data, trakt_movies, plex_movie, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):
