@@ -46,15 +46,22 @@ class Deleterr:
 
             for library in self.config.config.get("libraries", []):
                 if library.get("radarr") == name:
+                    logger.info("Processing library '%s'", library.get("name"))
+
                     trakt_movies = self.trakt.get_all_movies_for_url(library.get("exclude", {}).get("trakt_lists", []))
-                    logger.debug("Got %s trakt movies to exclude", len(trakt_movies))
+                    logger.info("Got %s trakt movies to exclude", len(trakt_movies))
 
                     movies_library = self.plex.library.section("Movies")
-                    logger.debug("Got %s movies in plex library", movies_library.totalSize)
+                    logger.info("Got %s movies in plex library", movies_library.totalSize)
 
-                    logger.info("Processing library '%s'", library.get("name"))
-                    movies_needing_action = self.apply_library_rules(library, movies_library, all_movie_data, movie_activity, trakt_movies)
-                    for radarr_movie in movies_needing_action:
+                    movie_activity = self.tautulli.get_last_movie_activity(library, movies_library.key)
+                    logger.info("Got %s movies in tautulli activity", len(movie_activity))
+                    
+                    actions_performed = 0
+                    for radarr_movie in self.apply_library_rules(library, movies_library, all_movie_data, movie_activity, trakt_movies):
+                        if library.get('max_actions_per_run') and actions_performed >= library.get('max_actions_per_run'):
+                            logger.info(f"Reached max actions per run ({library.get('max_actions_per_run')}), stopping")
+                            break
                         if not self.config.get("dry_run"):
                             logger.info("Deleting movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
                             if self.config.get("interactive"):
@@ -65,6 +72,7 @@ class Deleterr:
                                 radarr.del_movie(radarr_movie['id'], delete_files=True)
                         else:
                             logger.info("[DRY-RUN] Would have deleted  movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
+                        actions_performed += 1
             
             if not self.config.get("dry_run"):
                 if self.config.get("interactive"):
@@ -115,9 +123,7 @@ class Deleterr:
                 if last_watched_threshold and last_watched < last_watched_threshold:
                     logger.debug(f"Movie {watched_data['title']} watched {last_watched} days ago, adding collection {plex_movie.collections} to watched collections")
                     self.watched_collections = self.watched_collections | set([c.tag for c in plex_movie.collections])
-        # store the shows that need action
-        shows_needing_action = []
-        
+
         for movie_data in all_data:
             plex_movie = self.get_plex_item(plex_library, movie_data['title'], movie_data['year'], [t['title'] for t in movie_data['alternateTitles']])
             if plex_movie is None:
@@ -127,14 +133,7 @@ class Deleterr:
             if not self.is_movie_actionable(library_config, activity_data, movie_data, trakt_movies, plex_movie, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):
                 continue
             
-            shows_needing_action.append(movie_data)
-
-            if library_config.get('max_actions_per_run') and len(shows_needing_action) >= library_config.get('max_actions_per_run'):
-                logger.debug(f"Reached max actions per run ({library_config.get('max_actions_per_run')}), stopping")
-                break
-
-        logger.debug(f"Found {len(shows_needing_action)} movies needing action")
-        return shows_needing_action
+            yield movie_data
 
     def is_movie_actionable(self, library, activity_data, movie_data, trakt_movies, plex_movie, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):          
         watched_data = find_watched_data(movie_data, activity_data)
