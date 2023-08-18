@@ -14,7 +14,7 @@ Deleterr is a Python script designed to help you manage your Plex media server. 
 
 ### Docker (Recommended)
 
-1. Clone the repository: `git clone https://github.com/username/Deleterr.git`
+1. Clone the repository: `git clone https://github.com/rfsbraz/Deleterr.git`
 2. Enter the cloned directory: `cd Deleterr`
 3. Build the Docker image: `docker build -t deleterr .`
 4. Run the Docker container: `docker run deleterr`
@@ -36,7 +36,11 @@ To start Deleterr, simply run `python deleterr.py`. You can also set it to run o
 ## Thanks
 
 https://github.com/nwithan8/pytulli
+
 https://github.com/pkkid/python-plexapi
+
 https://github.com/totaldebug/pyarr
+
 https://github.com/fuzeman/trakt.py
+
 https://github.com/Tautulli/Tautulli

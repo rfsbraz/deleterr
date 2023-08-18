@@ -8,7 +8,7 @@ from tautulli import RawAPI
 from modules.trakt import Trakt
 
 class Config:
-    def __init__(self, config_file, args):
+    def __init__(self, config_file):
         try:
             with open(config_file, "r", encoding="utf8") as stream:
                 self.config = yaml.safe_load(stream)
@@ -17,12 +17,10 @@ class Config:
                     logger.error("Invalid configuration, exiting.")
                     exit(1)
 
-                if args.dry_run:
-                    self.config["dry_run"] = True
+                if self.config.get("dry_run"):
                     logger.info("Running in dry-run mode, no changes will be made.")
 
-                if args.interactive:
-                    self.config["interactive"] = True
+                if self.config.get("interactive"):
                     logger.info("Running in interactive mode, you will be prompted before any changes are made.")
 
         except FileNotFoundError:

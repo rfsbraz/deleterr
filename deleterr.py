@@ -2,8 +2,8 @@
 
 import logging
 import locale
-import argparse
 import time
+import os
 
 from datetime import datetime, timedelta
 from config import Config
@@ -222,24 +222,10 @@ def main():
     """
     locale.setlocale(locale.LC_ALL, "")
 
-    # Set up and gather command line arguments
-    parser = argparse.ArgumentParser(
-        description='A Python based monitoring and tracking tool for Plex Media Server.')
-
-    parser.add_argument(
-        '-v', '--verbose', action='store_true', help='Increase console logging verbosity')
-    parser.add_argument(
-        '-q', '--quiet', action='store_true', help='Turn off console logging')
-    parser.add_argument(
-        '-d', '--dry-run', action='store_true', help='Do not perform any actions when running')
-    parser.add_argument(
-        '-i', '--interactive', action='store_true', help='Run in interactive mode')
+    log_level = os.environ.get('LOG_LEVEL', 'info').upper()
+    logger.initLogger(console=True, log_dir="/config/logs", verbose=log_level == "DEBUG")
     
-    args = parser.parse_args()
-
-    logger.initLogger(console=not args.quiet, log_dir="logs", verbose=args.verbose)
-    
-    config = Config('/config/settings.yaml', args)
+    config = Config('/config/settings.yaml')
     deleterr = Deleterr(config)
 
 if __name__ == "__main__":
