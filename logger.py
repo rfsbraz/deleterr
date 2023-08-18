@@ -50,7 +50,7 @@ def initLogger(console=False, log_dir=False, verbose=False):
 
     # Setup file logger
     if log_dir:
-        file_formatter = logging.Formatter('%(asctime)s - %(levelname)-7s :: %(threadName)s : %(message)s', '%Y-%m-%d %H:%M:%S')
+        file_formatter = logging.Formatter('%(asctime)s - %(levelname)-7s :: %(filename)s :: %(name)s : %(message)s', '%Y-%m-%d %H:%M:%S')
 
         # Main logger
         filename = os.path.join(log_dir, FILENAME)
@@ -62,7 +62,7 @@ def initLogger(console=False, log_dir=False, verbose=False):
 
     # Setup console logger
     if console:
-        console_formatter = logging.Formatter('%(asctime)s - %(levelname)s :: %(threadName)s : %(message)s', '%Y-%m-%d %H:%M:%S')
+        console_formatter = logging.Formatter('%(asctime)s - %(levelname)s :: %(filename)s :: %(name)s : %(message)s', '%Y-%m-%d %H:%M:%S')
 
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setFormatter(console_formatter)
