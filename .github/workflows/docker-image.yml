@@ -39,7 +39,7 @@ jobs:
           else
             echo "tag=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
           fi
-          elif [[ $GITHUB_REF == refs/tags/* ]]; then
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
             echo "branch=master" >> $GITHUB_OUTPUT
           else
             echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
