@@ -14,11 +14,11 @@ class Trakt:
         # Test connection
         trakt.Trakt["lists"].trending(exceptions=True, per_page=1)
 
-    def get_all_movies_for_url(self, trakt):
+    def get_all_movies_for_url(self, trakt_config):
         items = {}
-        max_items_per_list = trakt.get("max_items_per_list", 100)
+        max_items_per_list = trakt_config.get("max_items_per_list", 100)
 
-        for url in trakt.get("lists", []):
+        for url in trakt_config.get("lists", []):
             username, listname, recurrence = extract_info_from_url(url)
 
             if username and listname:
