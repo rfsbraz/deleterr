@@ -47,7 +47,7 @@ class Deleterr:
                 if library.get("radarr") == name:
                     logger.info("Processing library '%s'", library.get("name"))
 
-                    trakt_movies = self.trakt.get_all_movies_for_url(library.get("exclude", {}).get("trakt", {}).get("lists", []))
+                    trakt_movies = self.trakt.get_all_movies_for_url(library.get("exclude", {}).get("trakt", {}))
                     logger.info("Got %s trakt movies to exclude", len(trakt_movies))
 
                     movies_library = self.plex.library.section("Movies")

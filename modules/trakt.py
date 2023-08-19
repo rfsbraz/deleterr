@@ -9,16 +9,16 @@ class Trakt:
             id=config.get("trakt").get("client_id"),
             secret=config.get("trakt").get("client_secret"),
         )
-        self.max_items_per_list = config.get("trakt", {}).get("max_items_per_list", 100)
 
     def test_connection(self):
         # Test connection
         trakt.Trakt["lists"].trending(exceptions=True, per_page=1)
 
-    def get_all_movies_for_url(self, urls):
+    def get_all_movies_for_url(self, trakt):
         items = {}
+        max_items_per_list = trakt.get("max_items_per_list", 100)
 
-        for url in urls:
+        for url in trakt.get("lists", []):
             username, listname, recurrence = extract_info_from_url(url)
 
             if username and listname:
@@ -27,7 +27,7 @@ class Trakt:
                     listname,
                     media="movie",
                     exceptions=True,
-                    per_page=self.max_items_per_list,
+                    per_page=max_items_per_list,
                 ):
                     items[int(m.get_key("tmdb"))] = {"trakt": m, "list": url}
             elif listname and recurrence:
@@ -50,11 +50,11 @@ class Trakt:
                 movies = []
                 if listname == "popular":
                     movies = trakt.Trakt["movies"].popular(
-                        exceptions=True, per_page=self.max_items_per_list
+                        exceptions=True, per_page=max_items_per_list
                     )
                 elif listname == "trending":
                     movies = trakt.Trakt["movies"].trending(
-                        exceptions=True, per_page=self.max_items_per_list
+                        exceptions=True, per_page=max_items_per_list
                     )
                 for m in movies:
                     items[int(m.get_key("tmdb"))] = {"trakt": m, "list": url}
