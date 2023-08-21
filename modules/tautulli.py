@@ -35,17 +35,13 @@ class Tautulli:
     def get_last_episode_activity(self, library_config, section):
         return self.get_activity(section)
 
-    def get_last_movie_activity(self, library_config, section):
-        last_watched_threshold_date = datetime.now() - timedelta(days=library_config.get('last_watched_threshold'))
-        unwatched_threshold_date = datetime.now() - timedelta(days=library_config.get('added_at_threshold'))
-        min_date = min(last_watched_threshold_date, unwatched_threshold_date)
-
-        return self.get_activity(section, after=min_date, length=100)
-
     def refresh_library(self, section_id):
         self.api.get_library_media_info(section_id=section_id, refresh=True)
 
-    def get_activity(self, section, **kwargs):
+    def get_activity(self, library_config, section):
+        last_watched_threshold_date = datetime.now() - timedelta(days=library_config.get('last_watched_threshold'))
+        unwatched_threshold_date = datetime.now() - timedelta(days=library_config.get('added_at_threshold'))
+        min_date = min(last_watched_threshold_date, unwatched_threshold_date)
 
         # Request params
         start = 0
@@ -56,7 +52,7 @@ class Tautulli:
 
         while True:
             # load the data
-            history = self.api.get_history(section_id=section, order_column='date', order_direction="asc", start=start, **kwargs)    
+            history = self.api.get_history(section_id=section, order_column='date', order_direction="asc", start=start, after=min_date, length=100)    
 
             if len(history["data"]) == 0:
                 break
@@ -66,6 +62,7 @@ class Tautulli:
 
             logger.debug("Got %s history items. next start: %s", len(history["data"]), start)
 
+        #TODO: we may need to handle rating_key and parent_rating_key to support more complex rules regarding deleting shows, seasons and episodes
         key = (
             "grandparent_rating_key"
             if raw_data[0].get("grandparent_rating_key", "") != ""
@@ -76,25 +73,31 @@ class Tautulli:
         i = 0
         for entry in filtered_data:
             i += 1
-            metadata = self.api.get_metadata(entry["rating_key"])
-
+            metadata = self.api.get_metadata(entry[key])
+            if not metadata:
+                # Media was deleted, skip
+                continue
+            
             item_id = None
             for guid in metadata.get("guids", []):
+                if "tvdb://" in guid:
+                    item_id = guid.replace("tvdb://", "")
+                    break
                 if "tmdb://" in guid:
                     item_id = guid.replace("tmdb://", "")
                     break
-
+            
             last_activity.append(
                 {
                     "last_watched": datetime.fromtimestamp(entry["stopped"]),
-                    "title": entry["title"],
-                    "year": entry["year"],
+                    "title": metadata["title"],
+                    "year": metadata["year"],
                     "guid": item_id,
-                    "rating_key": entry["rating_key"],
                 }
             )
+            
 
             # Print progress
-            logger.debug("[%s/%s] Processed movies", i, len(filtered_data))
+            logger.debug("[%s/%s] Processed items", i, len(filtered_data))
 
         return last_activity
