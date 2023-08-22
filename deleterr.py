@@ -79,9 +79,9 @@ class Deleterr:
                         saved_space += sonarr_show['statistics']['sizeOnDisk']
                         actions_performed += 1
 
-                        if library.get('action_delay'):
+                        if self.config.config.get('action_delay'):
                             # sleep in seconds
-                            time.sleep(library.get('action_delay'))
+                            time.sleep(self.config.config.get('action_delay'))
                     
                     logger.info("Freed %s of space by deleting %s shows", print_readable_freed_space(saved_space), actions_performed)
 
@@ -125,9 +125,9 @@ class Deleterr:
                         saved_space += radarr_movie['statistics']['sizeOnDisk']
                         actions_performed += 1
 
-                        if library.get('action_delay'):
+                        if self.config.config.get('action_delay'):
                             # sleep in seconds
-                            time.sleep(library.get('action_delay'))
+                            time.sleep(self.config.config.get('action_delay'))
 
                     logger.info("Freed %s of space by deleting %s movies", print_readable_freed_space(saved_space), actions_performed)
 
