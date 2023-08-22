@@ -28,18 +28,17 @@ class Trakt:
             username, listname, recurrence = extract_info_from_url(url)
 
             key = "tmdb" if media_type == "movie" else "tvdb"
-
+            
+            list_items = []
             if username and listname:
-                for m in trakt.Trakt["users/*/lists/*"].items(
+                list_items = trakt.Trakt["users/*/lists/*"].items(
                     username,
                     listname,
                     media=media_type,
                     exceptions=True,
                     per_page=max_items_per_list,
-                ):
-                    items[int(m.get_key(key))] = {"trakt": m, "list": url}
+                )
             elif listname and recurrence:
-                list_items = []
                 if listname == "favorited":
                     logger.warning(
                         f"Traktpy does not support favorited {media_type}s. Skipping..."
@@ -52,10 +51,7 @@ class Trakt:
                     logger.warning(
                         f"Traktpy does not support collected {media_type}s. Skipping..."
                     )
-                for m in list_items:
-                    items[int(m.get_key(key))] = {"trakt": m, "list": url}
             elif listname:
-                list_items = []
                 if listname == "popular":
                     list_items = trakt.Trakt[f"{media_type}s"].popular(
                         exceptions=True, per_page=max_items_per_list
@@ -64,17 +60,24 @@ class Trakt:
                     list_items = trakt.Trakt[f"{media_type}s"].trending(
                         exceptions=True, per_page=max_items_per_list
                     )
-                for m in list_items:
-                    items[int(m.get_key(key))] = {"trakt": m, "list": url}
+            
+            _process_trakt_item_list(items, list_items, url, key)
         return items
 
+"""
+Transforms a list of trakt items into a dictionary of usable items
+"""
+def _process_trakt_item_list(items, list_items, url, key):
+    for m in list_items:
+        try:
+            items[int(m.get_key(key))] = {"trakt": m, "list": url}
+        except TypeError: 
+            logger.debug(f"Could not get {key} for {m}")
 
 """
 Extracts the username and listname from a trakt url
 returns username, listname, recurrence
 """
-
-
 def extract_info_from_url(url):
     # Pattern to capture the username and list name
     user_list_pattern = (
