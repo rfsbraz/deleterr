@@ -19,6 +19,7 @@ import logger
 from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound
 from modules.trakt import Trakt
+from utils import print_readable_freed_space
 
 logging.basicConfig()
 
@@ -82,7 +83,7 @@ class Deleterr:
                             # sleep in seconds
                             time.sleep(library.get('action_delay'))
                     
-                    logger.info("Freed %s GB of space", round(saved_space / 1024 / 1024 / 1024, 2))
+                    logger.info("Freed %s of space by deleting %s shows", print_readable_freed_space(saved_space), actions_performed)
 
     def process_radarr(self):
         for name, radarr in self.radarr.items():
@@ -128,7 +129,7 @@ class Deleterr:
                             # sleep in seconds
                             time.sleep(library.get('action_delay'))
 
-                    logger.info("Freed %s GB of space", round(saved_space / 1024 / 1024 / 1024, 2))
+                    logger.info("Freed %s of space by deleting %s movies", print_readable_freed_space(saved_space), actions_performed)
 
             if not self.config.get("dry_run"):
                 if self.config.get("interactive"):
