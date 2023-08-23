@@ -44,13 +44,14 @@ class Deleterr:
         for name, sonarr in self.sonarr.items():
             logger.info("Processing sonarr instance: '%s'", name)
             all_show_data = sonarr.get_series()
-            all_show_data = [show for show in all_show_data if show['seriesType'] == 'standard']
         
             logger.debug("[%s] Got %s shows to process", name, len(all_show_data))
 
             saved_space = 0
             for library in self.config.config.get("libraries", []):
                 if library.get("sonarr") == name:
+                    all_show_data = [show for show in all_show_data if show['seriesType'] == library.get("series_type")]
+
                     max_actions_per_run = _get_config_value(library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN)
 
                     logger.info("Processing library '%s'", library.get("name"))
