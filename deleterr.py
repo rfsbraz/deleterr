@@ -207,8 +207,8 @@ class Deleterr:
                 return False
         
         # Check if the movie tmdb id is in the trakt watched list
-        if media_data.get('tmdbId', media_data['tvdbId']) in trakt_movies:
-            logger.debug(f"{media_data['title']} found in trakt watched list {trakt_movies[media_data.get('tmdbId', media_data['tvdbId'])]['list']}, skipping")
+        if media_data.get('tvdbId', media_data.get('tmdbId')) in trakt_movies:
+            logger.debug(f"{media_data['title']} found in trakt watched list {trakt_movies[media_data.get('tvdbId', media_data.get('tmdbId'))]['list']}, skipping")
             return False
 
         # Days since added
@@ -263,7 +263,7 @@ class Deleterr:
 
 def find_watched_data(media_data, activity_data):
     for watched_data in activity_data:
-        if watched_data['guid'] == media_data.get('tmdbId', media_data['tvdbId']):
+        if watched_data['guid'] == media_data.get('tvdbId', media_data.get('tmdbId')):
             return watched_data
         if watched_data['title'] == media_data['title'] and watched_data['year'] == media_data['year']:
             return watched_data

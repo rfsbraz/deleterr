@@ -79,20 +79,15 @@ class Tautulli:
                 continue
             
             item_id = None
-            for guid in metadata.get("guids", []):
-                if "tvdb://" in guid:
-                    item_id = guid.replace("tvdb://", "")
-                    break
-                if "tmdb://" in guid:
-                    item_id = guid.replace("tmdb://", "")
-                    break
             
+            item_id = _extract_id(metadata.get("guids", []))
+
             last_activity.append(
                 {
                     "last_watched": datetime.fromtimestamp(entry["stopped"]),
                     "title": metadata["title"],
                     "year": metadata["year"],
-                    "guid": item_id,
+                    "guid": int(item_id),
                 }
             )
             
@@ -101,3 +96,20 @@ class Tautulli:
             logger.debug("[%s/%s] Processed items", i, len(filtered_data))
 
         return last_activity
+
+"""
+Extracts the tvdb or tmdb id from a list of guids
+"""
+def _extract_id(guids):
+    tvdb_id = None
+    tmdb_id = None
+
+    # Loop through the guids array
+    for guid in guids:
+        if 'tvdb' in guid:
+            tvdb_id = guid.split('//')[1]
+        elif 'tmdb' in guid:
+            tmdb_id = guid.split('//')[1]
+
+    # Return tvdb if exists, otherwise return tmdb
+    return tvdb_id if tvdb_id else tmdb_id
