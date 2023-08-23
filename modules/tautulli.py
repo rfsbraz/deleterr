@@ -82,6 +82,10 @@ class Tautulli:
             
             item_id = _extract_id(metadata.get("guids", []))
 
+            if not item_id:
+                logger.warn("No tvdb or tmdb id found for %s", metadata["title"])
+                continue
+            
             last_activity.append(
                 {
                     "last_watched": datetime.fromtimestamp(entry["stopped"]),
@@ -90,7 +94,6 @@ class Tautulli:
                     "guid": int(item_id),
                 }
             )
-            
 
             # Print progress
             logger.debug("[%s/%s] Processed items", i, len(filtered_data))
