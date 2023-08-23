@@ -179,27 +179,27 @@ class Deleterr:
         if apply_last_watch_threshold_to_collections:
             logger.debug(f"Gathering collection watched status")
             for watched_data in activity_data:
-                plex_movie = self.get_plex_item(plex_library, watched_data['title'], watched_data['year'])
-                if plex_movie is None:
+                plex_media_item = self.get_plex_item(plex_library, watched_data['title'], watched_data['year'])
+                if plex_media_item is None:
                     logger.debug(f"{watched_data['title']} ({watched_data['year']}) not found in Plex: {watched_data}")
                     continue
                 last_watched = (datetime.now() - watched_data['last_watched']).days
-                if plex_movie.collections and last_watched_threshold and last_watched < last_watched_threshold:
-                    logger.debug(f"{watched_data['title']} watched {last_watched} days ago, adding collection {plex_movie.collections} to watched collections")
-                    self.watched_collections = self.watched_collections | set([c.tag for c in plex_movie.collections])
+                if plex_media_item.collections and last_watched_threshold and last_watched < last_watched_threshold:
+                    logger.debug(f"{watched_data['title']} watched {last_watched} days ago, adding collection {plex_media_item.collections} to watched collections")
+                    self.watched_collections = self.watched_collections | set([c.tag for c in plex_media_item.collections])
 
         for media_data in sorted(all_data, key=lambda k: k.get('inCinemas', k.get('physicalRelease', k.get('digitalRelease', ''))), reverse=False):
-            plex_movie = self.get_plex_item(plex_library, media_data['title'], media_data['year'], [t['title'] for t in media_data['alternateTitles']])
-            if plex_movie is None:
+            plex_media_item = self.get_plex_item(plex_library, media_data['title'], media_data['year'], [t['title'] for t in media_data['alternateTitles']])
+            if plex_media_item is None:
                 logger.debug(f"{media_data['title']} ({media_data['year']}) not found in Plex, probably a mismatch in the release year metadata")
                 continue
 
-            if not self.is_movie_actionable(library_config, activity_data, media_data, trakt_movies, plex_movie, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):
+            if not self.is_movie_actionable(library_config, activity_data, media_data, trakt_movies, plex_media_item, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):
                 continue
             
             yield media_data
 
-    def is_movie_actionable(self, library, activity_data, media_data, trakt_movies, plex_movie, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):          
+    def is_movie_actionable(self, library, activity_data, media_data, trakt_movies, plex_media_item, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):          
         watched_data = find_watched_data(media_data, activity_data)
         if watched_data:
             last_watched = (datetime.now() - watched_data['last_watched']).days
@@ -208,7 +208,7 @@ class Deleterr:
                 return False
             
         if apply_last_watch_threshold_to_collections:
-            already_watched = self.watched_collections.intersection(set([c.tag for c in plex_movie.collections]))
+            already_watched = self.watched_collections.intersection(set([c.tag for c in plex_media_item.collections]))
             if already_watched:
                 logger.debug(f"{media_data['title']} has watched collections ({already_watched}), skipping")
                 return False
@@ -219,7 +219,7 @@ class Deleterr:
             return False
 
         # Days since added
-        date_added = (datetime.now() - plex_movie.addedAt).days
+        date_added = (datetime.now() - plex_media_item.addedAt).days
         if added_at_threshold and date_added < added_at_threshold:
             logger.debug(f"{media_data['title']} added {date_added} days ago, skipping")
             return False
@@ -228,42 +228,42 @@ class Deleterr:
         exclude = library.get('exclude', {})
         if exclude:
             for genre in exclude.get('genres', []):
-                if genre.lower() in (g.tag.lower() for g in plex_movie.genres):
+                if genre.lower() in (g.tag.lower() for g in plex_media_item.genres):
                     logger.debug(f"{media_data['title']} has excluded genre {genre}, skipping")
                     return False
 
             for collection in exclude.get('collections', []):
-                if collection.lower() in (g.tag.lower() for g in plex_movie.collections):
+                if collection.lower() in (g.tag.lower() for g in plex_media_item.collections):
                     logger.debug(f"{media_data['title']} has excluded collection {collection}, skipping")
                     return False
                 
             if exclude.get('release_years', 0):
-                if plex_movie.year >= datetime.now().year - exclude.get('release_years'):
-                    logger.debug(f"{media_data['title']} ({plex_movie.year}) was released within the threshold years ({datetime.now().year} - {exclude.get('release_years', 0)} = {datetime.now().year - exclude.get('release_years', 0)}), skipping")
+                if plex_media_item.year >= datetime.now().year - exclude.get('release_years'):
+                    logger.debug(f"{media_data['title']} ({plex_media_item.year}) was released within the threshold years ({datetime.now().year} - {exclude.get('release_years', 0)} = {datetime.now().year - exclude.get('release_years', 0)}), skipping")
                     return False
 
             for producer in exclude.get('producers', []):
-                if producer.lower() in (g.tag.lower() for g in plex_movie.producers):
+                if producer.lower() in (g.tag.lower() for g in plex_media_item.producers):
                     logger.debug(f"{media_data['title']} has excluded producer {producer}, skipping")
                     return False
             
             for director in exclude.get('directors', []):
-                if director.lower() in (g.tag.lower() for g in plex_movie.directors):
+                if director.lower() in (g.tag.lower() for g in plex_media_item.directors):
                     logger.debug(f"{media_data['title']} has excluded director {director}, skipping")
                     return False
 
             for writer in exclude.get('writers', []):
-                if writer.lower() in (g.tag.lower() for g in plex_movie.writers):
+                if writer.lower() in (g.tag.lower() for g in plex_media_item.writers):
                     logger.debug(f"{media_data['title']} has excluded writer {writer}, skipping")
                     return False
 
             for actor in exclude.get('actors', []):
-                if actor.lower() in (g.tag.lower() for g in plex_movie.roles):
+                if actor.lower() in (g.tag.lower() for g in plex_media_item.roles):
                     logger.debug(f"{media_data['title']} has excluded actor {actor}, skipping")
                     return False
 
-            if plex_movie.studio and plex_movie.studio.lower() in exclude.get('studios', []):
-                logger.debug(f"{media_data['title']} has excluded studio {plex_movie.studio}, skipping")
+            if plex_media_item.studio and plex_media_item.studio.lower() in exclude.get('studios', []):
+                logger.debug(f"{media_data['title']} has excluded studio {plex_media_item.studio}, skipping")
                 return False
         
         return True
