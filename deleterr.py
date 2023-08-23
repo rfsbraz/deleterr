@@ -23,6 +23,8 @@ from utils import print_readable_freed_space
 
 logging.basicConfig()
 
+DEFAULT_MAX_ACTIONS_PER_RUN = 10
+
 class Deleterr:
     def __init__(self, config):
         self.config = config
@@ -49,6 +51,8 @@ class Deleterr:
             saved_space = 0
             for library in self.config.config.get("libraries", []):
                 if library.get("sonarr") == name:
+                    max_actions_per_run = _get_config_value(library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN)
+
                     logger.info("Processing library '%s'", library.get("name"))
 
                     trakt_shows = self.trakt.get_all_shows_for_url(library.get("exclude", {}).get("trakt", {}))
@@ -62,8 +66,8 @@ class Deleterr:
 
                     actions_performed = 0
                     for sonarr_show in self.process_library_rules(library, shows_library, all_show_data, show_activity, trakt_shows):
-                        if library.get('max_actions_per_run') and actions_performed >= library.get('max_actions_per_run'):
-                            logger.info(f"Reached max actions per run ({library.get('max_actions_per_run')}), stopping")
+                        if max_actions_per_run and actions_performed >= max_actions_per_run:
+                            logger.info(f"Reached max actions per run ({max_actions_per_run}), stopping")
                             break
                         if not self.config.get("dry_run"):
                             logger.info("Deleting show '%s' from sonarr instance  '%s'", sonarr_show['title'], name)
@@ -95,6 +99,8 @@ class Deleterr:
             saved_space = 0
             for library in self.config.config.get("libraries", []):
                 if library.get("radarr") == name:
+                    max_actions_per_run = _get_config_value(library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN)
+
                     logger.info("Processing library '%s'", library.get("name"))
 
                     trakt_movies = self.trakt.get_all_movies_for_url(library.get("exclude", {}).get("trakt", {}))
@@ -108,8 +114,8 @@ class Deleterr:
                     
                     actions_performed = 0
                     for radarr_movie in self.process_library_rules(library, movies_library, all_movie_data, movie_activity, trakt_movies):
-                        if library.get('max_actions_per_run') and actions_performed >= library.get('max_actions_per_run'):
-                            logger.info(f"Reached max actions per run ({library.get('max_actions_per_run')}), stopping")
+                        if max_actions_per_run and actions_performed >= max_actions_per_run:
+                            logger.info(f"Reached max actions per run ({max_actions_per_run}), stopping")
                             break
                         if not self.config.get("dry_run"):
                             logger.info("Deleting movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
@@ -269,6 +275,12 @@ def find_watched_data(media_data, activity_data):
             return watched_data
     return None
 
+def _get_config_value(config, key, default=None):
+        if key in config:
+            return config[key]
+        else:
+            return default
+        
 def main():
     """
     Deleterr application entry point. Parses arguments, configs and
