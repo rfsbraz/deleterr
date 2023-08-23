@@ -59,7 +59,7 @@ class Deleterr:
                     trakt_shows = self.trakt.get_all_shows_for_url(library.get("exclude", {}).get("trakt", {}))
                     logger.info("Got %s trakt shows to exclude", len(trakt_shows))
 
-                    shows_library = self.plex.library.section("TV Shows")
+                    shows_library = self.plex.library.section(library.get("name"))
                     logger.info("Got %s shows in plex library", shows_library.totalSize)
 
                     show_activity = self.tautulli.get_activity(library, shows_library.key)
@@ -107,7 +107,7 @@ class Deleterr:
                     trakt_movies = self.trakt.get_all_movies_for_url(library.get("exclude", {}).get("trakt", {}))
                     logger.info("Got %s trakt movies to exclude", len(trakt_movies))
 
-                    movies_library = self.plex.library.section("Movies")
+                    movies_library = self.plex.library.section(library.get("name"))
                     logger.info("Got %s movies in plex library", movies_library.totalSize)
 
                     movie_activity = self.tautulli.get_activity(library, movies_library.key)
