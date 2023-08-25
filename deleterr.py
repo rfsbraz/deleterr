@@ -19,8 +19,12 @@ import logger
 from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound
 from modules.trakt import Trakt
+from utils import print_readable_freed_space
 
 logging.basicConfig()
+
+DEFAULT_MAX_ACTIONS_PER_RUN = 10
+DEFAULT_SONARR_SERIES_TYPE = "standard"
 
 class Deleterr:
     def __init__(self, config):
@@ -34,32 +38,85 @@ class Deleterr:
         self.trakt = Trakt(config)
         self.watched_collections = set()
 
+        self.process_sonarr()
         self.process_radarr()
+
+    def process_sonarr(self):
+        for name, sonarr in self.sonarr.items():
+            logger.info("Processing sonarr instance: '%s'", name)
+            unfiltered_all_show_data = sonarr.get_series()
+        
+            saved_space = 0
+            for library in self.config.config.get("libraries", []):
+                if library.get("sonarr") == name:
+                    all_show_data = [show for show in unfiltered_all_show_data if show['seriesType'] == library.get("series_type", DEFAULT_SONARR_SERIES_TYPE)]
+                    logger.info("Instance has %s items to process", len(all_show_data))
+
+                    max_actions_per_run = _get_config_value(library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN)
+
+                    logger.info("Processing library '%s'", library.get("name"))
+
+                    trakt_items = self.trakt.get_all_shows_for_url(library.get("exclude", {}).get("trakt", {}))
+                    logger.info("Got %s trakt items to exclude", len(trakt_items))
+
+                    plex_library = self.plex.library.section(library.get("name"))
+                    logger.info("Got %s items in plex library", plex_library.totalSize)
+
+                    show_activity = self.tautulli.get_activity(library, plex_library.key)
+                    logger.info("Got %s items in tautulli activity", len(show_activity))
+
+                    actions_performed = 0
+                    for sonarr_show in self.process_library_rules(library, plex_library, all_show_data, show_activity, trakt_items):
+                        if max_actions_per_run and actions_performed >= max_actions_per_run:
+                            logger.info(f"Reached max actions per run ({max_actions_per_run}), stopping")
+                            break
+                        if not self.config.get("dry_run"):
+                            logger.info("Deleting show '%s' from sonarr instance  '%s'", sonarr_show['title'], name)
+                            if self.config.get("interactive"):
+                                logger.info("Would you like to delete show '%s' from sonarr instance '%s'? (y/n)", sonarr_show['title'], name)
+                                if input().lower() == 'y':
+                                    sonarr.del_series(sonarr_show['id'], delete_files=True)
+                            else:
+                                sonarr.del_series(sonarr_show['id'], delete_files=True)
+                        else:
+                            logger.info("[DRY-RUN] Would have deleted show '%s' from sonarr instance '%s'", sonarr_show['title'], name)
+                        
+                        saved_space += sonarr_show.get('statistics', {}).get('sizeOnDisk', 0)
+                        actions_performed += 1
+
+                        if self.config.config.get('action_delay'):
+                            # sleep in seconds
+                            time.sleep(self.config.config.get('action_delay'))
+                    
+                    logger.info("Freed %s of space by deleting %s shows", print_readable_freed_space(saved_space), actions_performed)
 
     def process_radarr(self):
         for name, radarr in self.radarr.items():
             logger.info("Processing radarr instance: '%s'", name)
             all_movie_data = radarr.get_movie()
             
-            logger.debug("[%s] Got %s movies to process", name, len(all_movie_data))
+            logger.info("[%s] Got %s movies to process", name, len(all_movie_data))
 
+            saved_space = 0
             for library in self.config.config.get("libraries", []):
                 if library.get("radarr") == name:
+                    max_actions_per_run = _get_config_value(library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN)
+
                     logger.info("Processing library '%s'", library.get("name"))
 
                     trakt_movies = self.trakt.get_all_movies_for_url(library.get("exclude", {}).get("trakt", {}))
                     logger.info("Got %s trakt movies to exclude", len(trakt_movies))
 
-                    movies_library = self.plex.library.section("Movies")
+                    movies_library = self.plex.library.section(library.get("name"))
                     logger.info("Got %s movies in plex library", movies_library.totalSize)
 
-                    movie_activity = self.tautulli.get_last_movie_activity(library, movies_library.key)
+                    movie_activity = self.tautulli.get_activity(library, movies_library.key)
                     logger.info("Got %s movies in tautulli activity", len(movie_activity))
                     
                     actions_performed = 0
                     for radarr_movie in self.process_library_rules(library, movies_library, all_movie_data, movie_activity, trakt_movies):
-                        if library.get('max_actions_per_run') and actions_performed >= library.get('max_actions_per_run'):
-                            logger.info(f"Reached max actions per run ({library.get('max_actions_per_run')}), stopping")
+                        if max_actions_per_run and actions_performed >= max_actions_per_run:
+                            logger.info(f"Reached max actions per run ({max_actions_per_run}), stopping")
                             break
                         if not self.config.get("dry_run"):
                             logger.info("Deleting movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
@@ -70,13 +127,17 @@ class Deleterr:
                             else:
                                 radarr.del_movie(radarr_movie['id'], delete_files=True)
                         else:
-                            logger.info("[DRY-RUN] Would have deleted  movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
+                            logger.info("[DRY-RUN] Would have deleted movie '%s' from radarr instance '%s'", radarr_movie['title'], name)
+                        
+                        saved_space += radarr_movie.get('sizeOnDisk', 0)
                         actions_performed += 1
 
-                        if library.get('action_delay'):
+                        if self.config.config.get('action_delay'):
                             # sleep in seconds
-                            time.sleep(library.get('action_delay'))
-            
+                            time.sleep(self.config.config.get('action_delay'))
+
+                    logger.info("Freed %s of space by deleting %s movies", print_readable_freed_space(saved_space), actions_performed)
+
             if not self.config.get("dry_run"):
                 if self.config.get("interactive"):
                     logger.info("Would you like to refresh plex library '%s'? (y/n)", movies_library.title)
@@ -98,16 +159,37 @@ class Deleterr:
     def get_library_config(self, config, show):
         return next((library for library in config.config.get("libraries", []) if library.get("name") == show), None)
     
-    def get_plex_item(self, plex_library, title, year, alternate_titles=[], stop=False):
+    def get_plex_item(self, plex_library, guid=None, title=None, year=None, alternate_titles=[], imdbId=None, tvdbId=None, teste=None):
+        if guid:
+            for guids, plex_media_item in plex_library:
+                # Check if any guid cmatches
+                for plex_guid in guids:
+                    if guid in plex_guid:
+                        return plex_media_item
+            logger.debug(f"{guid} not found in Plex")
+
         # Plex may pick some different titles sometimes, and since we can't only fetch by title, we need to check all of them
-        for title in [title] + alternate_titles:
-            try:
-                return plex_library.get(title, year=year)
-            except NotFound:
-                continue
+        for _, plex_media_item in plex_library:
+            # Check if any title matches
+            for t in [title] + alternate_titles:
+                if t.lower() == plex_media_item.title.lower() or f"{t.lower()} ({year})" == plex_media_item.title.lower():
+                    if year and plex_media_item.year and plex_media_item.year != year:
+                        if (abs(plex_media_item.year - year)) <= 1:
+                            return plex_media_item
+                    else:
+                        return plex_media_item
+            
+            # Check tvdbId is in any of the guids
+            if tvdbId:
+                for guid in plex_media_item.guids:
+                    if f"tvdb://{tvdbId}" in guid.id:
+                        return plex_media_item
+            if imdbId:
+                for guid in plex_media_item.guids:
+                    if f"imdb://{imdbId}" in guid.id:
+                        return plex_media_item
         
-        if not stop:
-            return self.get_plex_item(plex_library, title, year-1, alternate_titles, stop=True) or self.get_plex_item(plex_library, title, year+1, alternate_titles, stop=True)
+        return None
                     
     def process_library_rules(self, library_config, plex_library, all_data, activity_data, trakt_movies):
         # get the time thresholds from the config
@@ -115,106 +197,134 @@ class Deleterr:
         added_at_threshold = library_config.get('added_at_threshold', None)
         apply_last_watch_threshold_to_collections = library_config.get('apply_last_watch_threshold_to_collections', False)
         
+        plex_guid_item_pair = [([plex_media_item.guid] + [g.id for g in plex_media_item.guids], plex_media_item) for plex_media_item in plex_library.all()]
         if apply_last_watch_threshold_to_collections:
             logger.debug(f"Gathering collection watched status")
-            for watched_data in activity_data:
-                plex_movie = self.get_plex_item(plex_library, watched_data['title'], watched_data['year'])
-                if plex_movie is None:
-                    logger.debug(f"Movie {watched_data['title']} ({watched_data['year']}) not found in Plex: {watched_data}")
+            for guid, watched_data in activity_data.items():
+                plex_media_item = self.get_plex_item(plex_guid_item_pair, guid=guid)
+                if plex_media_item is None:
                     continue
                 last_watched = (datetime.now() - watched_data['last_watched']).days
-                if plex_movie.collections and last_watched_threshold and last_watched < last_watched_threshold:
-                    logger.debug(f"Movie {watched_data['title']} watched {last_watched} days ago, adding collection {plex_movie.collections} to watched collections")
-                    self.watched_collections = self.watched_collections | set([c.tag for c in plex_movie.collections])
-
-        for movie_data in sorted(all_data, key=lambda k: k.get('inCinemas', k.get('physicalRelease', k.get('digitalRelease', ''))), reverse=False):
-            plex_movie = self.get_plex_item(plex_library, movie_data['title'], movie_data['year'], [t['title'] for t in movie_data['alternateTitles']])
-            if plex_movie is None:
-                logger.debug(f"Movie {movie_data['title']} ({movie_data['year']}) not found in Plex, probably a mismatch in the release year metadata")
-                continue
-
-            if not self.is_movie_actionable(library_config, activity_data, movie_data, trakt_movies, plex_movie, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):
+                if plex_media_item.collections and last_watched_threshold and last_watched < last_watched_threshold:
+                    logger.debug(f"{watched_data['title']} watched {last_watched} days ago, adding collection {plex_media_item.collections} to watched collections")
+                    self.watched_collections = self.watched_collections | set([c.tag for c in plex_media_item.collections])
+        
+        unmatched = 0
+        for media_data in all_data:
+            plex_media_item = self.get_plex_item(plex_guid_item_pair, title=media_data['title'], year=media_data['year'], alternate_titles=[t['title'] for t in media_data['alternateTitles']], imdbId=media_data.get('imdbId'), tvdbId=media_data.get('tvdbId'), teste=media_data)
+            if plex_media_item is None:
+                if media_data.get('statistics', {}).get('episodeFileCount', 0) == 0:
+                    logger.debug(f"{media_data['title']} ({media_data['year']}) not found in Plex, but has no episodes, skipping")
+                    continue
+                else:
+                    logger.warning(f"UNMATCHED: {media_data['title']} ({media_data['year']}) not found in Plex.")
+                    unmatched += 1
+                    continue
+            if not self.is_movie_actionable(library_config, activity_data, media_data, trakt_movies, plex_media_item, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):
                 continue
             
-            yield movie_data
+            yield media_data
+            
+        logger.info(f"Found {len(all_data)} items, {unmatched} unmatched")
 
-    def is_movie_actionable(self, library, activity_data, movie_data, trakt_movies, plex_movie, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):          
-        watched_data = find_watched_data(movie_data, activity_data)
+    def is_movie_actionable(self, library, activity_data, media_data, trakt_movies, plex_media_item, last_watched_threshold, added_at_threshold, apply_last_watch_threshold_to_collections):          
+        watched_data = find_watched_data(plex_media_item, activity_data)
         if watched_data:
             last_watched = (datetime.now() - watched_data['last_watched']).days
             if last_watched_threshold and last_watched < last_watched_threshold:
-                logger.debug(f"Movie {movie_data['title']} watched {last_watched} days ago, skipping")
+                logger.debug(f"{media_data['title']} watched {last_watched} days ago, skipping")
                 return False
             
         if apply_last_watch_threshold_to_collections:
-            already_watched = self.watched_collections.intersection(set([c.tag for c in plex_movie.collections]))
+            already_watched = self.watched_collections.intersection(set([c.tag for c in plex_media_item.collections]))
             if already_watched:
-                logger.debug(f"Movie {movie_data['title']} has watched collections ({already_watched}), skipping")
+                logger.debug(f"{media_data['title']} has watched collections ({already_watched}), skipping")
                 return False
         
         # Check if the movie tmdb id is in the trakt watched list
-        if movie_data['tmdbId'] in trakt_movies:
-            logger.debug(f"Movie {movie_data['title']} found in trakt watched list {trakt_movies[movie_data['tmdbId']]['list']}, skipping")
+        if media_data.get('tvdbId', media_data.get('tmdbId')) in trakt_movies:
+            logger.debug(f"{media_data['title']} found in trakt watched list {trakt_movies[media_data.get('tvdbId', media_data.get('tmdbId'))]['list']}, skipping")
             return False
 
         # Days since added
-        date_added = (datetime.now() - plex_movie.addedAt).days
+        date_added = (datetime.now() - plex_media_item.addedAt).days
         if added_at_threshold and date_added < added_at_threshold:
-            logger.debug(f"Movie {movie_data['title']} added {date_added} days ago, skipping")
+            logger.debug(f"{media_data['title']} added {date_added} days ago, skipping")
             return False
 
         # Exclusions
         exclude = library.get('exclude', {})
         if exclude:
+            for title in exclude.get('titles', []):
+                if title.lower() == plex_media_item.title.lower():
+                    logger.debug(f"{media_data['title']} has excluded title {title}, skipping")
+                    return False
+                
             for genre in exclude.get('genres', []):
-                if genre.lower() in (g.tag.lower() for g in plex_movie.genres):
-                    logger.debug(f"Movie {movie_data['title']} has excluded genre {genre}, skipping")
+                if genre.lower() in (g.tag.lower() for g in plex_media_item.genres):
+                    logger.debug(f"{media_data['title']} has excluded genre {genre}, skipping")
                     return False
 
             for collection in exclude.get('collections', []):
-                if collection.lower() in (g.tag.lower() for g in plex_movie.collections):
-                    logger.debug(f"Movie {movie_data['title']} has excluded collection {collection}, skipping")
+                if collection.lower() in (g.tag.lower() for g in plex_media_item.collections):
+                    logger.debug(f"{media_data['title']} has excluded collection {collection}, skipping")
                     return False
                 
             if exclude.get('release_years', 0):
-                if plex_movie.year >= datetime.now().year - exclude.get('release_years'):
-                    logger.debug(f"Movie {movie_data['title']} ({plex_movie.year}) was released within the threshold years ({datetime.now().year} - {exclude.get('release_years', 0)} = {datetime.now().year - exclude.get('release_years', 0)}), skipping")
+                if plex_media_item.year >= datetime.now().year - exclude.get('release_years'):
+                    logger.debug(f"{media_data['title']} ({plex_media_item.year}) was released within the threshold years ({datetime.now().year} - {exclude.get('release_years', 0)} = {datetime.now().year - exclude.get('release_years', 0)}), skipping")
                     return False
 
             for producer in exclude.get('producers', []):
-                if producer.lower() in (g.tag.lower() for g in plex_movie.producers):
-                    logger.debug(f"Movie {movie_data['title']} has excluded producer {producer}, skipping")
+                if producer.lower() in (g.tag.lower() for g in plex_media_item.producers):
+                    logger.debug(f"{media_data['title']} has excluded producer {producer}, skipping")
                     return False
             
             for director in exclude.get('directors', []):
-                if director.lower() in (g.tag.lower() for g in plex_movie.directors):
-                    logger.debug(f"Movie {movie_data['title']} has excluded director {director}, skipping")
+                if director.lower() in (g.tag.lower() for g in plex_media_item.directors):
+                    logger.debug(f"{media_data['title']} has excluded director {director}, skipping")
                     return False
 
             for writer in exclude.get('writers', []):
-                if writer.lower() in (g.tag.lower() for g in plex_movie.writers):
-                    logger.debug(f"Movie {movie_data['title']} has excluded writer {writer}, skipping")
+                if writer.lower() in (g.tag.lower() for g in plex_media_item.writers):
+                    logger.debug(f"{media_data['title']} has excluded writer {writer}, skipping")
                     return False
 
             for actor in exclude.get('actors', []):
-                if actor.lower() in (g.tag.lower() for g in plex_movie.roles):
-                    logger.debug(f"Movie {movie_data['title']} has excluded actor {actor}, skipping")
+                if actor.lower() in (g.tag.lower() for g in plex_media_item.roles):
+                    logger.debug(f"{media_data['title']} has excluded actor {actor}, skipping")
                     return False
 
-            if plex_movie.studio and plex_movie.studio.lower() in exclude.get('studios', []):
-                logger.debug(f"Movie {movie_data['title']} has excluded studio {plex_movie.studio}, skipping")
+            if plex_media_item.studio and plex_media_item.studio.lower() in exclude.get('studios', []):
+                logger.debug(f"{media_data['title']} has excluded studio {plex_media_item.studio}, skipping")
                 return False
         
         return True
 
-def find_watched_data(movie_data, activity_data):
-    for watched_data in activity_data:
-        if watched_data['guid'] == movie_data['tmdbId']:
-            return watched_data
-        if watched_data['title'] == movie_data['title'] and watched_data['year'] == movie_data['year']:
-            return watched_data
+def find_watched_data(plex_media_item, activity_data):
+    resp = activity_data.get(plex_media_item.guid)
+
+    if resp:
+        return resp
+    
+    for guid, history in activity_data.items():
+        # Check if any guid cmatches
+        if guid in plex_media_item.guid:
+            return history
+
+        if history['title'] == plex_media_item.title:
+            if history['year'] and plex_media_item.year and plex_media_item.year != history['year']:
+                if (abs(plex_media_item.year - history['year'])) <= 1:
+                    return history
+                
     return None
 
+def _get_config_value(config, key, default=None):
+        if key in config:
+            return config[key]
+        else:
+            return default
+        
 def main():
     """
     Deleterr application entry point. Parses arguments, configs and
@@ -225,7 +335,7 @@ def main():
     log_level = os.environ.get('LOG_LEVEL', 'info').upper()
     logger.initLogger(console=True, log_dir="/config/logs", verbose=log_level == "DEBUG")
     
-    config = Config('/config/settings.yaml')
+    config = Config('config/settings.yaml')
     deleterr = Deleterr(config)
 
 if __name__ == "__main__":

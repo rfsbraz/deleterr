@@ -56,6 +56,7 @@ libraries:
     added_at_threshold: 90  # Media not added in this period will be subject to actions
     max_actions_per_run: 10  # Maximum number of actions to perform per run
     exclude:
+      titles: ["Forrest Gump"]
       tags: ["children", "favorite"]
       genres: ["horror", "thriller"]
       collections: ["Marvel Cinematic Universe"]
@@ -74,4 +75,61 @@ libraries:
             "https://trakt.tv/movies/watched/yearly",
             "https://trakt.tv/movies/collected/yearly",
             "https://trakt.tv/users/justin/lists/imdb-top-rated-movies"
+          ]
+  - name: "TV Shows"
+    action_mode: delete
+    last_watched_threshold: 365
+    added_at_threshold: 180
+    apply_last_watch_threshold_to_collections: false
+    max_actions_per_run: 10
+    sonarr: Sonarr
+    series_type: standard
+    exclude:
+      titles: []
+      tags: []
+      genres: []
+      collections: []
+      actors: []
+      producers: []
+      directors: []
+      writers: []
+      studios: []
+      release_years: 2
+      trakt:
+        max_items_per_list: 50
+        lists:
+          [
+            "https://trakt.tv/shows/trending",
+            "https://trakt.tv/shows/popular",
+            "https://trakt.tv/shows/watched/yearly",
+            "https://trakt.tv/shows/collected/yearly"
+          ]
+  - name: "Anime"
+    action_mode: delete
+    last_watched_threshold: 670
+    added_at_threshold: 360
+    apply_last_watch_threshold_to_collections: false
+    max_actions_per_run: 5
+    sonarr: Sonarr
+    series_type: anime
+    exclude:
+      titles: ["Dragon Ball", "Dragon Ball Z", "Dragon Ball GT"]
+      tags: []
+      genres: []
+      collections: []
+      actors: []
+      producers: []
+      directors: []
+      writers: []
+      studios: []
+      release_years: 0
+      trakt:
+        max_items_per_list: 50
+        lists:
+          [
+            "https://trakt.tv/shows/trending",
+            "https://trakt.tv/shows/popular",
+            "https://trakt.tv/shows/watched/yearly",
+            "https://trakt.tv/shows/collected/yearly",
+            "https://trakt.tv/users/lwerndly/lists/anime-best-series-of-all-time"
           ]

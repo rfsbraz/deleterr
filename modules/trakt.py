@@ -15,58 +15,69 @@ class Trakt:
         trakt.Trakt["lists"].trending(exceptions=True, per_page=1)
 
     def get_all_movies_for_url(self, trakt_config):
+        return self.get_trakt_items_for_url("movie", trakt_config)
+    
+    def get_all_shows_for_url(self, trakt_config):
+        return self.get_trakt_items_for_url("show", trakt_config)
+
+    def get_trakt_items_for_url(self, media_type, trakt_config):
         items = {}
         max_items_per_list = trakt_config.get("max_items_per_list", 100)
 
         for url in trakt_config.get("lists", []):
             username, listname, recurrence = extract_info_from_url(url)
 
+            key = "tmdb" if media_type == "movie" else "tvdb"
+            
+            list_items = []
             if username and listname:
-                for m in trakt.Trakt["users/*/lists/*"].items(
+                list_items = trakt.Trakt["users/*/lists/*"].items(
                     username,
                     listname,
-                    media="movie",
+                    media=media_type,
                     exceptions=True,
                     per_page=max_items_per_list,
-                ):
-                    items[int(m.get_key("tmdb"))] = {"trakt": m, "list": url}
+                )
             elif listname and recurrence:
-                movies = []
                 if listname == "favorited":
                     logger.warning(
-                        "Traktpy does not support favorited movies. Skipping..."
+                        f"Traktpy does not support favorited {media_type}s. Skipping..."
                     )
                 elif listname == "watched":
                     logger.warning(
-                        "Traktpy does not support watched movies. Skipping..."
+                        f"Traktpy does not support watched {media_type}s. Skipping..."
                     )
                 elif listname == "collected":
                     logger.warning(
-                        "Traktpy does not support collected movies. Skipping..."
+                        f"Traktpy does not support collected {media_type}s. Skipping..."
                     )
-                for m in movies:
-                    items[int(m.get_key("tmdb"))] = {"trakt": m, "list": url}
             elif listname:
-                movies = []
                 if listname == "popular":
-                    movies = trakt.Trakt["movies"].popular(
+                    list_items = trakt.Trakt[f"{media_type}s"].popular(
                         exceptions=True, per_page=max_items_per_list
                     )
                 elif listname == "trending":
-                    movies = trakt.Trakt["movies"].trending(
+                    list_items = trakt.Trakt[f"{media_type}s"].trending(
                         exceptions=True, per_page=max_items_per_list
                     )
-                for m in movies:
-                    items[int(m.get_key("tmdb"))] = {"trakt": m, "list": url}
+            
+            _process_trakt_item_list(items, list_items, url, key)
         return items
 
+"""
+Transforms a list of trakt items into a dictionary of usable items
+"""
+def _process_trakt_item_list(items, list_items, url, key):
+    for m in list_items:
+        try:
+            items[int(m.get_key(key))] = {"trakt": m, "list": url}
+        except TypeError: 
+            logger.debug(f"Could not get {key} for {m}")
 
 """
 Extracts the username and listname from a trakt url
 returns username, listname, recurrence
 """
-
-
 def extract_info_from_url(url):
     # Pattern to capture the username and list name
     user_list_pattern = (
@@ -74,10 +85,10 @@ def extract_info_from_url(url):
     )
     # Pattern to capture trending, popular movies
     movie_pattern = (
-        r"https://trakt.tv/movies/(?P<listname>trending|popular|anticipated|boxoffice)"
+        r"https://trakt.tv/(movies|shows)/(?P<listname>trending|popular|anticipated|boxoffice)"
     )
     # Pattern to capture watched, collected along with their period
-    movie_action_period_pattern = r"https://trakt.tv/movies/(?P<listname>favorited|watched|collected|)/(?P<period>daily|weekly|monthly|yearly)"
+    movie_action_period_pattern = r"https://trakt.tv/(movies|shows)/(?P<listname>favorited|watched|collected|)/(?P<period>daily|weekly|monthly|yearly)"
 
     # Check movie action with period pattern
     match = re.match(movie_action_period_pattern, url)
