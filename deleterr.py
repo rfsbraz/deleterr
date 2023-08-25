@@ -24,6 +24,7 @@ from utils import print_readable_freed_space
 logging.basicConfig()
 
 DEFAULT_MAX_ACTIONS_PER_RUN = 10
+DEFAULT_SONARR_SERIES_TYPE = "standard"
 
 class Deleterr:
     def __init__(self, config):
@@ -48,7 +49,7 @@ class Deleterr:
             saved_space = 0
             for library in self.config.config.get("libraries", []):
                 if library.get("sonarr") == name:
-                    all_show_data = [show for show in unfiltered_all_show_data if show['seriesType'] == library.get("series_type")]
+                    all_show_data = [show for show in unfiltered_all_show_data if show['seriesType'] == library.get("series_type", DEFAULT_SONARR_SERIES_TYPE)]
                     logger.info("Instance has %s items to process", len(all_show_data))
 
                     max_actions_per_run = _get_config_value(library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN)

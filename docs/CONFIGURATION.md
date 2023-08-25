@@ -145,6 +145,7 @@ For each of your Plex libraries, specify how you want Deleterr to behave. Define
 | `name` | Name of the Plex library you wish to manage. Must match the name of your Plex Library | `"Movies", "TV Shows", "Anime` |
 | `radarr` | Identifier of the Radarr instance to be used for this library (matches a `name` under the `radarr` configuration). Exclusive with the `sonarr` property | `"Radarr", "Radarr 4K"` |
 | `sonarr` | Identifier of the Sonarr instance to be used for this library (matches a `name` under the `sonarr` configuration). Exclusive with the `radarr` property | `"Sonarr", "Sonarr 4K"` |
+| `series_type` | Only used if `sonarr` is set. It's required to filter for the show type, defaults to `standard`. Supported values: `standard`, `anime`, `daily` | `"standard", "anime"` |
 | `action_mode` | The action to perform on the media items. Possible values: `"delete"`. | `"delete"` |
 | `last_watched_threshold` | Time threshold in days. Media watched in this period will not be actionable | `90` |
 | `apply_last_watch_threshold_to_collections` | If set to `true`, the last watched threshold will be applied to all other items in the same collection. | `true` |
