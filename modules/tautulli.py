@@ -7,6 +7,7 @@ import json
 import logger
 import time
 
+
 def filter_by_most_recent(data, key, sort_key):
     # Create an empty dictionary to hold the highest stopped value for each id
     max_sort_key = {}
@@ -39,20 +40,31 @@ class Tautulli:
         self.api.get_library_media_info(section_id=section_id, refresh=True)
 
     def get_activity(self, library_config, section):
-        last_watched_threshold_date = datetime.now() - timedelta(days=library_config.get('last_watched_threshold'))
-        unwatched_threshold_date = datetime.now() - timedelta(days=library_config.get('added_at_threshold'))
+        last_watched_threshold_date = datetime.now() - timedelta(
+            days=library_config.get("last_watched_threshold")
+        )
+        unwatched_threshold_date = datetime.now() - timedelta(
+            days=library_config.get("added_at_threshold")
+        )
         min_date = min(last_watched_threshold_date, unwatched_threshold_date)
 
         # Request params
         start = 0
 
         # create a dictionary to store last watch activity for each show
-        last_activity = []
+        last_activity = {}
         raw_data = []
 
         while True:
             # load the data
-            history = self.api.get_history(section_id=section, order_column='date', order_direction="asc", start=start, after=min_date, length=100)    
+            history = self.api.get_history(
+                section_id=section,
+                order_column="date",
+                order_direction="asc",
+                start=start,
+                after=min_date,
+                length=100,
+            )
 
             if len(history["data"]) == 0:
                 break
@@ -60,15 +72,17 @@ class Tautulli:
             start += len(history["data"])
             raw_data += history["data"]
 
-            logger.debug("Got %s history items. next start: %s", len(history["data"]), start)
+            logger.debug(
+                "Got %s history items. next start: %s", len(history["data"]), start
+            )
 
-        #TODO: we may need to handle rating_key and parent_rating_key to support more complex rules regarding deleting shows, seasons and episodes
+        # TODO: we may need to handle rating_key and parent_rating_key to support more complex rules regarding deleting shows, seasons and episodes
         key = (
             "grandparent_rating_key"
             if raw_data[0].get("grandparent_rating_key", "") != ""
             else "rating_key"
         )
-        
+
         filtered_data = filter_by_most_recent(raw_data, key, "stopped")
         i = 0
         for entry in filtered_data:
@@ -78,41 +92,13 @@ class Tautulli:
                 # Media was deleted, skip
                 continue
             
-            item_id = None
-            
-            item_id = _extract_id(metadata.get("guids", []))
-
-            if not item_id:
-                logger.warn("No tvdb or tmdb id found for %s", metadata["title"])
-                continue
-            
-            last_activity.append(
-                {
-                    "last_watched": datetime.fromtimestamp(entry["stopped"]),
-                    "title": metadata["title"],
-                    "year": metadata["year"],
-                    "guid": int(item_id),
-                }
-            )
+            last_activity[metadata["guid"]] = {
+                "last_watched": datetime.fromtimestamp(entry["stopped"]),
+                "title": metadata["title"],
+                "year": int(metadata["year"]),
+            }
 
             # Print progress
             logger.debug("[%s/%s] Processed items", i, len(filtered_data))
 
         return last_activity
-
-"""
-Extracts the tvdb or tmdb id from a list of guids
-"""
-def _extract_id(guids):
-    tvdb_id = None
-    tmdb_id = None
-
-    # Loop through the guids array
-    for guid in guids:
-        if 'tvdb' in guid:
-            tvdb_id = guid.split('//')[1]
-        elif 'tmdb' in guid:
-            tmdb_id = guid.split('//')[1]
-
-    # Return tvdb if exists, otherwise return tmdb
-    return tvdb_id if tvdb_id else tmdb_id
