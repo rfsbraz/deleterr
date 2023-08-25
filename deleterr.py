@@ -335,7 +335,7 @@ def main():
     log_level = os.environ.get('LOG_LEVEL', 'info').upper()
     logger.initLogger(console=True, log_dir="/config/logs", verbose=log_level == "DEBUG")
     
-    config = Config('config/settings.yaml')
+    config = Config('/config/settings.yaml')
     deleterr = Deleterr(config)
 
 if __name__ == "__main__":
