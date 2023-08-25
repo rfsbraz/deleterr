@@ -56,6 +56,7 @@ libraries:
     added_at_threshold: 90  # Media not added in this period will be subject to actions
     max_actions_per_run: 10  # Maximum number of actions to perform per run
     exclude:
+      titles: ["Forrest Gump"]
       tags: ["children", "favorite"]
       genres: ["horror", "thriller"]
       collections: ["Marvel Cinematic Universe"]

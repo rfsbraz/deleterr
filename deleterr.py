@@ -254,6 +254,11 @@ class Deleterr:
         # Exclusions
         exclude = library.get('exclude', {})
         if exclude:
+            for title in exclude.get('titles', []):
+                if title.lower() == plex_media_item.title.lower():
+                    logger.debug(f"{media_data['title']} has excluded title {title}, skipping")
+                    return False
+                
             for genre in exclude.get('genres', []):
                 if genre.lower() in (g.tag.lower() for g in plex_media_item.genres):
                     logger.debug(f"{media_data['title']} has excluded genre {genre}, skipping")
