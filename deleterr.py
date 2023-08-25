@@ -41,6 +41,13 @@ class Deleterr:
         self.process_sonarr()
         self.process_radarr()
 
+    def delete_series(self, sonarr, sonarr_show):
+        import pdb; pdb.set_trace()
+        episodes = sonarr.get_episode_files_by_series_id(sonarr_show['id'])
+        for episode in episodes:
+            sonarr.del_episode_file(episode['id'])
+        sonarr.del_series(sonarr_show['id'], delete_files=True)
+
     def process_sonarr(self):
         for name, sonarr in self.sonarr.items():
             logger.info("Processing sonarr instance: '%s'", name)
@@ -75,9 +82,9 @@ class Deleterr:
                             if self.config.get("interactive"):
                                 logger.info("Would you like to delete show '%s' from sonarr instance '%s'? (y/n)", sonarr_show['title'], name)
                                 if input().lower() == 'y':
-                                    sonarr.del_series(sonarr_show['id'], delete_files=True)
+                                    self.delete_series(sonarr, sonarr_show)
                             else:
-                                sonarr.del_series(sonarr_show['id'], delete_files=True)
+                                self.delete_series(sonarr, sonarr_show)
                         else:
                             logger.info("[DRY-RUN] Would have deleted show '%s' from sonarr instance '%s'", sonarr_show['title'], name)
                         
