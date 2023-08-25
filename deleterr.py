@@ -127,8 +127,8 @@ class Deleterr:
                                 radarr.del_movie(radarr_movie['id'], delete_files=True)
                         else:
                             logger.info("[DRY-RUN] Would have deleted movie '%s' from radarr instance '%s'", radarr_movie['title'], name)
-
-                        saved_space += radarr_movie.get('statistics', {}).get('sizeOnDisk', 0)
+                        
+                        saved_space += radarr_movie.get('sizeOnDisk', 0)
                         actions_performed += 1
 
                         if self.config.config.get('action_delay'):
