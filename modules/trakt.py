@@ -5,9 +5,12 @@ import logger
 
 class Trakt:
     def __init__(self, config):
+        self._configure_trakt(config)
+
+    def _configure_trakt(self, config):
         trakt.Trakt.configuration.defaults.client(
-            id=config.get("trakt").get("client_id"),
-            secret=config.get("trakt").get("client_secret"),
+            id=config.get("trakt", {}).get("client_id"),
+            secret=config.get("trakt", {}).get("client_secret"),
         )
 
     def test_connection(self):
@@ -15,62 +18,60 @@ class Trakt:
         trakt.Trakt["lists"].trending(exceptions=True, per_page=1)
 
     def get_all_movies_for_url(self, trakt_config):
-        return self.get_trakt_items_for_url("movie", trakt_config)
+        return self._get_all_items_for_url("movie", trakt_config)
     
     def get_all_shows_for_url(self, trakt_config):
-        return self.get_trakt_items_for_url("show", trakt_config)
+        return self._get_all_items_for_url("show", trakt_config)
 
-    def get_trakt_items_for_url(self, media_type, trakt_config):
+    def _get_all_items_for_url(self, media_type, trakt_config):
         items = {}
         max_items_per_list = trakt_config.get("max_items_per_list", 100)
-
         for url in trakt_config.get("lists", []):
             username, listname, recurrence = extract_info_from_url(url)
-
+            list_items = self._fetch_list_items(media_type, username, listname, recurrence, max_items_per_list)
             key = "tmdb" if media_type == "movie" else "tvdb"
-            
-            list_items = []
-            if username and listname:
-                if listname == "watchlist":
-                    list_items = trakt.Trakt['users/*/watchlist'].get(
-                        username,
-                        media=media_type,
-                        exceptions=True,
-                        per_page=max_items_per_list,
-                    )
-                else:
-                    list_items = trakt.Trakt["users/*/lists/*"].items(
-                        username,
-                        listname,
-                        media=media_type,
-                        exceptions=True,
-                        per_page=max_items_per_list,
-                    )
-            elif listname and recurrence:
-                if listname == "favorited":
-                    logger.warning(
-                        f"Traktpy does not support favorited {media_type}s. Skipping..."
-                    )
-                elif listname == "watched":
-                    logger.warning(
-                        f"Traktpy does not support watched {media_type}s. Skipping..."
-                    )
-                elif listname == "collected":
-                    logger.warning(
-                        f"Traktpy does not support collected {media_type}s. Skipping..."
-                    )
-            elif listname:
-                if listname == "popular":
-                    list_items = trakt.Trakt[f"{media_type}s"].popular(
-                        exceptions=True, per_page=max_items_per_list
-                    )
-                elif listname == "trending":
-                    list_items = trakt.Trakt[f"{media_type}s"].trending(
-                        exceptions=True, per_page=max_items_per_list
-                    )
-            
             _process_trakt_item_list(items, list_items, url, key)
         return items
+
+    def _fetch_list_items(self, media_type, username, listname, recurrence, max_items_per_list):
+        if username and listname:
+            return self._fetch_user_list_items(media_type, username, listname, max_items_per_list)
+        elif listname and recurrence:
+            return self._fetch_recurrent_list_items(media_type, listname)
+        elif listname:
+            return self._fetch_general_list_items(media_type, listname, max_items_per_list)
+        return []
+
+    def _fetch_user_list_items(self, media_type, username, listname, max_items_per_list):
+        if listname == "watchlist":
+            return trakt.Trakt['users/*/watchlist'].get(
+                username,
+                media=media_type,
+                exceptions=True,
+                per_page=max_items_per_list,
+            )
+        return trakt.Trakt["users/*/lists/*"].items(
+            username,
+            listname,
+            media=media_type,
+            exceptions=True,
+            per_page=max_items_per_list,
+        )
+
+    def _fetch_recurrent_list_items(self, media_type, listname):
+        logger.warning(f"Traktpy does not support {listname} {media_type}s. Skipping...")
+        return []
+
+    def _fetch_general_list_items(self, media_type, listname, max_items_per_list):
+        if listname == "popular":
+            return trakt.Trakt[f"{media_type}s"].popular(
+                exceptions=True, per_page=max_items_per_list
+            )
+        elif listname == "trending":
+            return trakt.Trakt[f"{media_type}s"].trending(
+                exceptions=True, per_page=max_items_per_list
+            )
+        return []
 
 """
 Transforms a list of trakt items into a dictionary of usable items

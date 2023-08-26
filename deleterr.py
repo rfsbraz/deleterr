@@ -35,7 +35,7 @@ class Deleterr:
         self.plex = PlexServer(config.get("plex", "url"), config.get("plex", "token"), timeout=120)
         self.sonarr = {connection['name']: SonarrAPI(connection["url"],connection["api_key"]) for connection in config.config.get("sonarr", [])}
         self.radarr = {connection['name']: RadarrAPI(connection["url"],connection["api_key"]) for connection in config.config.get("radarr", [])}
-        self.trakt = Trakt(config)
+        self.trakt = Trakt(config.config)
         self.watched_collections = set()
 
         self.process_sonarr()
