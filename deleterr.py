@@ -6,15 +6,15 @@ import time
 import os
 
 from datetime import datetime, timedelta
-from config import Config
 from pyarr.sonarr import SonarrAPI
 from pyarr.radarr import RadarrAPI
-from modules.tautulli import Tautulli
-import logger
+from .modules.tautulli import Tautulli
+from .modules.trakt import Trakt
+from . import logger
 from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound
-from modules.trakt import Trakt
-from utils import print_readable_freed_space
+from .utils import print_readable_freed_space
+from .config import Config
 
 logging.basicConfig()
 

@@ -1,6 +1,6 @@
 import trakt
 import re
-import logger
+from .. import logger
 
 
 class Trakt:
