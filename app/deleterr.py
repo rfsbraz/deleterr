@@ -21,7 +21,7 @@ logging.basicConfig()
 DEFAULT_MAX_ACTIONS_PER_RUN = 10
 DEFAULT_SONARR_SERIES_TYPE = "standard"
 
-CONFIG = Config('config/settings.yaml')
+CONFIG = Config('/config/settings.yaml')
 
 class Deleterr:
     def __init__(self):
