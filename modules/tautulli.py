@@ -6,8 +6,9 @@ import logger
 
 HISTORY_PAGE_SIZE = 300
 
+
 def filter_by_most_recent(data, key, sort_key):
-     # Create an empty dictionary to hold the highest stopped value for each id
+    # Create an empty dictionary to hold the highest stopped value for each id
     max_sort_key = {}
 
     # Go through each dictionary in the list
@@ -25,10 +26,8 @@ def filter_by_most_recent(data, key, sort_key):
 
 
 class Tautulli:
-    def __init__(self, config):
-        self.api = RawAPI(
-            config.get("tautulli", "url"), config.get("tautulli", "api_key")
-        )
+    def __init__(self, url, api_key):
+        self.api = RawAPI(url, api_key)
 
     def get_last_episode_activity(self, library_config, section):
         return self.get_activity(library_config, section)
@@ -47,7 +46,9 @@ class Tautulli:
         for index, entry in enumerate(filtered_data):
             metadata = self.api.get_metadata(entry[key])
             if metadata:
-                last_activity[metadata["guid"]] = self._prepare_activity_entry(entry, metadata)
+                last_activity[metadata["guid"]] = self._prepare_activity_entry(
+                    entry, metadata
+                )
             logger.debug("[%s/%s] Processed items", index + 1, len(filtered_data))
 
         return last_activity
@@ -72,7 +73,7 @@ class Tautulli:
                 start=start,
                 after=min_date,
                 length=HISTORY_PAGE_SIZE,
-                include_activity=1
+                include_activity=1,
             )
             if not history["data"]:
                 break
@@ -85,7 +86,11 @@ class Tautulli:
         return raw_data
 
     def _determine_key(self, raw_data):
-        return "grandparent_rating_key" if raw_data[0].get("grandparent_rating_key", "") else "rating_key"
+        return (
+            "grandparent_rating_key"
+            if raw_data[0].get("grandparent_rating_key", "")
+            else "rating_key"
+        )
 
     def _prepare_activity_entry(self, entry, metadata):
         return {

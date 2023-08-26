@@ -7,11 +7,6 @@ import os
 
 from datetime import datetime, timedelta
 from config import Config
-from pyarr.exceptions import (
-    PyarrMissingArgument,
-    PyarrRecordNotFound,
-    PyarrResourceNotFound,
-)
 from pyarr.sonarr import SonarrAPI
 from pyarr.radarr import RadarrAPI
 from modules.tautulli import Tautulli
@@ -26,16 +21,16 @@ logging.basicConfig()
 DEFAULT_MAX_ACTIONS_PER_RUN = 10
 DEFAULT_SONARR_SERIES_TYPE = "standard"
 
-class Deleterr:
-    def __init__(self, config):
-        self.config = config
+CONFIG = Config('/config/settings.yaml')
 
+class Deleterr:
+    def __init__(self):
         # Setup connections
-        self.tautulli = Tautulli(config)
-        self.plex = PlexServer(config.get("plex", "url"), config.get("plex", "token"), timeout=120)
-        self.sonarr = {connection['name']: SonarrAPI(connection["url"],connection["api_key"]) for connection in config.config.get("sonarr", [])}
-        self.radarr = {connection['name']: RadarrAPI(connection["url"],connection["api_key"]) for connection in config.config.get("radarr", [])}
-        self.trakt = Trakt(config.config)
+        self.tautulli = Tautulli(CONFIG.settings.get("tautulli").get("url"), CONFIG.settings.get("tautulli").get("api_key"))
+        self.plex = PlexServer(CONFIG.settings.get("plex").get("url"), CONFIG.settings.get("plex").get("token"), timeout=120)
+        self.sonarr = {connection['name']: SonarrAPI(connection["url"],connection["api_key"]) for connection in CONFIG.settings.get("sonarr", [])}
+        self.radarr = {connection['name']: RadarrAPI(connection["url"],connection["api_key"]) for connection in CONFIG.settings.get("radarr", [])}
+        self.trakt = Trakt(CONFIG.settings.get("trakt", {}).get("client_id"), CONFIG.settings.get("trakt", {}).get("client_secret"))
         self.watched_collections = set()
 
         self.process_sonarr()
@@ -61,7 +56,7 @@ class Deleterr:
             unfiltered_all_show_data = sonarr.get_series()
         
             saved_space = 0
-            for library in self.config.config.get("libraries", []):
+            for library in CONFIG.settings.get("libraries", []):
                 if library.get("sonarr") == name:
                     all_show_data = [show for show in unfiltered_all_show_data if show['seriesType'] == library.get("series_type", DEFAULT_SONARR_SERIES_TYPE)]
                     logger.info("Instance has %s items to process", len(all_show_data))
@@ -84,9 +79,9 @@ class Deleterr:
                         if max_actions_per_run and actions_performed >= max_actions_per_run:
                             logger.info(f"Reached max actions per run ({max_actions_per_run}), stopping")
                             break
-                        if not self.config.get("dry_run"):
+                        if not CONFIG.settings.get("dry_run"):
                             logger.info("Deleting show '%s' from sonarr instance  '%s'", sonarr_show['title'], name)
-                            if self.config.get("interactive"):
+                            if CONFIG.settings.get("interactive"):
                                 logger.info("Would you like to delete show '%s' from sonarr instance '%s'? (y/n)", sonarr_show['title'], name)
                                 if input().lower() == 'y':
                                     self.delete_series(sonarr, sonarr_show)
@@ -98,9 +93,9 @@ class Deleterr:
                         saved_space += sonarr_show.get('statistics', {}).get('sizeOnDisk', 0)
                         actions_performed += 1
 
-                        if self.config.config.get('action_delay'):
+                        if CONFIG.settings.get('action_delay'):
                             # sleep in seconds
-                            time.sleep(self.config.config.get('action_delay'))
+                            time.sleep(CONFIG.settings.get('action_delay'))
                     
                     logger.info("Freed %s of space by deleting %s shows", print_readable_freed_space(saved_space), actions_performed)
 
@@ -112,7 +107,7 @@ class Deleterr:
             logger.info("[%s] Got %s movies to process", name, len(all_movie_data))
 
             saved_space = 0
-            for library in self.config.config.get("libraries", []):
+            for library in CONFIG.settings.get("libraries", []):
                 if library.get("radarr") == name:
                     max_actions_per_run = _get_config_value(library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN)
 
@@ -132,9 +127,9 @@ class Deleterr:
                         if max_actions_per_run and actions_performed >= max_actions_per_run:
                             logger.info(f"Reached max actions per run ({max_actions_per_run}), stopping")
                             break
-                        if not self.config.get("dry_run"):
+                        if not CONFIG.settings.get("dry_run"):
                             logger.info("Deleting movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
-                            if self.config.get("interactive"):
+                            if CONFIG.settings.get("interactive"):
                                 logger.info("Would you like to delete movie '%s' from radarr instance '%s'? (y/n)", radarr_movie['title'], name)
                                 if input().lower() == 'y':
                                     radarr.del_movie(radarr_movie['id'], delete_files=True)
@@ -146,14 +141,14 @@ class Deleterr:
                         saved_space += radarr_movie.get('sizeOnDisk', 0)
                         actions_performed += 1
 
-                        if self.config.config.get('action_delay'):
+                        if CONFIG.settings.get('action_delay'):
                             # sleep in seconds
-                            time.sleep(self.config.config.get('action_delay'))
+                            time.sleep(CONFIG.settings.get('action_delay'))
 
                     logger.info("Freed %s of space by deleting %s movies", print_readable_freed_space(saved_space), actions_performed)
 
-            if not self.config.get("dry_run"):
-                if self.config.get("interactive"):
+            if not CONFIG.settings.get("dry_run"):
+                if CONFIG.settings.get("interactive"):
                     logger.info("Would you like to refresh plex library '%s'? (y/n)", movies_library.title)
                     if input().lower() == 'y':
                         movies_library.refresh()
@@ -161,9 +156,9 @@ class Deleterr:
                     if input().lower() == 'y':
                         self.tautulli.refresh_library(movies_library.key)
                 else:
-                    if self.config.get("plex_library_scan_after_actions"):
+                    if CONFIG.settings.get("plex_library_scan_after_actions"):
                         movies_library.refresh()
-                    if self.config.get("tautulli_library_scan_after_actions"):
+                    if CONFIG.settings.get("tautulli_library_scan_after_actions"):
                         self.tautulli.refresh_library(movies_library.key)
             else:
                 logger.info("[DRY-RUN] Would have updated plex library")
@@ -349,8 +344,7 @@ def main():
     log_level = os.environ.get('LOG_LEVEL', 'info').upper()
     logger.initLogger(console=True, log_dir="/config/logs", verbose=log_level == "DEBUG")
     
-    config = Config('config/settings.yaml')
-    deleterr = Deleterr(config)
+    Deleterr()
 
 if __name__ == "__main__":
     main()
