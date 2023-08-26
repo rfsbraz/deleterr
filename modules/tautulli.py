@@ -1,15 +1,13 @@
-# enconding: utf-8
+# encoding: utf-8
 
 from tautulli import RawAPI
-import logging
 from datetime import datetime, timedelta
-import json
 import logger
-import time
 
+HISTORY_PAGE_SIZE = 300
 
 def filter_by_most_recent(data, key, sort_key):
-    # Create an empty dictionary to hold the highest stopped value for each id
+     # Create an empty dictionary to hold the highest stopped value for each id
     max_sort_key = {}
 
     # Go through each dictionary in the list
@@ -28,78 +26,70 @@ def filter_by_most_recent(data, key, sort_key):
 
 class Tautulli:
     def __init__(self, config):
-        self.config = config
         self.api = RawAPI(
             config.get("tautulli", "url"), config.get("tautulli", "api_key")
         )
 
     def get_last_episode_activity(self, library_config, section):
-        return self.get_activity(section)
+        return self.get_activity(library_config, section)
 
     def refresh_library(self, section_id):
         self.api.get_library_media_info(section_id=section_id, refresh=True)
 
     def get_activity(self, library_config, section):
+        last_activity = {}
+        min_date = self._calculate_min_date(library_config)
+        logger.debug("Fetching last activity since %s", min_date)
+        raw_data = self._fetch_history_data(section, min_date)
+        key = self._determine_key(raw_data)
+        filtered_data = filter_by_most_recent(raw_data, key, "stopped")
+
+        for index, entry in enumerate(filtered_data):
+            metadata = self.api.get_metadata(entry[key])
+            if metadata:
+                last_activity[metadata["guid"]] = self._prepare_activity_entry(entry, metadata)
+            logger.debug("[%s/%s] Processed items", index + 1, len(filtered_data))
+
+        return last_activity
+
+    def _calculate_min_date(self, library_config):
         last_watched_threshold_date = datetime.now() - timedelta(
             days=library_config.get("last_watched_threshold")
         )
         unwatched_threshold_date = datetime.now() - timedelta(
             days=library_config.get("added_at_threshold")
         )
-        min_date = min(last_watched_threshold_date, unwatched_threshold_date)
+        return min(last_watched_threshold_date, unwatched_threshold_date)
 
-        # Request params
+    def _fetch_history_data(self, section, min_date):
         start = 0
-
-        # create a dictionary to store last watch activity for each show
-        last_activity = {}
         raw_data = []
-
         while True:
-            # load the data
             history = self.api.get_history(
                 section_id=section,
                 order_column="date",
                 order_direction="asc",
                 start=start,
                 after=min_date,
-                length=100,
+                length=HISTORY_PAGE_SIZE,
                 include_activity=1
             )
-
-            if len(history["data"]) == 0:
+            if not history["data"]:
                 break
 
             start += len(history["data"])
-            raw_data += history["data"]
+            raw_data.extend(history["data"])
 
-            logger.debug(
-                "Got %s history items. next start: %s", len(history["data"]), start
-            )
+        logger.debug("Fetched %s items", len(raw_data))
 
-        # TODO: we may need to handle rating_key and parent_rating_key to support more complex rules regarding deleting shows, seasons and episodes
-        key = (
-            "grandparent_rating_key"
-            if raw_data[0].get("grandparent_rating_key", "") != ""
-            else "rating_key"
-        )
+        return raw_data
 
-        filtered_data = filter_by_most_recent(raw_data, key, "stopped")
-        i = 0
-        for entry in filtered_data:
-            i += 1
-            metadata = self.api.get_metadata(entry[key])
-            if not metadata:
-                # Media was deleted, skip
-                continue
-            
-            last_activity[metadata["guid"]] = {
-                "last_watched": datetime.fromtimestamp(entry["stopped"]),
-                "title": metadata["title"],
-                "year": int(metadata["year"]),
-            }
+    def _determine_key(self, raw_data):
+        return "grandparent_rating_key" if raw_data[0].get("grandparent_rating_key", "") else "rating_key"
 
-            # Print progress
-            logger.debug("[%s/%s] Processed items", i, len(filtered_data))
-
-        return last_activity
+    def _prepare_activity_entry(self, entry, metadata):
+        return {
+            "last_watched": datetime.fromtimestamp(entry["stopped"]),
+            "title": metadata["title"],
+            "year": int(metadata["year"]),
+        }
