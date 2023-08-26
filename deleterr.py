@@ -42,10 +42,17 @@ class Deleterr:
         self.process_radarr()
 
     def delete_series(self, sonarr, sonarr_show):
-        import pdb; pdb.set_trace()
+        ## PyArr doesn't support deleting the series files, so we need to do it manually
         episodes = sonarr.get_episode_files_by_series_id(sonarr_show['id'])
+
+        # Mark all episodes as unmonitored so they don't get re-downloaded while we're deleting them
+        sonarr.upd_episode_monitor([episode['id'] for episode in episodes], False)
+
+        # delete the files
         for episode in episodes:
             sonarr.del_episode_file(episode['id'])
+
+        # delete the series
         sonarr.del_series(sonarr_show['id'], delete_files=True)
 
     def process_sonarr(self):
@@ -342,7 +349,7 @@ def main():
     log_level = os.environ.get('LOG_LEVEL', 'info').upper()
     logger.initLogger(console=True, log_dir="/config/logs", verbose=log_level == "DEBUG")
     
-    config = Config('/config/settings.yaml')
+    config = Config('config/settings.yaml')
     deleterr = Deleterr(config)
 
 if __name__ == "__main__":

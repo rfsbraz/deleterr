@@ -31,13 +31,21 @@ class Trakt:
             
             list_items = []
             if username and listname:
-                list_items = trakt.Trakt["users/*/lists/*"].items(
-                    username,
-                    listname,
-                    media=media_type,
-                    exceptions=True,
-                    per_page=max_items_per_list,
-                )
+                if listname == "watchlist":
+                    list_items = trakt.Trakt['users/*/watchlist'].get(
+                        username,
+                        media=media_type,
+                        exceptions=True,
+                        per_page=max_items_per_list,
+                    )
+                else:
+                    list_items = trakt.Trakt["users/*/lists/*"].items(
+                        username,
+                        listname,
+                        media=media_type,
+                        exceptions=True,
+                        per_page=max_items_per_list,
+                    )
             elif listname and recurrence:
                 if listname == "favorited":
                     logger.warning(
@@ -80,6 +88,10 @@ returns username, listname, recurrence
 """
 def extract_info_from_url(url):
     # Pattern to capture the username and list name
+    user_watchlist_pattern = (
+        r"https://trakt.tv/users/(?P<username>[^/]+)/watchlist"
+    )
+    # Pattern to capture the username and list name
     user_list_pattern = (
         r"https://trakt.tv/users/(?P<username>[^/]+)/lists/(?P<listname>[^/]+)"
     )
@@ -100,6 +112,11 @@ def extract_info_from_url(url):
     if match:
         return None, match.group("listname"), None
 
+    # Check user watchlist pattern
+    match = re.match(user_watchlist_pattern, url)
+    if match:
+        return match.group("username"), "watchlist", None
+    
     # Check user list pattern
     match = re.match(user_list_pattern, url)
     if match:

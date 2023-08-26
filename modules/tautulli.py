@@ -64,6 +64,7 @@ class Tautulli:
                 start=start,
                 after=min_date,
                 length=100,
+                include_activity=1
             )
 
             if len(history["data"]) == 0:
