@@ -25,11 +25,14 @@ RUN \
 
 RUN \
   mkdir /config && \
+  mkdir /config/logs && \
   touch /config/DOCKER
+  
+ADD ./config/ /config
 VOLUME /config
 
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Run deleterr.py when the container launches
-CMD ["python", "deleterr.py"]
+CMD ["python", "-m", "app.deleterr"]

@@ -1,11 +1,11 @@
 # encoding: utf-8
 
 import yaml
-from . import logger
+from app import logger
 import sys
 import requests
 from tautulli import RawAPI
-from .modules.trakt import Trakt
+from app.modules.trakt import Trakt
 
 class Config:
     def __init__(self, config_file):

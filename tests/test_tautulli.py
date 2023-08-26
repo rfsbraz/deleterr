@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, Mock
-from ..modules.tautulli import Tautulli, filter_by_most_recent
+from app.modules.tautulli import Tautulli, filter_by_most_recent
 from datetime import datetime, timedelta
 
 
@@ -25,8 +25,8 @@ def test_filter_by_most_recent(data, key, sort_key, expected):
     assert result == expected
 
 
-@patch("deleterr.config.Config", Mock())
-@patch("deleterr.modules.tautulli.RawAPI", Mock())
+@patch("app.config.Config", Mock())
+@patch("app.modules.tautulli.RawAPI", Mock())
 @pytest.mark.parametrize(
     "library_config,expected_days",
     [

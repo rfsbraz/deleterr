@@ -2,7 +2,7 @@
 
 from tautulli import RawAPI
 from datetime import datetime, timedelta
-from .. import logger
+from app import logger
 
 HISTORY_PAGE_SIZE = 300
 

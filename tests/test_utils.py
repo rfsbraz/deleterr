@@ -1,5 +1,5 @@
 import pytest
-from ..utils import print_readable_freed_space
+from app.utils import print_readable_freed_space
 
 @pytest.mark.parametrize("input_size, expected_output", [
     (500, "500.00 Bytes"),

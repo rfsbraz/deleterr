@@ -8,20 +8,20 @@ import os
 from datetime import datetime, timedelta
 from pyarr.sonarr import SonarrAPI
 from pyarr.radarr import RadarrAPI
-from .modules.tautulli import Tautulli
-from .modules.trakt import Trakt
-from . import logger
+from app.modules.tautulli import Tautulli
+from app.modules.trakt import Trakt
+from app import logger
 from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound
-from .utils import print_readable_freed_space
-from .config import Config
+from app.utils import print_readable_freed_space
+from app.config import Config
 
 logging.basicConfig()
 
 DEFAULT_MAX_ACTIONS_PER_RUN = 10
 DEFAULT_SONARR_SERIES_TYPE = "standard"
 
-CONFIG = Config('/config/settings.yaml')
+CONFIG = Config('config/settings.yaml')
 
 class Deleterr:
     def __init__(self):
