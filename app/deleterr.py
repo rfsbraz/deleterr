@@ -55,8 +55,6 @@ class Deleterr:
                 # Every episode is unmonitored, so it won't be re-downloaded
                 skip_deleting_show = True
                 logger.warning(f"Failed to delete episode file {episode['episodeFileId']} ({episode}): {e}")
-            except PyarrBadRequest as e:
-                import pdb; pdb.set_trace()
     
         # delete the series
         if not skip_deleting_show:
