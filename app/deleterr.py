@@ -15,6 +15,7 @@ from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound
 from app.utils import print_readable_freed_space
 from app.config import Config
+from pyarr.exceptions import PyarrResourceNotFound
 
 logging.basicConfig()
 
@@ -38,17 +39,30 @@ class Deleterr:
 
     def delete_series(self, sonarr, sonarr_show):
         ## PyArr doesn't support deleting the series files, so we need to do it manually
-        episodes = sonarr.get_episode_files_by_series_id(sonarr_show['id'])
+        episodes = sonarr.get_episode(sonarr_show['id'], series=True)
 
         # Mark all episodes as unmonitored so they don't get re-downloaded while we're deleting them
         sonarr.upd_episode_monitor([episode['id'] for episode in episodes], False)
 
         # delete the files
+        skip_deleting_show = False
         for episode in episodes:
-            sonarr.del_episode_file(episode['id'])
-
+            try:
+                if episode['episodeFileId'] != 0:
+                    sonarr.del_episode_file(episode['episodeFileId'])
+            except PyarrResourceNotFound as e:
+                # An error occurred while deleting the file, we'll skip deleting the show to make sure it is grabbed on the next run
+                # Every episode is unmonitored, so it won't be re-downloaded
+                skip_deleting_show = True
+                logger.warning(f"Failed to delete episode file {episode['episodeFileId']} ({episode}): {e}")
+            except PyarrBadRequest as e:
+                import pdb; pdb.set_trace()
+    
         # delete the series
-        sonarr.del_series(sonarr_show['id'], delete_files=True)
+        if not skip_deleting_show:
+            sonarr.del_series(sonarr_show['id'], delete_files=True)
+        else:
+            logger.info(f"Skipping deleting show {sonarr_show['id']} ({sonarr_show['title']}) due to errors deleting episode files. It will be deleted on the next run.")
 
     def process_sonarr(self):
         for name, sonarr in self.sonarr.items():
