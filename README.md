@@ -1,10 +1,8 @@
 # Deleterr
 
-Disk space is finite, but so is your time. Automate removing inactive media with Deleterr.
+Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files based on user-specified criteria. Deleterr is customizable, allowing you to specify metadata based rules for different libraries and sonarr/radarr instances.
 
 Setup Deleterr to run on a schedule and it will automatically delete media files that meet your criteria. This allows to keep your library fresh and clean, without having to manually manage it to free up space.
-
-Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files based on user-specified criteria. Deleterr is customizable, allowing you to specify rules for different libraries, as well as tags, collections, and genres to exclude.
 
 ## WARNING
 
