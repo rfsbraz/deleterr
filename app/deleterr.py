@@ -15,7 +15,7 @@ from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound
 from app.utils import print_readable_freed_space
 from app.config import Config
-from pyarr.exceptions import PyarrResourceNotFound
+from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 
 logging.basicConfig()
 
@@ -51,10 +51,15 @@ class Deleterr:
                 if episode['episodeFileId'] != 0:
                     sonarr.del_episode_file(episode['episodeFileId'])
             except PyarrResourceNotFound as e:
-                # An error occurred while deleting the file, we'll skip deleting the show to make sure it is grabbed on the next run
-                # Every episode is unmonitored, so it won't be re-downloaded
+                # If the episode file doesn't exist, it's probably because it was already deleted by sonarr
+                # Sometimes happens for multi-episode files
+                logger.debug(f"Failed to delete episode file {episode['episodeFileId']} for show {sonarr_show['id']} ({sonarr_show['title']}): {e}")
+                pass
+            except PyarrServerError as e:
+                # If the episode file is still in use, we can't delete the show
+                logger.error(f"Failed to delete episode file {episode['episodeFileId']} for show {sonarr_show['id']} ({sonarr_show['title']}): {e}")
                 skip_deleting_show = True
-                logger.warning(f"Failed to delete episode file {episode['episodeFileId']} ({episode}): {e}")
+                break
     
         # delete the series
         if not skip_deleting_show:
