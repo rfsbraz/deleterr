@@ -20,7 +20,7 @@ services:
         image: ghcr.io/rfsbraz/deleterr:master
         container_name: deleterr
         environment:
-            LOG_LEVEL: DEBUG
+            LOG_LEVEL: INFO
         volumes:
             - ./config:/config
             - ./logs:/config/logs
