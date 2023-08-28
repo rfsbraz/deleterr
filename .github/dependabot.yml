@@ -13,3 +13,9 @@ updates:
       python-packages:
         patterns:
           - "*"
+  - package-ecosystem: "docker"
+    # Look for a `Dockerfile` in the `root` directory
+    directory: "/"
+    # Check for updates once a week
+    schedule:
+      interval: "weekly"
