@@ -11,7 +11,7 @@ Setup Deleterr to run on a schedule and it will automatically delete media files
 
 ### Docker Compose
 
-Adding deleterr to your docker-compose file is really easy and can be combinede with ofelia to run at a schedule. Here's an example that runs deleterr weekly:
+Adding deleterr to your docker-compose file is really easy and can be combined with ofelia to run at a schedule. Here's an example that runs deleterr weekly:
 
 ```yaml
 version: "3.9"
