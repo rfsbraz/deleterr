@@ -301,29 +301,31 @@ class Deleterr:
                     logger.debug(f"{media_data['title']} ({plex_media_item.year}) was released within the threshold years ({datetime.now().year} - {exclude.get('release_years', 0)} = {datetime.now().year - exclude.get('release_years', 0)}), skipping")
                     return False
 
-            for producer in exclude.get('producers', []):
-                if producer.lower() in (g.tag.lower() for g in plex_media_item.producers):
-                    logger.debug(f"{media_data['title']} has excluded producer {producer}, skipping")
-                    return False
-            
-            for director in exclude.get('directors', []):
-                if director.lower() in (g.tag.lower() for g in plex_media_item.directors):
-                    logger.debug(f"{media_data['title']} has excluded director {director}, skipping")
-                    return False
-
-            for writer in exclude.get('writers', []):
-                if writer.lower() in (g.tag.lower() for g in plex_media_item.writers):
-                    logger.debug(f"{media_data['title']} has excluded writer {writer}, skipping")
-                    return False
-
-            for actor in exclude.get('actors', []):
-                if actor.lower() in (g.tag.lower() for g in plex_media_item.roles):
-                    logger.debug(f"{media_data['title']} has excluded actor {actor}, skipping")
-                    return False
-
             if plex_media_item.studio and plex_media_item.studio.lower() in exclude.get('studios', []):
                 logger.debug(f"{media_data['title']} has excluded studio {plex_media_item.studio}, skipping")
                 return False
+            
+            # Producers, directors, writers, actors are only available for shows per episode, so we need to check each episode
+            for episode in plex_media_item.episodes():
+                for producer in exclude.get('producers', []):
+                    if producer.lower() in (g.tag.lower() for g in episode.producers):
+                        logger.debug(f"{media_data['title']} [{episode}] has excluded producer {producer}, skipping")
+                        return False
+                
+                for director in exclude.get('directors', []):
+                    if director.lower() in (g.tag.lower() for g in episode.directors):
+                        logger.debug(f"{media_data['title']} [{episode}] has excluded director {director}, skipping")
+                        return False
+
+                for writer in exclude.get('writers', []):
+                    if writer.lower() in (g.tag.lower() for g in episode.writers):
+                        logger.debug(f"{media_data['title']} [{episode}] has excluded writer {writer}, skipping")
+                        return False
+
+                for actor in exclude.get('actors', []):
+                    if actor.lower() in (g.tag.lower() for g in episode.roles):
+                        logger.debug(f"{media_data['title']} [{episode}] has excluded actor {actor}, skipping")
+                        return False
         
         return True
 
