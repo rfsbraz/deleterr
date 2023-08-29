@@ -44,8 +44,7 @@ class Tautulli:
         filtered_data = filter_by_most_recent(raw_data, key, "stopped")
 
         for index, entry in enumerate(filtered_data):
-            metadata = self.api.get_metadata(entry[key])
-            if metadata:
+            if metadata := self.api.get_metadata(entry[key]):
                 last_activity[metadata["guid"]] = self._prepare_activity_entry(
                     entry, metadata
                 )

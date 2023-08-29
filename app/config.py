@@ -55,15 +55,16 @@ class Config:
             t.test_connection()
             return True
         except Exception as err:
-            logger.error(f"Failed to connect to Trakt, check your configuration.")
+            logger.error("Failed to connect to Trakt, check your configuration.")
             logger.debug(f"Error: {err}")
             return False
 
     def validate_sonarr_and_radarr(self):
-        for connection in self.settings.get("sonarr") + self.settings.get("radarr"):
-            if not self.test_api_connection(connection):
-                return False
-        return True
+        return all(
+            self.test_api_connection(connection)
+            for connection in self.settings.get("sonarr")
+            + self.settings.get("radarr")
+        )
 
     def test_api_connection(self, connection):
         try:
