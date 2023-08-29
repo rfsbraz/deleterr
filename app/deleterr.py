@@ -93,11 +93,14 @@ class Deleterr:
 
                     actions_performed = 0
                     for sonarr_show in self.process_library_rules(library, plex_library, all_show_data, show_activity, trakt_items):
+                        disk_size = sonarr_show.get('statistics', {}).get('sizeOnDisk', 0)
+                        total_episodes = sonarr_show.get('statistics', {}).get('episodeFileCount', 0)
+
                         if max_actions_per_run and actions_performed >= max_actions_per_run:
                             logger.info(f"Reached max actions per run ({max_actions_per_run}), stopping")
                             break
                         if not CONFIG.settings.get("dry_run"):
-                            logger.info("Deleting show '%s' from sonarr instance  '%s'", sonarr_show['title'], name)
+                            logger.info("[%s/%s] Deleting show '%s' from sonarr instance  '%s' (%s - %s episodes)", actions_performed, max_actions_per_run, sonarr_show['title'], name, print_readable_freed_space(disk_size), total_episodes)
                             if CONFIG.settings.get("interactive"):
                                 logger.info("Would you like to delete show '%s' from sonarr instance '%s'? (y/n)", sonarr_show['title'], name)
                                 if input().lower() == 'y':
@@ -105,9 +108,9 @@ class Deleterr:
                             else:
                                 self.delete_series(sonarr, sonarr_show)
                         else:
-                            logger.info("[DRY-RUN] Would have deleted show '%s' from sonarr instance '%s'", sonarr_show['title'], name)
+                            logger.info("[DRY-RUN] [%s/%s] Would have deleted show '%s' from sonarr instance '%s'  (%s - %s episodes) ", actions_performed, max_actions_per_run, sonarr_show['title'], name, print_readable_freed_space(disk_size), total_episodes)
                         
-                        saved_space += sonarr_show.get('statistics', {}).get('sizeOnDisk', 0)
+                        saved_space += disk_size
                         actions_performed += 1
 
                         if CONFIG.settings.get('action_delay'):
@@ -141,11 +144,13 @@ class Deleterr:
                     
                     actions_performed = 0
                     for radarr_movie in self.process_library_rules(library, movies_library, all_movie_data, movie_activity, trakt_movies):
+                        disk_size = radarr_movie.get('sizeOnDisk', 0)
+
                         if max_actions_per_run and actions_performed >= max_actions_per_run:
                             logger.info(f"Reached max actions per run ({max_actions_per_run}), stopping")
                             break
                         if not CONFIG.settings.get("dry_run"):
-                            logger.info("Deleting movie '%s' from radarr instance  '%s'", radarr_movie['title'], name)
+                            logger.info("[%s/%s] Deleting movie '%s' from radarr instance  '%s' (%s)", actions_performed, max_actions_per_run, radarr_movie['title'], name, print_readable_freed_space(disk_size))
                             if CONFIG.settings.get("interactive"):
                                 logger.info("Would you like to delete movie '%s' from radarr instance '%s'? (y/n)", radarr_movie['title'], name)
                                 if input().lower() == 'y':
@@ -153,9 +158,9 @@ class Deleterr:
                             else:
                                 radarr.del_movie(radarr_movie['id'], delete_files=True)
                         else:
-                            logger.info("[DRY-RUN] Would have deleted movie '%s' from radarr instance '%s'", radarr_movie['title'], name)
+                            logger.info("[DRY-RUN] [%s/%s] Would have deleted movie '%s' from radarr instance '%s' (%s)", actions_performed, max_actions_per_run, radarr_movie['title'], name, print_readable_freed_space(disk_size))
                         
-                        saved_space += radarr_movie.get('sizeOnDisk', 0)
+                        saved_space += disk_size
                         actions_performed += 1
 
                         if CONFIG.settings.get('action_delay'):
@@ -306,25 +311,46 @@ class Deleterr:
                 return False
             
             # Producers, directors, writers, actors are only available for shows per episode, so we need to check each episode
-            for episode in plex_media_item.episodes():
+            if hasattr(plex_media_item, 'episodes'):
+                for episode in plex_media_item.episodes():
+                    for producer in exclude.get('producers', []):
+                        if producer.lower() in (g.tag.lower() for g in episode.producers):
+                            logger.debug(f"{media_data['title']} [{episode}] has excluded producer {producer}, skipping")
+                            return False
+                    
+                    for director in exclude.get('directors', []):
+                        if director.lower() in (g.tag.lower() for g in episode.directors):
+                            logger.debug(f"{media_data['title']} [{episode}] has excluded director {director}, skipping")
+                            return False
+
+                    for writer in exclude.get('writers', []):
+                        if writer.lower() in (g.tag.lower() for g in episode.writers):
+                            logger.debug(f"{media_data['title']} [{episode}] has excluded writer {writer}, skipping")
+                            return False
+
+                    for actor in exclude.get('actors', []):
+                        if actor.lower() in (g.tag.lower() for g in episode.roles):
+                            logger.debug(f"{media_data['title']} [{episode}] has excluded actor {actor}, skipping")
+                            return False
+            else:
                 for producer in exclude.get('producers', []):
-                    if producer.lower() in (g.tag.lower() for g in episode.producers):
-                        logger.debug(f"{media_data['title']} [{episode}] has excluded producer {producer}, skipping")
+                    if producer.lower() in (g.tag.lower() for g in plex_media_item.producers):
+                        logger.debug(f"{media_data['title']} [{plex_media_item}] has excluded producer {producer}, skipping")
                         return False
                 
                 for director in exclude.get('directors', []):
-                    if director.lower() in (g.tag.lower() for g in episode.directors):
-                        logger.debug(f"{media_data['title']} [{episode}] has excluded director {director}, skipping")
+                    if director.lower() in (g.tag.lower() for g in plex_media_item.directors):
+                        logger.debug(f"{media_data['title']} [{plex_media_item}] has excluded director {director}, skipping")
                         return False
 
                 for writer in exclude.get('writers', []):
-                    if writer.lower() in (g.tag.lower() for g in episode.writers):
-                        logger.debug(f"{media_data['title']} [{episode}] has excluded writer {writer}, skipping")
+                    if writer.lower() in (g.tag.lower() for g in plex_media_item.writers):
+                        logger.debug(f"{media_data['title']} [{plex_media_item}] has excluded writer {writer}, skipping")
                         return False
 
                 for actor in exclude.get('actors', []):
-                    if actor.lower() in (g.tag.lower() for g in episode.roles):
-                        logger.debug(f"{media_data['title']} [{episode}] has excluded actor {actor}, skipping")
+                    if actor.lower() in (g.tag.lower() for g in plex_media_item.roles):
+                        logger.debug(f"{media_data['title']} [{plex_media_item}] has excluded actor {actor}, skipping")
                         return False
         
         return True
