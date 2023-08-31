@@ -91,7 +91,6 @@ class Deleterr:
                 logger.debug(
                     f"Failed to delete episode file {episode['episodeFileId']} for show {sonarr_show['id']} ({sonarr_show['title']}): {e}"
                 )
-                pass
             except PyarrServerError as e:
                 # If the episode file is still in use, we can't delete the show
                 logger.error(
@@ -304,28 +303,28 @@ class Deleterr:
                         actions_performed,
                     )
 
-            if not CONFIG.settings.get("dry_run"):
-                if CONFIG.settings.get("interactive"):
-                    logger.info(
-                        "Would you like to refresh plex library '%s'? (y/n)",
-                        movies_library.title,
-                    )
-                    if input().lower() == "y":
-                        movies_library.refresh()
-                    logger.info(
-                        "Would you like to refresh tautulli library '%s'? (y/n)",
-                        movies_library.title,
-                    )
-                    if input().lower() == "y":
-                        self.tautulli.refresh_library(movies_library.key)
-                else:
-                    if CONFIG.settings.get("plex_library_scan_after_actions"):
-                        movies_library.refresh()
-                    if CONFIG.settings.get("tautulli_library_scan_after_actions"):
-                        self.tautulli.refresh_library(movies_library.key)
-            else:
+            if CONFIG.settings.get("dry_run"):
                 logger.info("[DRY-RUN] Would have updated plex library")
                 logger.info("[DRY-RUN] Would have updated tautulli library")
+
+            elif CONFIG.settings.get("interactive"):
+                logger.info(
+                    "Would you like to refresh plex library '%s'? (y/n)",
+                    movies_library.title,
+                )
+                if input().lower() == "y":
+                    movies_library.refresh()
+                logger.info(
+                    "Would you like to refresh tautulli library '%s'? (y/n)",
+                    movies_library.title,
+                )
+                if input().lower() == "y":
+                    self.tautulli.refresh_library(movies_library.key)
+            else:
+                if CONFIG.settings.get("plex_library_scan_after_actions"):
+                    movies_library.refresh()
+                if CONFIG.settings.get("tautulli_library_scan_after_actions"):
+                    self.tautulli.refresh_library(movies_library.key)
 
     def get_library_config(self, config, show):
         return next(
@@ -364,12 +363,15 @@ class Deleterr:
                     t.lower() == plex_media_item.title.lower()
                     or f"{t.lower()} ({year})" == plex_media_item.title.lower()
                 ):
-                    if year and plex_media_item.year and plex_media_item.year != year:
-                        if (abs(plex_media_item.year - year)) <= 1:
-                            return plex_media_item
-                    else:
+                    if (
+                        not year
+                        or not plex_media_item.year
+                        or plex_media_item.year == year
+                    ):
                         return plex_media_item
 
+                    if (abs(plex_media_item.year - year)) <= 1:
+                        return plex_media_item
             # Check tvdbId is in any of the guids
             if tvdbId:
                 for guid in plex_media_item.guids:
@@ -400,7 +402,7 @@ class Deleterr:
             for plex_media_item in plex_library.all()
         ]
         if apply_last_watch_threshold_to_collections:
-            logger.debug(f"Gathering collection watched status")
+            logger.debug("Gathering collection watched status")
             for guid, watched_data in activity_data.items():
                 plex_media_item = self.get_plex_item(plex_guid_item_pair, guid=guid)
                 if plex_media_item is None:
@@ -414,9 +416,9 @@ class Deleterr:
                     logger.debug(
                         f"{watched_data['title']} watched {last_watched} days ago, adding collection {plex_media_item.collections} to watched collections"
                     )
-                    self.watched_collections = self.watched_collections | set(
-                        [c.tag for c in plex_media_item.collections]
-                    )
+                    self.watched_collections = self.watched_collections | {
+                        c.tag for c in plex_media_item.collections
+                    }
 
         unmatched = 0
         for media_data in sort_media(all_data, library_config.get("sort", {})):
@@ -434,13 +436,12 @@ class Deleterr:
                     logger.debug(
                         f"{media_data['title']} ({media_data['year']}) not found in Plex, but has no episodes, skipping"
                     )
-                    continue
                 else:
                     logger.warning(
                         f"UNMATCHED: {media_data['title']} ({media_data['year']}) not found in Plex."
                     )
                     unmatched += 1
-                    continue
+                continue
             if not self.is_movie_actionable(
                 library_config,
                 activity_data,
@@ -468,8 +469,7 @@ class Deleterr:
         added_at_threshold,
         apply_last_watch_threshold_to_collections,
     ):
-        watched_data = find_watched_data(plex_media_item, activity_data)
-        if watched_data:
+        if watched_data := find_watched_data(plex_media_item, activity_data):
             last_watched = (datetime.now() - watched_data["last_watched"]).days
             if last_watched_threshold and last_watched < last_watched_threshold:
                 logger.debug(
@@ -478,10 +478,9 @@ class Deleterr:
                 return False
 
         if apply_last_watch_threshold_to_collections:
-            already_watched = self.watched_collections.intersection(
-                set([c.tag for c in plex_media_item.collections])
-            )
-            if already_watched:
+            if already_watched := self.watched_collections.intersection(
+                {c.tag for c in plex_media_item.collections}
+            ):
                 logger.debug(
                     f"{media_data['title']} has watched collections ({already_watched}), skipping"
                 )
@@ -500,9 +499,7 @@ class Deleterr:
             logger.debug(f"{media_data['title']} added {date_added} days ago, skipping")
             return False
 
-        # Exclusions
-        exclude = library.get("exclude", {})
-        if exclude:
+        if exclude := library.get("exclude", {}):
             for title in exclude.get("titles", []):
                 if title.lower() == plex_media_item.title.lower():
                     logger.debug(
@@ -618,9 +615,7 @@ class Deleterr:
 
 
 def find_watched_data(plex_media_item, activity_data):
-    resp = activity_data.get(plex_media_item.guid)
-
-    if resp:
+    if resp := activity_data.get(plex_media_item.guid):
         return resp
 
     for guid, history in activity_data.items():
@@ -641,10 +636,7 @@ def find_watched_data(plex_media_item, activity_data):
 
 
 def _get_config_value(config, key, default=None):
-    if key in config:
-        return config[key]
-    else:
-        return default
+    return config[key] if key in config else default
 
 
 def sort_media(media_list, sort_config):

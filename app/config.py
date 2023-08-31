@@ -44,15 +44,16 @@ class Config:
             t.test_connection()
             return True
         except Exception as err:
-            logger.error(f"Failed to connect to Trakt, check your configuration.")
+            logger.error("Failed to connect to Trakt, check your configuration.")
             logger.debug(f"Error: {err}")
             return False
 
     def validate_sonarr_and_radarr(self):
-        for connection in self.settings.get("sonarr") + self.settings.get("radarr"):
-            if not self.test_api_connection(connection):
-                return False
-        return True
+        return all(
+            self.test_api_connection(connection)
+            for connection in self.settings.get("sonarr")
+            + self.settings.get("radarr")
+        )
 
     def test_api_connection(self, connection):
         try:
@@ -107,13 +108,11 @@ class Config:
                     f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete'."
                 )
                 return False
-            
-        # Validate sort_config
-        sort_config = library.get('sort', {})
-        if sort_config:
+
+        if sort_config := library.get('sort', {}):
             sort_field = sort_config.get('field')
             sort_order = sort_config.get('order')
-            
+
             if sort_field and sort_field not in VALID_SORT_FIELDS:
                 logger.error(
                     f"Invalid sort field '{sort_field}' in library '{library['name']}', supported values are {VALID_SORT_FIELDS}."
@@ -125,5 +124,5 @@ class Config:
                     f"Invalid sort order '{sort_order}' in library '{library['name']}', supported values are {VALID_SORT_ORDERS}."
                 )
                 return False
-        
+
         return True
