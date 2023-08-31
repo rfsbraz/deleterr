@@ -8,6 +8,19 @@ from tautulli import RawAPI
 from app.modules.trakt import Trakt
 from app.constants import VALID_SORT_FIELDS, VALID_SORT_ORDERS, VALID_ACTION_MODES
 
+def load_config(self, config_file):
+    try:
+        with open(config_file, "r", encoding="utf8") as stream:
+            return Config(yaml.safe_load(stream))
+    except FileNotFoundError:
+        logger.error(
+            f"Configuration file {config_file} not found. Copy the example config and edit it to your needs."
+        )
+    except yaml.YAMLError as exc:
+        logger.error(exc)
+
+    sys.exit(1)
+    
 class Config:
     def __init__(self, config_file):
         self.settings = config_file

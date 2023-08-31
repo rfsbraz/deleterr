@@ -1,5 +1,5 @@
 import pytest
-from app.deleterr import Config
+from app.config import Config
 from app.constants import VALID_SORT_FIELDS, VALID_SORT_ORDERS, VALID_ACTION_MODES
 
 # Test case for validate_libraries
