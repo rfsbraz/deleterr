@@ -6,24 +6,13 @@ import sys
 import requests
 from tautulli import RawAPI
 from app.modules.trakt import Trakt
+from app.constants import VALID_SORT_FIELDS, VALID_SORT_ORDERS, VALID_ACTION_MODES
 
 class Config:
     def __init__(self, config_file):
-        self.load_config(config_file)
-        self.post_init_validations()
+        self.settings = config_file
 
-    def load_config(self, config_file):
-        try:
-            with open(config_file, "r", encoding="utf8") as stream:
-                self.settings = yaml.safe_load(stream)
-        except FileNotFoundError:
-            self.log_and_exit(
-                f"Configuration file {config_file} not found. Copy the example config and edit it to your needs."
-            )
-        except yaml.YAMLError as exc:
-            self.log_and_exit(exc)
-
-    def post_init_validations(self):
+    def validate(self):
         if not self.validate_config():
             self.log_and_exit("Invalid configuration, exiting.")
 
@@ -113,9 +102,27 @@ class Config:
                 )
                 return False
 
-            if library["action_mode"] not in ["delete"]:
+            if library["action_mode"] not in VALID_ACTION_MODES:
                 logger.error(
                     f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete'."
+                )
+                return False
+            
+        # Validate sort_config
+        sort_config = library.get('sort', {})
+        if sort_config:
+            sort_field = sort_config.get('field')
+            sort_order = sort_config.get('order')
+            
+            if sort_field and sort_field not in VALID_SORT_FIELDS:
+                logger.error(
+                    f"Invalid sort field '{sort_field}' in library '{library['name']}', supported values are {VALID_SORT_FIELDS}."
+                )
+                return False
+
+            if sort_order and sort_order not in VALID_SORT_ORDERS:
+                logger.error(
+                    f"Invalid sort order '{sort_order}' in library '{library['name']}', supported values are {VALID_SORT_ORDERS}."
                 )
                 return False
         
