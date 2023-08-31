@@ -140,17 +140,19 @@ trakt:
 
 For each of your Plex libraries, specify how you want Deleterr to behave. Define the name of the library, which instances to use, the action mode, and various thresholds related to watched status and addition date. You can also define exclusion rules here to protect certain media items from being actioned.
 
-| Property | Description | Example |
-|----------|-------------|---------|
-| `name` | Name of the Plex library you wish to manage. Must match the name of your Plex Library | `"Movies", "TV Shows", "Anime` |
-| `radarr` | Identifier of the Radarr instance to be used for this library (matches a `name` under the `radarr` configuration). Exclusive with the `sonarr` property | `"Radarr", "Radarr 4K"` |
-| `sonarr` | Identifier of the Sonarr instance to be used for this library (matches a `name` under the `sonarr` configuration). Exclusive with the `radarr` property | `"Sonarr", "Sonarr 4K"` |
-| `series_type` | Only used if `sonarr` is set. It's required to filter for the show type, defaults to `standard`. Supported values: `standard`, `anime`, `daily` | `"standard", "anime"` |
-| `action_mode` | The action to perform on the media items. Possible values: `"delete"`. | `"delete"` |
-| `last_watched_threshold` | Time threshold in days. Media watched in this period will not be actionable | `90` |
-| `apply_last_watch_threshold_to_collections` | If set to `true`, the last watched threshold will be applied to all other items in the same collection. | `true` |
-| `added_at_threshold` | Media that added to Plex within this period (in days) will not be actionable | `180` |
-| `max_actions_per_run` | Limit the number of actions performed per run. Defaults to `10` | `3000` |
+| Property | Description | Example |  Supported Values |
+|----------|-------------|---------|-------------------|
+| `name` | Name of the Plex library you wish to manage. Must match the name of your Plex Library | `"Movies", "TV Shows", "Anime` | - |
+| `radarr` | Identifier of the Radarr instance to be used for this library (matches a `name` under the `radarr` configuration). Exclusive with the `sonarr` property | `"Radarr", "Radarr 4K"` | - |
+| `sonarr` | Identifier of the Sonarr instance to be used for this library (matches a `name` under the `sonarr` configuration). Exclusive with the `radarr` property | `"Sonarr", "Sonarr 4K"` | - |
+| `series_type` | Only used if `sonarr` is set. It's required to filter for the show type, defaults to `standard`. | `"standard", "anime"` | `standard`, `anime`, `daily` |
+| `action_mode` | The action to perform on the media items. | `delete` | `delete` |
+| `last_watched_threshold` | Time threshold in days. Media watched in this period will not be actionable | `90` | - |
+| `apply_last_watch_threshold_to_collections` | If set to `true`, the last watched threshold will be applied to all other items in the same collection. | `true` | `true` / `false` |
+| `added_at_threshold` | Media that added to Plex within this period (in days) will not be actionable | `180` | - |
+| `max_actions_per_run` | Limit the number of actions performed per run. Defaults to `10` | `3000` | - |
+| `sort_config.field` | Field to sort media list by. Defaults to `title`	 | `title` | `title`, `size`, `release_year`, `runtime`, `added_date`, `rating`, `episodes`, `seasons` |
+| `sort_config.order` | Direction to sort media list by. Defaults to `asc`  | `asc` | `asc`, `desc` |
 
 <details>
   <summary>See example</summary>
@@ -164,6 +166,9 @@ libraries:
     added_at_threshold: 180
     apply_last_watch_threshold_to_collections: true
     max_actions_per_run: 3000
+    sort_config:
+      field: "title"
+      order: "asc"
 ```
 </details>
 
