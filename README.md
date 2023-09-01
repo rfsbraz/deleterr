@@ -24,7 +24,7 @@ services:
         volumes:
             - ./config:/config
             - ./logs:/config/logs
-        restart: on-failure:2
+        restart: no
     scheduler:
         image: mcuadros/ofelia:latest
         container_name: scheduler
