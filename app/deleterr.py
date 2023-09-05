@@ -673,7 +673,7 @@ def main():
         console=True, log_dir="/config/logs", verbose=log_level == "DEBUG"
     )
     
-    config = load_config()
+    config = load_config("/config/config.yml")
     config.validate()
 
     Deleterr(config)
