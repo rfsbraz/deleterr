@@ -129,9 +129,6 @@ class Deleterr:
                     for sonarr_show in self.process_library_rules(
                         library, plex_library, all_show_data, show_activity, trakt_items
                     ):
-                        import pdb
-
-                        pdb.set_trace()
                         disk_size = sonarr_show.get("statistics", {}).get(
                             "sizeOnDisk", 0
                         )
