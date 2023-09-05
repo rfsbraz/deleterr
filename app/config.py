@@ -8,7 +8,7 @@ from tautulli import RawAPI
 from app.modules.trakt import Trakt
 from app.constants import VALID_SORT_FIELDS, VALID_SORT_ORDERS, VALID_ACTION_MODES
 
-def load_config(self, config_file):
+def load_config(config_file):
     try:
         with open(config_file, "r", encoding="utf8") as stream:
             return Config(yaml.safe_load(stream))
