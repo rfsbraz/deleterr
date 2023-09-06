@@ -642,7 +642,7 @@ def sort_media(media_list, sort_config):
             ratings = media_item.get("ratings", {})
             return ratings.get("imdb", {}).get("value", 0) or ratings.get(
                 "tmdb", {}
-            ).get("value", 0)
+            ).get("value", 0) or ratings.get("value", 0)
         elif sort_field == "seasons":
             return media_item.get("statistics", {}).get("seasonCount", 1)
         elif sort_field == "episodes":
