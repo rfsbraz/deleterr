@@ -627,32 +627,28 @@ def sort_media(media_list, sort_config):
 
     def sort_key(media_item):
         if sort_field == "title":
-            return media_item.get("sortTitle")
+            return media_item.get("sortTitle", "")
         elif sort_field == "size":
             return media_item.get("sizeOnDisk") or media_item.get("statistics", {}).get(
-                "sizeOnDisk"
+                "sizeOnDisk", 0
             )
         elif sort_field == "release_year":
-            return media_item.get("year")
+            return media_item.get("year", 0)
         elif sort_field == "runtime":
-            return media_item.get("runtime")
+            return media_item.get("runtime", 0)
         elif sort_field == "added_date":
-            return media_item.get("added")
+            return media_item.get("added", "")
         elif sort_field == "rating":
             ratings = media_item.get("ratings", {})
-            return (
-                ratings.get("imdb", {}).get("value")
-                or ratings.get("tmdb", {}).get("value")
-                or ratings.get("value")
-            )
+            return ratings.get("imdb", {}).get("value", 0) or ratings.get(
+                "tmdb", {}
+            ).get("value", 0)
         elif sort_field == "seasons":
-            return media_item.get("statistics", {}).get("seasonCount") or 1
+            return media_item.get("statistics", {}).get("seasonCount", 1)
         elif sort_field == "episodes":
-            return media_item.get("statistics", {}).get("totalEpisodeCount") or 1
+            return media_item.get("statistics", {}).get("totalEpisodeCount", 1)
         else:
-            return media_item.get(
-                "sortTitle"
-            )  # Default to sorting by title if the field is not recognized
+            return media_item.get("sortTitle", "")
 
     sorted_media = sorted(media_list, key=sort_key, reverse=(sort_order == "desc"))
     return sorted_media
