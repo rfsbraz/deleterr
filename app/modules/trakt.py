@@ -60,6 +60,12 @@ class Trakt:
                 exceptions=True,
                 per_page=max_items_per_list,
             )
+        elif listname == "favorites":
+            logger.warning(
+                f"Traktpy does not support {listname} {media_type}s. Skipping..."
+            )
+            return []
+        
         return trakt.Trakt["users/*/lists/*"].items(
             username,
             listname,
@@ -107,7 +113,7 @@ returns username, listname, recurrence
 
 def extract_info_from_url(url):
     # Pattern to capture the username and list name
-    user_watchlist_pattern = r"https://trakt.tv/users/(?P<username>[^/]+)/watchlist"
+    user_watchlist_pattern = r"https://trakt.tv/users/(?P<username>[^/]+)/(?P<listname>(watchlist|favorites))"
     # Pattern to capture the username and list name
     user_list_pattern = (
         r"https://trakt.tv/users/(?P<username>[^/]+)/lists/(?P<listname>[^/]+)"
@@ -130,7 +136,7 @@ def extract_info_from_url(url):
     # Check user watchlist pattern
     match = re.match(user_watchlist_pattern, url)
     if match:
-        return match.group("username"), "watchlist", None
+        return match.group("username"), match.group("listname"), None
 
     # Check user list pattern
     match = re.match(user_list_pattern, url)
