@@ -96,5 +96,5 @@ class Tautulli:
         return {
             "last_watched": datetime.fromtimestamp(entry["stopped"]),
             "title": metadata["title"],
-            "year": int(metadata["year"]),
+            "year": int(metadata.get("year", 0))
         }
