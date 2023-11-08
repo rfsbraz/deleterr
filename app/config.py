@@ -3,6 +3,7 @@
 import yaml
 from app import logger
 import sys
+import os
 import requests
 from tautulli import RawAPI
 from app.modules.trakt import Trakt
@@ -10,7 +11,9 @@ from app.constants import VALID_SORT_FIELDS, VALID_SORT_ORDERS, VALID_ACTION_MOD
 
 def load_config(config_file):
     try:
-        with open(config_file, "r", encoding="utf8") as stream:
+        full_path = os.path.abspath(config_file)
+        with open(full_path, "r", encoding="utf8") as stream:
+            logger.debug("Loading configuration from %s", full_path)
             return Config(yaml.safe_load(stream))
     except FileNotFoundError:
         logger.error(
