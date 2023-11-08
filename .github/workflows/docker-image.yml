@@ -1,7 +1,8 @@
 name: Create and publish a Docker image
 
-# Configures this workflow to run every time a change is pushed to the branch master.
 on:
+  schedule:
+    - cron:  '0 2 * * *'
   push:
     branches:
       - 'master'
