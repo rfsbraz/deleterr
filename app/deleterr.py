@@ -665,8 +665,9 @@ def main():
     logger.initLogger(
         console=True, log_dir="/config/logs", verbose=log_level == "DEBUG"
     )
-    
-    config = load_config("/config/settings.yaml")
+    logger.info("Log level set to %s", log_level)
+
+    config = load_config("config/settings.yaml")
     config.validate()
 
     Deleterr(config)
