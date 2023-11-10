@@ -1,10 +1,10 @@
-version: '3'
+version: "3.9"
 services:
-  deleterr:
-    build: .
-    volumes:
-      - .:/app
-      - ./config:/app/config
-      - ./logs:/app/logs
-    environment:
-      - PYTHONUNBUFFERED=1
+    deleterr:
+        image: ghcr.io/rfsbraz/deleterr:latest
+        container_name: deleterr
+        environment:
+            LOG_LEVEL: INFO
+        volumes:
+            - ./config:/config
+            - ./logs:/config/logs

@@ -17,7 +17,7 @@ Adding deleterr to your docker-compose file is really easy and can be combined w
 version: "3.9"
 services:
     deleterr:
-        image: ghcr.io/rfsbraz/deleterr:master
+        image: ghcr.io/rfsbraz/deleterr:latest
         container_name: deleterr
         environment:
             LOG_LEVEL: INFO
@@ -46,7 +46,7 @@ You can find more information about ofelia's scheduling options [here](https://g
 Set your settings file in `config/settings.yaml` and run the following command:
 
 ```bash
-docker run -v ./config:/config -v ./logs:/config/logs ghcr.io/rfsbraz/deleterr:master -e LOG_LEVEL=DEBUG
+docker run -v ./config:/config -v ./logs:/config/logs ghcr.io/rfsbraz/deleterr:latest -e LOG_LEVEL=DEBUG
 ```
 
 ## Configuration
