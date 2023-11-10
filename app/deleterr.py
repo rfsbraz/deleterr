@@ -667,7 +667,7 @@ def main():
     )
     logger.info("Log level set to %s", log_level)
 
-    config = load_config("config/settings.yaml")
+    config = load_config("/config/settings.yaml")
     config.validate()
 
     Deleterr(config)
