@@ -1,10 +1,10 @@
 version: "3.9"
 services:
     deleterr:
-        image: ghcr.io/rfsbraz/deleterr:latest
+        build: .
         container_name: deleterr
         environment:
-            LOG_LEVEL: INFO
+            LOG_LEVEL: DEBUG
         volumes:
             - ./config:/config
             - ./logs:/config/logs
