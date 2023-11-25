@@ -115,36 +115,40 @@ class Config:
     def validate_libraries(self):
         trakt_configured = self.settings.get("trakt") is not None
 
-        for library in self.settings.get("libraries", []):
+        libraries = self.settings.get("libraries", [])
+
+        if not libraries:
+            self.log_and_exit("No libraries configured. Please check your configuration.")
+            
+        for library in libraries:
+            if 'sonarr' not in library and 'radarr' not in library:
+                self.log_and_exit(f"Neither 'sonarr' nor 'radarr' is configured for library '{library.get('name')}'. Please check your configuration.")
+            
             if (
                 len(library.get("exclude", {}).get("trakt_lists", [])) > 0
                 and not trakt_configured
             ):
-                logger.error(
+                self.log_and_exit(
                     f"Trakt lists configured for {library['name']} but trakt is not configured, check your configuration."
                 )
-                return False
 
             if library["action_mode"] not in VALID_ACTION_MODES:
-                logger.error(
+                self.log_and_exit(
                     f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete'."
                 )
-                return False
 
         if sort_config := library.get('sort', {}):
             sort_field = sort_config.get('field')
             sort_order = sort_config.get('order')
 
             if sort_field and sort_field not in VALID_SORT_FIELDS:
-                logger.error(
+                self.log_and_exit(
                     f"Invalid sort field '{sort_field}' in library '{library['name']}', supported values are {VALID_SORT_FIELDS}."
                 )
-                return False
 
             if sort_order and sort_order not in VALID_SORT_ORDERS:
-                logger.error(
+                self.log_and_exit(
                     f"Invalid sort order '{sort_order}' in library '{library['name']}', supported values are {VALID_SORT_ORDERS}."
                 )
-                return False
 
         return True
