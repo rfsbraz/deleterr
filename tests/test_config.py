@@ -49,7 +49,7 @@ def test_validate_action_modes(library_config, expected_exit_code):
                 "order": "invalid_order"
             }
         },
-        1 
+        1
     ),
 ])
 def test_invalid_sorting_options(library_config, expected_exit_code):
