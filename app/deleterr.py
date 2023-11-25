@@ -653,18 +653,29 @@ def sort_media(media_list, sort_config):
     sorted_media = sorted(media_list, key=sort_key, reverse=(sort_order == "desc"))
     return sorted_media
 
+def get_file_contents(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            return file.read().strip()
+    except FileNotFoundError:
+        print(f"File not found: {file_path}")
+    except IOError as e:
+        print(f"Error reading file {file_path}: {e}")
 
 def main():
     """
     Deleterr application entry point. Parses arguments, configs and
     initializes the application.
     """
+
     locale.setlocale(locale.LC_ALL, "")
 
     log_level = os.environ.get("LOG_LEVEL", "info").upper()
     logger.initLogger(
         console=True, log_dir="/config/logs", verbose=log_level == "DEBUG"
     )
+
+    logger.info("Running version %s", get_file_contents("/app/commit_tag.txt"))
     logger.info("Log level set to %s", log_level)
 
     config = load_config("/config/settings.yaml")
