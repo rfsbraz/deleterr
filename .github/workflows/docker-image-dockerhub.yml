@@ -12,6 +12,7 @@ on:
   pull_request:
     branches:
       - 'master'
+      - 'develop'
 
 # Defines two custom environment variables for the workflow. These are used for the Container registry domain, and a name for the Docker image that this workflow builds.
 env:
