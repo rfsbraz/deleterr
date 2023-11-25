@@ -65,10 +65,16 @@ class Config:
             return False
 
     def validate_sonarr_and_radarr(self):
+        sonarr_settings = self.settings.get("sonarr", [])
+        radarr_settings = self.settings.get("radarr", [])
+
+        # Check if sonarr_settings and radarr_settings are lists
+        if not isinstance(sonarr_settings, list) or not isinstance(radarr_settings, list):
+            self.log_and_exit("sonarr and radarr settings should be a list of dictionaries.")
+
         return all(
             self.test_api_connection(connection)
-            for connection in self.settings.get("sonarr")
-            + self.settings.get("radarr")
+            for connection in sonarr_settings + radarr_settings
         )
 
     def test_api_connection(self, connection):
