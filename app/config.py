@@ -65,10 +65,16 @@ class Config:
             return False
 
     def validate_sonarr_and_radarr(self):
+        sonarr_settings = self.settings.get("sonarr", [])
+        radarr_settings = self.settings.get("radarr", [])
+
+        # Check if sonarr_settings and radarr_settings are lists
+        if not isinstance(sonarr_settings, list) or not isinstance(radarr_settings, list):
+            self.log_and_exit("sonarr and radarr settings should be a list of dictionaries.")
+
         return all(
             self.test_api_connection(connection)
-            for connection in self.settings.get("sonarr")
-            + self.settings.get("radarr")
+            for connection in sonarr_settings + radarr_settings
         )
 
     def test_api_connection(self, connection):
@@ -109,36 +115,40 @@ class Config:
     def validate_libraries(self):
         trakt_configured = self.settings.get("trakt") is not None
 
-        for library in self.settings.get("libraries", []):
+        libraries = self.settings.get("libraries", [])
+
+        if not libraries:
+            self.log_and_exit("No libraries configured. Please check your configuration.")
+            
+        for library in libraries:
+            if 'sonarr' not in library and 'radarr' not in library:
+                self.log_and_exit(f"Neither 'sonarr' nor 'radarr' is configured for library '{library.get('name')}'. Please check your configuration.")
+            
             if (
                 len(library.get("exclude", {}).get("trakt_lists", [])) > 0
                 and not trakt_configured
             ):
-                logger.error(
+                self.log_and_exit(
                     f"Trakt lists configured for {library['name']} but trakt is not configured, check your configuration."
                 )
-                return False
 
             if library["action_mode"] not in VALID_ACTION_MODES:
-                logger.error(
+                self.log_and_exit(
                     f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete'."
                 )
-                return False
 
         if sort_config := library.get('sort', {}):
             sort_field = sort_config.get('field')
             sort_order = sort_config.get('order')
 
             if sort_field and sort_field not in VALID_SORT_FIELDS:
-                logger.error(
+                self.log_and_exit(
                     f"Invalid sort field '{sort_field}' in library '{library['name']}', supported values are {VALID_SORT_FIELDS}."
                 )
-                return False
 
             if sort_order and sort_order not in VALID_SORT_ORDERS:
-                logger.error(
+                self.log_and_exit(
                     f"Invalid sort order '{sort_order}' in library '{library['name']}', supported values are {VALID_SORT_ORDERS}."
                 )
-                return False
 
         return True

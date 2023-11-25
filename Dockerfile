@@ -5,7 +5,7 @@ LABEL maintainer="rfsbraz"
 
 ARG BRANCH
 ARG COMMIT
-ARG TAG
+ARG COMMIT_TAG
 
 ENV TZ=UTC
 ENV PLEXAPI_CONFIG_PATH='/app/.plexapi/config.ini'
