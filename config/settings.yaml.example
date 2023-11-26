@@ -52,6 +52,7 @@ libraries:
     radarr: "Radarr"  # The Radarr instance to use for this library
     action_mode: "delete"  # Actions can be "delete" 
     last_watched_threshold: 30  # Time threshold in days. Media not watched in this period will be subject to actions
+    watch_status: watched # Watched status of the media
     apply_last_watch_threshold_to_collections: true  # If true, the last watched threshold will be applied to all other items in the collection
     added_at_threshold: 90  # Media not added in this period will be subject to actions
     max_actions_per_run: 10  # Maximum number of actions to perform per run
