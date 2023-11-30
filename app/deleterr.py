@@ -503,7 +503,7 @@ class Deleterr:
                     )
                     return False
 
-            for label in exclude.get("tags", []):
+            for label in exclude.get("plex_labels", []):
                 if label.lower() in (
                     g.tag.lower() for g in plex_media_item.labels
                 ):
@@ -511,7 +511,7 @@ class Deleterr:
                         f"{media_data['title']} has excluded label {label}, skipping"
                     )
                     return False
-                    
+
             if exclude.get("release_years", 0):
                 if (
                     plex_media_item.year
