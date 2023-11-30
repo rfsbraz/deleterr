@@ -1,19 +1,27 @@
 # This workflow will install Python dependencies, run tests and lint with a single version of Python
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
-name: Python Tests
+name: CI
 
 on:
   pull_request:
-
-permissions:
-  contents: read
+  push:
+    branches:
+      - "master"
 
 jobs:
   build:
 
     runs-on: ubuntu-latest
-
+    permissions:
+      # Gives the action the necessary permissions for publishing new
+      # comments in pull requests.
+      pull-requests: write
+      # Gives the action the necessary permissions for pushing data to the
+      # python-coverage-comment-action branch, and for editing existing
+      # comments (to avoid publishing multiple comments in the same PR)
+      contents: write
+      
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python 3.10
