@@ -181,7 +181,7 @@ Metadata is matched against the media's metadata in Plex.
 | Property | Description | Example |
 |----------|-------------|---------|
 | `titles` | Array of titles to exclude media. | `["Forrest Gump"]` |
-| `tags` | Array of tags to exclude media. | `["children", "favorite"]` |
+| `plex_labels` | Array of labels to exclude media. | `["children", "favorite"]` |
 | `genres` | Array of genres to exclude media. | `["horror", "thriller"]` |
 | `collections` | Exclude media that are part of specific collections. | `["Marvel Cinematic Universe"]` |
 | `actors` | Exclude media featuring specific actors. | `["Tom Cruise", "Brad Pitt"]` |
@@ -202,7 +202,7 @@ libraries:
     ...
     exclude:
       titles: ["Forrest Gump"]
-      tags: ["children", "favorite"]
+      plex_labels: ["children", "favorite"]
       genres: ["horror", "thriller"]
       collections: ["Marvel Cinematic Universe"]
       actors: ["Tom Cruise", "Brad Pitt"]

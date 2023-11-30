@@ -503,7 +503,7 @@ class Deleterr:
                     )
                     return False
 
-            for label in exclude.get("tags", []):
+            for label in exclude.get("plex_labels", []):
                 if label.lower() in (
                     g.tag.lower() for g in plex_media_item.labels
                 ):
