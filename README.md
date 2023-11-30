@@ -1,3 +1,5 @@
+[![Coverage Status](https://coveralls.io/repos/github/rfsbraz/deleterr/badge.svg?branch=develop)](https://coveralls.io/github/rfsbraz/deleterr?branch=develop)
+
 # Deleterr
 
 Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files based on user-specified criteria. Deleterr is customizable, allowing you to specify metadata based rules for different libraries and sonarr/radarr instances.
