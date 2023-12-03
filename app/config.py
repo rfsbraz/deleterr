@@ -139,7 +139,11 @@ class Config:
 
             if 'watch_status' in library and library['watch_status'] not in ['watched', 'unwatched']:
                 self.log_and_exit(
-                    f"Invalid watch_status '{library.get('watch_status')}' in library '{library.get('name')}', it must be either 'watched', 'unwatched', or not set."
+                                    self.log_and_exit(
+                                        f"Invalid watch_status '{library.get('watch_status')}' in library "
+                                        f"'{library.get('name')}', it must be either 'watched', 'unwatched', "
+                                        "or not set."
+                                    )
                 )
 
             if 'watch_status' in library and 'apply_last_watch_threshold_to_collections' in library:
