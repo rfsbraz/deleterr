@@ -390,7 +390,7 @@ class Deleterr:
                 last_watched = (datetime.now() - watched_data["last_watched"]).days
                 if (
                     plex_media_item.collections
-                    and last_watched_threshold
+                    and last_watched_threshold is not None
                     and last_watched < last_watched_threshold
                 ):
                     logger.debug(
@@ -456,6 +456,12 @@ class Deleterr:
                     f"{media_data['title']} watched {last_watched} days ago, skipping"
                 )
                 return False
+            if library.get("watch_status") == "unwatched":
+                logger.debug(f"{media_data['title']} watched, skipping")
+                return False
+        elif library.get("watch_status") == "watched":
+            logger.debug(f"{media_data['title']} not watched, skipping")
+            return False
 
         if apply_last_watch_threshold_to_collections:
             if already_watched := self.watched_collections.intersection(
@@ -500,6 +506,15 @@ class Deleterr:
                 ):
                     logger.debug(
                         f"{media_data['title']} has excluded collection {collection}, skipping"
+                    )
+                    return False
+
+            for label in exclude.get("plex_labels", []):
+                if label.lower() in (
+                    g.tag.lower() for g in plex_media_item.labels
+                ):
+                    logger.debug(
+                        f"{media_data['title']} has excluded label {label}, skipping"
                     )
                     return False
 
@@ -653,18 +668,29 @@ def sort_media(media_list, sort_config):
     sorted_media = sorted(media_list, key=sort_key, reverse=(sort_order == "desc"))
     return sorted_media
 
+def get_file_contents(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            return file.read().strip()
+    except FileNotFoundError:
+        print(f"File not found: {file_path}")
+    except IOError as e:
+        print(f"Error reading file {file_path}: {e}")
 
 def main():
     """
     Deleterr application entry point. Parses arguments, configs and
     initializes the application.
     """
+
     locale.setlocale(locale.LC_ALL, "")
 
     log_level = os.environ.get("LOG_LEVEL", "info").upper()
     logger.initLogger(
         console=True, log_dir="/config/logs", verbose=log_level == "DEBUG"
     )
+
+    logger.info("Running version %s", get_file_contents("/app/commit_tag.txt"))
     logger.info("Log level set to %s", log_level)
 
     config = load_config("/config/settings.yaml")

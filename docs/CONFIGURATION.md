@@ -148,6 +148,7 @@ For each of your Plex libraries, specify how you want Deleterr to behave. Define
 | `series_type` | Only used if `sonarr` is set. It's required to filter for the show type, defaults to `standard`. | `"standard", "anime"` | `standard`, `anime`, `daily` |
 | `action_mode` | The action to perform on the media items. | `delete` | `delete` |
 | `last_watched_threshold` | Time threshold in days. Media watched in this period will not be actionable | `90` | - |
+| `watch_status` | Watch status. Media not in this is state will not be actionable | `-` | `wathced`, `unwatched` |
 | `apply_last_watch_threshold_to_collections` | If set to `true`, the last watched threshold will be applied to all other items in the same collection. | `true` | `true` / `false` |
 | `added_at_threshold` | Media that added to Plex within this period (in days) will not be actionable | `180` | - |
 | `max_actions_per_run` | Limit the number of actions performed per run. Defaults to `10` | `3000` | - |
@@ -181,7 +182,7 @@ Metadata is matched against the media's metadata in Plex.
 | Property | Description | Example |
 |----------|-------------|---------|
 | `titles` | Array of titles to exclude media. | `["Forrest Gump"]` |
-| `tags` | Array of tags to exclude media. | `["children", "favorite"]` |
+| `plex_labels` | Array of labels to exclude media. | `["children", "favorite"]` |
 | `genres` | Array of genres to exclude media. | `["horror", "thriller"]` |
 | `collections` | Exclude media that are part of specific collections. | `["Marvel Cinematic Universe"]` |
 | `actors` | Exclude media featuring specific actors. | `["Tom Cruise", "Brad Pitt"]` |
@@ -202,7 +203,7 @@ libraries:
     ...
     exclude:
       titles: ["Forrest Gump"]
-      tags: ["children", "favorite"]
+      plex_labels: ["children", "favorite"]
       genres: ["horror", "thriller"]
       collections: ["Marvel Cinematic Universe"]
       actors: ["Tom Cruise", "Brad Pitt"]
