@@ -137,6 +137,25 @@ class Config:
                     f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete'."
                 )
 
+            if 'watch_status' in library and library['watch_status'] not in ['watched', 'unwatched']:
+                self.log_and_exit(
+                                    self.log_and_exit(
+                                        f"Invalid watch_status '{library.get('watch_status')}' in library "
+                                        f"'{library.get('name')}', it must be either 'watched', 'unwatched', "
+                                        "or not set."
+                                    )
+                )
+
+            if 'watch_status' in library and 'apply_last_watch_threshold_to_collections' in library:
+                self.log_and_exit(
+                    self.log_and_exit(
+                        f"'apply_last_watch_threshold_to_collections' cannot be used when "
+                        f"'watch_status' is set in library '{library.get('name')}'. This would "
+                        f"mean entire collections would be deleted when a single item in the "
+                        f"collection meets the watch_status criteria."
+                    )
+                )
+
         if sort_config := library.get('sort', {}):
             sort_field = sort_config.get('field')
             sort_order = sort_config.get('order')

@@ -390,7 +390,7 @@ class Deleterr:
                 last_watched = (datetime.now() - watched_data["last_watched"]).days
                 if (
                     plex_media_item.collections
-                    and last_watched_threshold
+                    and last_watched_threshold is not None
                     and last_watched < last_watched_threshold
                 ):
                     logger.debug(
@@ -456,6 +456,12 @@ class Deleterr:
                     f"{media_data['title']} watched {last_watched} days ago, skipping"
                 )
                 return False
+            if library.get("watch_status") == "unwatched":
+                logger.debug(f"{media_data['title']} watched, skipping")
+                return False
+        elif library.get("watch_status") == "watched":
+            logger.debug(f"{media_data['title']} not watched, skipping")
+            return False
 
         if apply_last_watch_threshold_to_collections:
             if already_watched := self.watched_collections.intersection(
