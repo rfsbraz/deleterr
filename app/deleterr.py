@@ -459,10 +459,9 @@ class Deleterr:
             if library.get("watch_status") == "unwatched":
                 logger.debug(f"{media_data['title']} watched, skipping")
                 return False
-        else:
-            if library.get("watch_status") == "watched":
-                logger.debug(f"{media_data['title']} not watched, skipping")
-                return False
+        elif library.get("watch_status") == "watched":
+            logger.debug(f"{media_data['title']} not watched, skipping")
+            return False
 
         if apply_last_watch_threshold_to_collections:
             if already_watched := self.watched_collections.intersection(
