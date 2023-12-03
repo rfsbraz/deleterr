@@ -144,7 +144,12 @@ class Config:
 
             if 'watch_status' in library and 'apply_last_watch_threshold_to_collections' in library:
                 self.log_and_exit(
-                    f"'apply_last_watch_threshold_to_collections' cannot be used when 'watch_status' is set in library '{library.get('name')}'. This would mean entire collections would be deleted when a single item in the collection meets the watch_status criteria."
+                    self.log_and_exit(
+                        f"'apply_last_watch_threshold_to_collections' cannot be used when "
+                        f"'watch_status' is set in library '{library.get('name')}'. This would "
+                        f"mean entire collections would be deleted when a single item in the "
+                        f"collection meets the watch_status criteria."
+                    )
                 )
 
         if sort_config := library.get('sort', {}):
