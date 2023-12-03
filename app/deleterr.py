@@ -390,7 +390,7 @@ class Deleterr:
                 last_watched = (datetime.now() - watched_data["last_watched"]).days
                 if (
                     plex_media_item.collections
-                    and last_watched_threshold != None
+                    and last_watched_threshold is not None
                     and last_watched < last_watched_threshold
                 ):
                     logger.debug(
