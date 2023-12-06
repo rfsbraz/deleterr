@@ -56,3 +56,10 @@ docker run -v ./config:/config -v ./logs:/config/logs ghcr.io/rfsbraz/deleterr:l
 Deleterr is configured via a YAML file. An example configuration file, `settings.example.yaml`, is provided. Copy this file to `settings.yaml` and adjust the settings as needed.
 
 Please refer to the [configuration guide](./docs/CONFIGURATION.md) for a full list of options and their descriptions.
+
+## Image Availability
+
+The image is available through:
+
+* [GitHub Container Registry](https://github.com/rfsbraz/deleterr/pkgs/container/deleterr)
+* [Docker Hub](https://hub.docker.com/r/rfsbraz/deleterr)
