@@ -80,7 +80,7 @@ class Config:
     def test_api_connection(self, connection):
         try:
             response = requests.get(
-                f"{connection['url']}/system/status",
+                f"{connection['url']}/api",
                 params={"apiKey": connection["api_key"]},
                 headers={"Content-Type": "application/json"},
             )
