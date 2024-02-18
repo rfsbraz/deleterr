@@ -1,5 +1,5 @@
 import pytest
-from app.utils import print_readable_freed_space
+from app.utils import print_readable_freed_space, parse_size_to_bytes
 
 @pytest.mark.parametrize("input_size, expected_output", [
     (500, "500.00 Bytes"),
@@ -11,4 +11,16 @@ from app.utils import print_readable_freed_space
 ])
 def test_print_readable_freed_space(input_size, expected_output):
     result = print_readable_freed_space(input_size)
+    assert result == expected_output, f"For {input_size}, expected {expected_output} but got {result}"
+
+@pytest.mark.parametrize("input_size, expected_output", [
+    ('2TB', 2199023255552),
+    ('5.6GB', 6012954214),
+    ("1GB", 1073741824),
+    ('230MB', 241172480), 
+    ('1B', 1),
+    ('0KB', 0),
+])
+def test_print_readable_freed_space(input_size, expected_output):
+    result = parse_size_to_bytes(input_size)
     assert result == expected_output, f"For {input_size}, expected {expected_output} but got {result}"
