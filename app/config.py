@@ -9,6 +9,7 @@ from tautulli import RawAPI
 from app.modules.trakt import Trakt
 from app.constants import VALID_SORT_FIELDS, VALID_SORT_ORDERS, VALID_ACTION_MODES
 
+
 def load_config(config_file):
     try:
         full_path = os.path.abspath(config_file)
@@ -23,7 +24,8 @@ def load_config(config_file):
         logger.error(exc)
 
     sys.exit(1)
-    
+
+
 class Config:
     def __init__(self, config_file):
         self.settings = config_file
@@ -56,7 +58,10 @@ class Config:
         if not self.settings.get("trakt"):
             return True
         try:
-            t = Trakt(self.settings.get("trakt", {}).get("client_id"), self.settings.get("trakt", {}).get("client_secret"))
+            t = Trakt(
+                self.settings.get("trakt", {}).get("client_id"),
+                self.settings.get("trakt", {}).get("client_secret"),
+            )
             t.test_connection()
             return True
         except Exception as err:
@@ -69,8 +74,12 @@ class Config:
         radarr_settings = self.settings.get("radarr", [])
 
         # Check if sonarr_settings and radarr_settings are lists
-        if not isinstance(sonarr_settings, list) or not isinstance(radarr_settings, list):
-            self.log_and_exit("sonarr and radarr settings should be a list of dictionaries.")
+        if not isinstance(sonarr_settings, list) or not isinstance(
+            radarr_settings, list
+        ):
+            self.log_and_exit(
+                "sonarr and radarr settings should be a list of dictionaries."
+            )
 
         return all(
             self.test_api_connection(connection)
@@ -109,7 +118,7 @@ class Config:
             )
             logger.debug(f"Error: {err}")
             return False
-        
+
         return True
 
     def validate_libraries(self):
@@ -118,12 +127,16 @@ class Config:
         libraries = self.settings.get("libraries", [])
 
         if not libraries:
-            self.log_and_exit("No libraries configured. Please check your configuration.")
-            
+            self.log_and_exit(
+                "No libraries configured. Please check your configuration."
+            )
+
         for library in libraries:
-            if 'sonarr' not in library and 'radarr' not in library:
-                self.log_and_exit(f"Neither 'sonarr' nor 'radarr' is configured for library '{library.get('name')}'. Please check your configuration.")
-            
+            if "sonarr" not in library and "radarr" not in library:
+                self.log_and_exit(
+                    f"Neither 'sonarr' nor 'radarr' is configured for library '{library.get('name')}'. Please check your configuration."
+                )
+
             if (
                 len(library.get("exclude", {}).get("trakt_lists", [])) > 0
                 and not trakt_configured
@@ -137,16 +150,22 @@ class Config:
                     f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete'."
                 )
 
-            if 'watch_status' in library and library['watch_status'] not in ['watched', 'unwatched']:
+            if "watch_status" in library and library["watch_status"] not in [
+                "watched",
+                "unwatched",
+            ]:
                 self.log_and_exit(
-                                    self.log_and_exit(
-                                        f"Invalid watch_status '{library.get('watch_status')}' in library "
-                                        f"'{library.get('name')}', it must be either 'watched', 'unwatched', "
-                                        "or not set."
-                                    )
+                    self.log_and_exit(
+                        f"Invalid watch_status '{library.get('watch_status')}' in library "
+                        f"'{library.get('name')}', it must be either 'watched', 'unwatched', "
+                        "or not set."
+                    )
                 )
 
-            if 'watch_status' in library and 'apply_last_watch_threshold_to_collections' in library:
+            if (
+                "watch_status" in library
+                and "apply_last_watch_threshold_to_collections" in library
+            ):
                 self.log_and_exit(
                     self.log_and_exit(
                         f"'apply_last_watch_threshold_to_collections' cannot be used when "
@@ -156,9 +175,9 @@ class Config:
                     )
                 )
 
-        if sort_config := library.get('sort', {}):
-            sort_field = sort_config.get('field')
-            sort_order = sort_config.get('order')
+        if sort_config := library.get("sort", {}):
+            sort_field = sort_config.get("field")
+            sort_order = sort_config.get("order")
 
             if sort_field and sort_field not in VALID_SORT_FIELDS:
                 self.log_and_exit(

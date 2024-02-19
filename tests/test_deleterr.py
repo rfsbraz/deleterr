@@ -7,21 +7,19 @@ class TestLibraryMeetsDiskSpaceThreshold(unittest.TestCase):
     def setUp(self):
         self.pyarr = Mock()
         self.library = {
-            "disk_size_threshold": [
-                {"path": "/data/media/local", "threshold": "1TB"}
-            ],
-            "name": "Test Library"
+            "disk_size_threshold": [{"path": "/data/media/local", "threshold": "1TB"}],
+            "name": "Test Library",
         }
 
     def test_meets_threshold(self):
         self.pyarr.get_disk_space.return_value = [
-            {"path": "/data/media/local", "freeSpace": 500000000000 } # 500GB
+            {"path": "/data/media/local", "freeSpace": 500000000000}  # 500GB
         ]
         self.assertTrue(library_meets_disk_space_threshold(self.library, self.pyarr))
 
     def test_does_not_meet_threshold(self):
         self.pyarr.get_disk_space.return_value = [
-            {"path": "/data/media/local", "freeSpace": 2000000000000 } # 2TB
+            {"path": "/data/media/local", "freeSpace": 2000000000000}  # 2TB
         ]
         self.assertFalse(library_meets_disk_space_threshold(self.library, self.pyarr))
 
@@ -30,6 +28,7 @@ class TestLibraryMeetsDiskSpaceThreshold(unittest.TestCase):
             {"path": "/data/media/other", "freeSpace": 500000000000}
         ]
         self.assertFalse(library_meets_disk_space_threshold(self.library, self.pyarr))
+
 
 class TestFindWatchedData(unittest.TestCase):
     def setUp(self):
@@ -44,28 +43,40 @@ class TestFindWatchedData(unittest.TestCase):
         plex_media_item.guid = "guid1"
         plex_media_item.title = "Title1"
         plex_media_item.year = 2000
-        self.assertEqual(find_watched_data(plex_media_item, self.activity_data), self.activity_data["guid1"])
+        self.assertEqual(
+            find_watched_data(plex_media_item, self.activity_data),
+            self.activity_data["guid1"],
+        )
 
     def test_guid_in_guid(self):
         plex_media_item = Mock()
         plex_media_item.guid = "guid1"
         plex_media_item.title = "Title4"
         plex_media_item.year = 2003
-        self.assertEqual(find_watched_data(plex_media_item, self.activity_data), self.activity_data["guid1"])
+        self.assertEqual(
+            find_watched_data(plex_media_item, self.activity_data),
+            self.activity_data["guid1"],
+        )
 
     def test_title_match(self):
         plex_media_item = Mock()
         plex_media_item.guid = "guid2"
         plex_media_item.title = "Title2"
         plex_media_item.year = 2001
-        self.assertEqual(find_watched_data(plex_media_item, self.activity_data), self.activity_data["guid2"])
+        self.assertEqual(
+            find_watched_data(plex_media_item, self.activity_data),
+            self.activity_data["guid2"],
+        )
 
     def test_year_difference_less_than_one(self):
         plex_media_item = Mock()
         plex_media_item.guid = "guid4"
         plex_media_item.title = "Title3"
         plex_media_item.year = 2003
-        self.assertEqual(find_watched_data(plex_media_item, self.activity_data), self.activity_data["guid3"])
+        self.assertEqual(
+            find_watched_data(plex_media_item, self.activity_data),
+            self.activity_data["guid3"],
+        )
 
     def test_no_match(self):
         plex_media_item = Mock()
