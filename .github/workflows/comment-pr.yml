@@ -15,6 +15,7 @@ jobs:
     comment-pr:
         runs-on: ubuntu-latest
         name: Upsert comment on the PR
+        if: github.event_name == 'pull_request'
         steps:
             - uses: thollander/actions-comment-pull-request@v2
               with:
