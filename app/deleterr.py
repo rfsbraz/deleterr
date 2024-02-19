@@ -735,7 +735,7 @@ def main():
     logger.info("Running version %s", get_file_contents("/app/commit_tag.txt"))
     logger.info("Log level set to %s", log_level)
 
-    config = load_config("config/settings.yaml")
+    config = load_config("/config/settings.yaml")
     config.validate()
 
     Deleterr(config)

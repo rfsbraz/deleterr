@@ -8,6 +8,7 @@ import requests
 from tautulli import RawAPI
 from app.modules.trakt import Trakt
 from app.constants import VALID_SORT_FIELDS, VALID_SORT_ORDERS, VALID_ACTION_MODES
+from app.utils import validate_units
 
 
 def load_config(config_file):
@@ -136,6 +137,17 @@ class Config:
                 self.log_and_exit(
                     f"Neither 'sonarr' nor 'radarr' is configured for library '{library.get('name')}'. Please check your configuration."
                 )
+
+            for item in library.get("disk_size_threshold", []):
+                path = item.get("path")
+                threshold = item.get("threshold")
+
+                try:
+                    validate_units(threshold)
+                except ValueError as err:
+                    self.log_and_exit(
+                        f"Invalid threshold '{threshold}' for path '{path}' in library '{library.get('name')}': {err}"
+                    )
 
             if (
                 len(library.get("exclude", {}).get("trakt_lists", [])) > 0
