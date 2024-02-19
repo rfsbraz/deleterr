@@ -17,8 +17,8 @@ WORKDIR /app
 ADD . /app
 
 RUN \
-  groupadd -g 1000 deleterr && \
-  useradd -u 1000 -g 1000 deleterr && \
+  addgroup -g 1000 deleterr && \
+  adduser -u 1000 -g 1000 deleterr && \
   echo ${BRANCH} > /app/branch.txt && \
   echo ${COMMIT} > /app/version.txt && \
   echo ${COMMIT_TAG} > /app/commit_tag.txt
