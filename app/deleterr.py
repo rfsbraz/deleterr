@@ -716,7 +716,6 @@ def library_meets_disk_space_threshold(library, pyarr):
                 f"Could not find folder '{path}' in server instance. Skipping library '{library.get('name')}'"
             )
             return False
-
         return True
 
 

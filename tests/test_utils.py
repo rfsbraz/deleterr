@@ -17,10 +17,10 @@ def test_print_readable_freed_space(input_size, expected_output):
     ('2TB', 2199023255552),
     ('5.6GB', 6012954214),
     ("1GB", 1073741824),
-    ('230MB', 241172480), 
+    ('230MB', 241172480),
     ('1B', 1),
     ('0KB', 0),
 ])
-def test_print_readable_freed_space(input_size, expected_output):
+def test_parse_size_to_bytes(input_size, expected_output):
     result = parse_size_to_bytes(input_size)
     assert result == expected_output, f"For {input_size}, expected {expected_output} but got {result}"
