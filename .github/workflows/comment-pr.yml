@@ -1,5 +1,8 @@
 name: Update PR with docker image
 
+permissions: 
+  pull-requests: write
+  
 on:
   workflow_run:
     workflows: ["Create and publish a Docker image to Dockerhub", "Create and publish a Docker image to GitHub Packages"]
