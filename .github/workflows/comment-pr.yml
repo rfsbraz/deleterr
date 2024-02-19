@@ -6,7 +6,7 @@ on:
     types:
       - completed
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, synchronize]
 
 jobs:
     comment-pr:
