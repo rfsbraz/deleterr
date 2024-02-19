@@ -2,10 +2,10 @@ name: Update PR with docker image
 
 permissions: 
   pull-requests: write
-  
+
 on:
   workflow_run:
-    workflows: ["Create and publish a Docker image to Dockerhub", "Create and publish a Docker image to GitHub Packages"]
+    workflows: ["Create and publish a Docker image to GitHub Packages"]
     types:
       - completed
   pull_request:
@@ -21,13 +21,9 @@ jobs:
                 message: |
                     :robot: A Docker image for this PR is available to test with:
                     
-                    ## GitHub Packages
                     ```bash
-                    docker run --rm -v ./config:/config -v ./logs:/config/logs ghcr.io/rfsbraz/deleterr:pr-${{ github.event.pull_request.number }} -e LOG_LEVEL=DEBUG
+                    docker run -e LOG_LEVEL=DEBUG --rm -v ./config:/config -v ./logs:/config/logs ghcr.io/rfsbraz/deleterr:pr-${{ github.event.pull_request.number }}
                     ```
 
-                    ## Dockerhub
-                    ```bash
-                    docker run --rm -v ./config:/config -v ./logs:/config/logs rfsbraz/deleterr:pr-${{ github.event.pull_request.number }} -e LOG_LEVEL=DEBUG
-                    ```
+                    This assumes you have a `config` and `logs` directory where you're running the command. You can adjust the volume mounts as needed.
                 comment_tag: docker_image_instructions
