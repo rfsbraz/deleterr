@@ -151,7 +151,7 @@ For each of your Plex libraries, specify how you want Deleterr to behave. Define
 | `watch_status` | Watch status. Media not in this is state will not be actionable | `-` | `watched`, `unwatched` |
 | `apply_last_watch_threshold_to_collections` | If set to `true`, the last watched threshold will be applied to all other items in the same collection. | `true` | `true` / `false` |
 | `added_at_threshold` | Media that added to Plex within this period (in days) will not be actionable | `180` | - |
-| `disk_size_threshold` | Library deletion will only happen when below this threshold. It requires a `path` (that the `sonarr` or `radarr` instance can access) and a size threshold | `path: /media/local` </br> `threshold: 1TB` | [`B`, `KB`, `MB`, `GB`, `TB`, `PB`, `EB`] |
+| `disk_size_threshold` | Library deletion will only happen when below this threshold. It requires a `path` (that the `sonarr` or `radarr` instance can access) and a size threshold | `path: /media/local` </br> `threshold: 1TB` | Valid units: [`B`, `KB`, `MB`, `GB`, `TB`, `PB`, `EB`] |
 | `max_actions_per_run` | Limit the number of actions performed per run. Defaults to `10` | `3000` | - |
 | `sort_config.field` | Field to sort media list by. Defaults to `title`	 | `title` | `title`, `size`, `release_year`, `runtime`, `added_date`, `rating`, `episodes`, `seasons` |
 | `sort_config.order` | Direction to sort media list by. Defaults to `asc`  | `asc` | `asc`, `desc` |

@@ -123,7 +123,7 @@ libraries:
     sonarr: Sonarr
     series_type: anime
     sort: 
-      field: episodes # Deleter animes with more episodes first
+      field: episodes # Delete animes with more episodes first
       order: desc
     exclude:
       titles: ["Dragon Ball", "Dragon Ball Z", "Dragon Ball GT"]
