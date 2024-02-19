@@ -1,4 +1,4 @@
-name: Create and publish a Docker image
+name: Create and publish a Docker image to GitHub Packages
 
 on:
   schedule:
@@ -80,7 +80,7 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |

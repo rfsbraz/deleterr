@@ -1,4 +1,4 @@
-name: Create and publish a Docker image
+name: Create and publish a Docker image to Dockerhub
 
 on:
   schedule:
@@ -9,10 +9,6 @@ on:
       - 'develop'
     tags:
       - 'v*'
-  pull_request:
-    branches:
-      - 'master'
-      - 'develop'
 
 # Defines two custom environment variables for the workflow. These are used for the Container registry domain, and a name for the Docker image that this workflow builds.
 env:
@@ -78,7 +74,7 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |

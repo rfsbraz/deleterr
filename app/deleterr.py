@@ -14,7 +14,7 @@ from app.modules.trakt import Trakt
 from app import logger
 from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound
-from app.utils import print_readable_freed_space
+from app.utils import print_readable_freed_space, parse_size_to_bytes
 from app.config import load_config
 from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 
@@ -106,6 +106,9 @@ class Deleterr:
             saved_space = 0
             for library in self.config.settings.get("libraries", []):
                 if library.get("sonarr") == name:
+                    if not library_meets_disk_space_threshold(library, sonarr):
+                        continue
+
                     all_show_data = [
                         show
                         for show in unfiltered_all_show_data
@@ -206,6 +209,9 @@ class Deleterr:
             saved_space = 0
             for library in self.config.settings.get("libraries", []):
                 if library.get("radarr") == name:
+                    if not library_meets_disk_space_threshold(library, radarr):
+                        continue
+
                     max_actions_per_run = _get_config_value(
                         library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN
                     )
@@ -685,6 +691,32 @@ def get_file_contents(file_path):
         print(f"File not found: {file_path}")
     except IOError as e:
         print(f"Error reading file {file_path}: {e}")
+
+
+def library_meets_disk_space_threshold(library, pyarr):
+    for item in library.get("disk_size_threshold"):
+        path = item.get("path")
+        threshold = item.get("threshold")
+        disk_space = pyarr.get_disk_space()
+        folder_found = False
+        for folder in disk_space:
+            if folder["path"] == path:
+                folder_found = True
+                free_space = folder["freeSpace"]
+                logger.debug(
+                    f"Free space for '{path}': {print_readable_freed_space(free_space)} (threshold: {threshold})"
+                )
+                if free_space > parse_size_to_bytes(threshold):
+                    logger.info(
+                        f"Skipping library '{library.get('name')}' as free space is above threshold ({print_readable_freed_space(free_space)} > {threshold})"
+                    )
+                    return False
+        if not folder_found:
+            logger.error(
+                f"Could not find folder '{path}' in server instance. Skipping library '{library.get('name')}'"
+            )
+            return False
+        return True
 
 
 def main():
