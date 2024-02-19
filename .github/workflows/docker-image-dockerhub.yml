@@ -25,7 +25,7 @@ jobs:
       # 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Prepare
         id: prepare
@@ -82,3 +82,10 @@ jobs:
             BRANCH=${{ steps.prepare.outputs.branch }}
             COMMIT=${{ steps.prepare.outputs.commit }}
             BUILD_DATE=${{ steps.prepare.outputs.build_date }}
+
+      - name: Docker Hub Description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          repository: peterevans/dockerhub-description
