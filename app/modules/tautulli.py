@@ -27,7 +27,10 @@ def filter_by_most_recent(data, key, sort_key):
 
 class Tautulli:
     def __init__(self, url, api_key):
-        self.api = RawAPI(url, api_key)
+        self.api = RawAPI(url, api_key, verify=False)
+
+    def test_connection(self):
+        self.api.status()
 
     def get_last_episode_activity(self, library_config, section):
         return self.get_activity(library_config, section)

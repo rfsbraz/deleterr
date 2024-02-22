@@ -1,0 +1,137 @@
+plex:
+  url: "https://192.168.1.100:32400/"
+  token: "sampleToken12345"
+
+radarr:
+  - name: "SampleRadarr"
+    url: "https://user:password@radarr.sampledomain.com"
+    api_key: "sampleApiKey12345"
+
+sonarr:
+  - name: "SampleSonarr"
+    url: "https://user:password@sonarr.sampledomain.com"
+    api_key: "sampleApiKey67890"
+
+tautulli:
+  url: "https://user:password@tautulli.sampledomain.com"
+  api_key: "sampleApiKey11121"
+
+overseerr:
+  url: "https://user:password@overseerr.sampledomain.com"
+  api_key: "sampleApiKey22232"
+
+trakt:
+  client_id: "sampleClientId33343"
+  client_secret: "sampleClientSecret44454"
+  
+dry_run: true
+plex_library_scan_after_actions: false
+tautulli_library_scan_after_actions: false
+action_delay: 0 # Delay between actions in seconds
+
+libraries:
+  - name: "TV Shows"
+    action_mode: delete
+    last_watched_threshold: 20
+    added_at_threshold: 20
+    apply_last_watch_threshold_to_collections: false
+    max_actions_per_run: 5
+    sonarr: Sonarr
+    series_type: standard
+    exclude:
+      titles: ["A"]
+      tags: ["A"]
+      genres: ["A"]
+      collections: ["A"]
+      actors: ["A"]
+      producers: ["A"]
+      directors: ["A"]
+      writers: ["A"]
+      studios: ["A"]
+      release_years: 0
+      trakt:
+        max_items_per_list: 50
+        lists:
+          [
+            "https://trakt.tv/users/rfsbraz/watchlist",
+            "https://trakt.tv/shows/trending",
+            "https://trakt.tv/shows/popular",
+            "https://trakt.tv/shows/watched/yearly",
+            "https://trakt.tv/shows/collected/yearly",
+            "https://trakt.tv/users/rfsbraz/lists/veterinarian-craze"
+          ]
+  - name: "Anime"
+    action_mode: delete
+    last_watched_threshold: 1600
+    added_at_threshold: 360
+    apply_last_watch_threshold_to_collections: false
+    max_actions_per_run: 3000
+    sonarr: Sonarr
+    series_type: anime
+    exclude:
+      titles: ["Dragon Ball", "Dragon Ball Z", "Dragon Ball GT"]
+      tags: []
+      genres: []
+      collections: []
+      actors: []
+      producers: []
+      directors: []
+      writers: []
+      studios: []
+      release_years: 0
+      trakt:
+        max_items_per_list: 50
+        lists:
+          [
+            "https://trakt.tv/shows/trending",
+            "https://trakt.tv/shows/popular",
+            "https://trakt.tv/shows/watched/yearly",
+            "https://trakt.tv/shows/collected/yearly",
+            "https://trakt.tv/users/lwerndly/lists/anime-best-series-of-all-time"
+          ]
+  - name: "TV Shows"
+    action_mode: delete
+    last_watched_threshold: 90
+    added_at_threshold: 30
+    apply_last_watch_threshold_to_collections: false
+    max_actions_per_run: 3
+    sonarr: Sonarr
+    series_type: daily
+  - name: "Movies"
+    action_mode: "delete"
+    last_watched_threshold: 0
+    added_at_threshold: 1
+    max_actions_per_run: 5
+    radarr: Radarr
+    disk_size_threshold:
+      - path: "/data/media/local"
+        threshold: 2TB
+    exclude:
+      titles: []
+      tags: []
+      genres: []
+      collections:
+        [
+        ]
+      actors: []
+      producers: []
+      directors: ["Hayao Miyazaki"]
+      writers: ["Hayao Miyazaki"]
+      studios: ["Studio Ghibli"]
+      release_years: 1 # Exclude media released in the last year
+      trakt:
+        max_items_per_list: 200
+        lists:
+          [
+            "https://trakt.tv/users/rfsbraz/favorites",
+            "https://trakt.tv/users/rfsbraz/watchlist",
+            "https://trakt.tv/users/rfsbraz/lists/all-billion-dollar-movies",
+            "https://trakt.tv/movies/trending",
+            "https://trakt.tv/movies/popular",
+            "https://trakt.tv/movies/watched/yearly",
+            "https://trakt.tv/movies/collected/yearly",
+            "https://trakt.tv/users/justin/lists/imdb-top-rated-movies",
+            "https://trakt.tv/users/sonicwarrior/lists/star-wars-canon-timeline",
+            "https://trakt.tv/users/donxy/lists/marvel-cinematic-universe",
+          ]
+
