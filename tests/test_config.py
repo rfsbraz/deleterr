@@ -23,7 +23,7 @@ def test_validate_valid_action_modes(library_config):
     assert validator.validate_libraries()
 
 
-def test_validate_valid_action_modes():
+def test_validate_invalid_action_modes():
     sonarr_config = [
         {"name": "test", "url": "http://localhost:8989", "api_key": "API_KEY"}
     ]
