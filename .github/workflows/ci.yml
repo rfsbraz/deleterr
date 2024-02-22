@@ -23,6 +23,9 @@ jobs:
       contents: write
       
     steps:
+    # Purges github badge cache
+    - uses: kevincobain2000/action-camo-purge@v1
+    
     - uses: actions/checkout@v4
     - name: Set up Python 3.10
       uses: actions/setup-python@v3
