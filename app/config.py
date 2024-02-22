@@ -5,8 +5,8 @@ from app import logger
 import sys
 import os
 import requests
-from tautulli import RawAPI
 from app.modules.trakt import Trakt
+from app.modules.tautulli import Tautulli
 from app.constants import VALID_SORT_FIELDS, VALID_SORT_ORDERS, VALID_ACTION_MODES
 from app.utils import validate_units
 
@@ -105,17 +105,17 @@ class Config:
 
     def validate_tautulli(self):
         try:
-            tautulli = self.settings.get("tautulli")
-            if not tautulli:
+            tautulliConfig = self.settings.get("tautulli")
+            if not tautulliConfig:
                 raise KeyError
-            api = RawAPI(base_url=tautulli["url"], api_key=tautulli["api_key"])
-            api.status()
+            tautulli = Tautulli(tautulliConfig["url"], tautulliConfig["api_key"])
+            tautulli.test_connection()
         except KeyError:
             logger.error("Tautulli configuration not found, check your configuration.")
             return False
         except Exception as err:
             logger.error(
-                f"Failed to connect to tautulli at {tautulli['url']}, check your configuration."
+                f"Failed to connect to tautulli at {tautulliConfig['url']}, check your configuration."
             )
             logger.debug(f"Error: {err}")
             return False
@@ -133,10 +133,22 @@ class Config:
             )
 
         for library in libraries:
-            if "sonarr" not in library and "radarr" not in library:
-                self.log_and_exit(
-                    f"Neither 'sonarr' nor 'radarr' is configured for library '{library.get('name')}'. Please check your configuration."
-                )
+            if "sonarr" in library:
+                if not any(
+                    connection["name"] == library["sonarr"]
+                    for connection in self.settings.get("sonarr", [])
+                ):
+                    self.log_and_exit(
+                        f"Sonarr '{library['sonarr']}' is not configured. Please check your configuration."
+                    )
+            if "radarr" in library:
+                if not any(
+                    connection["name"] == library["radarr"]
+                    for connection in self.settings.get("radarr", [])
+                ):
+                    self.log_and_exit(
+                        f"Radarr '{library['radarr']}' is not configured. Please check your configuration."
+                    )
 
             for item in library.get("disk_size_threshold", []):
                 path = item.get("path")

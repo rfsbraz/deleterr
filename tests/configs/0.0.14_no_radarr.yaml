@@ -1,0 +1,103 @@
+# Plex connection details
+plex:
+  url: "http://localhost:32400"  # Replace with your Plex server URL
+  token: "YOUR_PLEX_TOKEN"  # Replace with your Plex server token
+
+# Sonarr connection details. You can add multiple instances.
+sonarr:
+  - name: "Sonarr"  # This is an identifier for your Sonarr instance
+    url: "http://localhost:8989"  # Replace with your Sonarr server URL
+    api_key: "YOUR_SONARR_API_KEY1"  # Replace with your Sonarr API key
+
+  - name: "Sonarr 4K"  # Another Sonarr instance
+    url: "http://localhost:8990"
+    api_key: "YOUR_SONARR_API_KEY2"
+
+# Tautulli connection details
+tautulli:
+  url: "http://localhost:8181"  # Replace with your Tautulli server URL
+  api_key: "YOUR_TAUTULLI_API_KEY"  # Replace with your Tautulli API key
+
+# Trakt application, created on https://trakt.tv/oauth/applications
+trakt:
+  client_id: "YOUR_TRAKT_CLIENT_ID"  # Replace with your Trakt client ID
+  client_secret: "YOUR_TRAKT_CLIENT_SECRET"  # Replace with your Trakt client secret
+
+# If true, Deleterr will only log what it would do but not perform the actions
+dry_run: true
+
+# Trigger a Plex library scan after actions are performed
+plex_library_scan_after_actions: false
+
+# Trigger a Tautulli library scan after actions are performed
+tautulli_library_scan_after_actions: false
+
+# Delay between actions in seconds
+# This is to prevent plex from getting overloaded
+action_delay: 25
+
+# Library configuration
+libraries:
+  - name: "TV Shows"
+    action_mode: delete
+    last_watched_threshold: 365
+    added_at_threshold: 180
+    apply_last_watch_threshold_to_collections: false
+    max_actions_per_run: 10
+    sonarr: Sonarr
+    series_type: standard
+    sort: 
+      field: seasons # Deleter shows with more seasons first
+      order: desc
+    exclude:
+      titles: []
+      tags: []
+      genres: []
+      collections: []
+      actors: []
+      producers: []
+      directors: []
+      writers: []
+      studios: []
+      release_years: 2
+      trakt:
+        max_items_per_list: 50
+        lists:
+          [
+            "https://trakt.tv/shows/trending",
+            "https://trakt.tv/shows/popular",
+            "https://trakt.tv/shows/watched/yearly",
+            "https://trakt.tv/shows/collected/yearly"
+          ]
+  - name: "Anime"
+    action_mode: delete
+    last_watched_threshold: 670
+    added_at_threshold: 360
+    apply_last_watch_threshold_to_collections: false
+    max_actions_per_run: 5
+    sonarr: Sonarr
+    series_type: anime
+    sort: 
+      field: episodes # Delete animes with more episodes first
+      order: desc
+    exclude:
+      titles: ["Dragon Ball", "Dragon Ball Z", "Dragon Ball GT"]
+      tags: []
+      genres: []
+      collections: []
+      actors: []
+      producers: []
+      directors: []
+      writers: []
+      studios: []
+      release_years: 0
+      trakt:
+        max_items_per_list: 50
+        lists:
+          [
+            "https://trakt.tv/shows/trending",
+            "https://trakt.tv/shows/popular",
+            "https://trakt.tv/shows/watched/yearly",
+            "https://trakt.tv/shows/collected/yearly",
+            "https://trakt.tv/users/lwerndly/lists/anime-best-series-of-all-time"
+          ]
