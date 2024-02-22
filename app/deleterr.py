@@ -5,6 +5,7 @@ import locale
 import time
 import os
 import requests
+import argparse
 
 from datetime import datetime, timedelta
 from pyarr.sonarr import SonarrAPI
@@ -735,7 +736,16 @@ def main():
     logger.info("Running version %s", get_file_contents("/app/commit_tag.txt"))
     logger.info("Log level set to %s", log_level)
 
-    config = load_config("/config/settings.yaml")
+    parser = argparse.ArgumentParser(description="Process some integers.")
+    parser.add_argument(
+        "--config",
+        "--c",
+        default="/config/settings.yaml",
+        help="Path to the config file",
+    )
+    args = parser.parse_args()
+
+    config = load_config(args.config)
     config.validate()
 
     Deleterr(config)
