@@ -694,7 +694,7 @@ def get_file_contents(file_path):
 
 
 def library_meets_disk_space_threshold(library, pyarr):
-    for item in library.get("disk_size_threshold"):
+    for item in library.get("disk_size_threshold", []):
         path = item.get("path")
         threshold = item.get("threshold")
         disk_space = pyarr.get_disk_space()
@@ -716,7 +716,7 @@ def library_meets_disk_space_threshold(library, pyarr):
                 f"Could not find folder '{path}' in server instance. Skipping library '{library.get('name')}'"
             )
             return False
-        return True
+    return True
 
 
 def main():

@@ -29,6 +29,10 @@ class TestLibraryMeetsDiskSpaceThreshold(unittest.TestCase):
         ]
         self.assertFalse(library_meets_disk_space_threshold(self.library, self.pyarr))
 
+    def test_unset_disk_size_threshold(self):
+        del self.library["disk_size_threshold"]
+        self.assertTrue(library_meets_disk_space_threshold(self.library, self.pyarr))
+
 
 class TestFindWatchedData(unittest.TestCase):
     def setUp(self):
