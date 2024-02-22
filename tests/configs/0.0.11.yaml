@@ -55,9 +55,6 @@ libraries:
     apply_last_watch_threshold_to_collections: true  # If true, the last watched threshold will be applied to all other items in the collection
     added_at_threshold: 90  # Media not added in this period will be subject to actions
     max_actions_per_run: 10  # Maximum number of actions to perform per run
-    disk_size_threshold: # Will only trigger if the available disk size is below this
-      - path: "/data/media/local"
-        threshold: 1TB
     sort: 
       field: year # Deleter older movies first
       order: asc

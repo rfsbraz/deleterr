@@ -1,6 +1,6 @@
 import os
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from app.deleterr import load_config
 from app.config import Config
 from app.modules import trakt, tautulli

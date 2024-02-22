@@ -13,16 +13,6 @@ radarr:
     url: "http://localhost:7879"
     api_key: "YOUR_RADARR_API_KEY2"
 
-# Sonarr connection details. You can add multiple instances.
-sonarr:
-  - name: "Sonarr"  # This is an identifier for your Sonarr instance
-    url: "http://localhost:8989"  # Replace with your Sonarr server URL
-    api_key: "YOUR_SONARR_API_KEY1"  # Replace with your Sonarr API key
-
-  - name: "Sonarr 4K"  # Another Sonarr instance
-    url: "http://localhost:8990"
-    api_key: "YOUR_SONARR_API_KEY2"
-
 # Tautulli connection details
 tautulli:
   url: "http://localhost:8181"  # Replace with your Tautulli server URL
@@ -59,7 +49,7 @@ libraries:
       - path: "/data/media/local"
         threshold: 1TB
     sort: 
-      field: year # Deleter older movies first
+      field: title # Deleter older movies first
       order: asc
     exclude:
       titles: ["Forrest Gump"]
@@ -81,67 +71,4 @@ libraries:
             "https://trakt.tv/movies/watched/yearly",
             "https://trakt.tv/movies/collected/yearly",
             "https://trakt.tv/users/justin/lists/imdb-top-rated-movies"
-          ]
-  - name: "TV Shows"
-    action_mode: delete
-    last_watched_threshold: 365
-    added_at_threshold: 180
-    apply_last_watch_threshold_to_collections: false
-    max_actions_per_run: 10
-    sonarr: Sonarr
-    series_type: standard
-    sort: 
-      field: seasons # Deleter shows with more seasons first
-      order: desc
-    exclude:
-      titles: []
-      tags: []
-      genres: []
-      collections: []
-      actors: []
-      producers: []
-      directors: []
-      writers: []
-      studios: []
-      release_years: 2
-      trakt:
-        max_items_per_list: 50
-        lists:
-          [
-            "https://trakt.tv/shows/trending",
-            "https://trakt.tv/shows/popular",
-            "https://trakt.tv/shows/watched/yearly",
-            "https://trakt.tv/shows/collected/yearly"
-          ]
-  - name: "Anime"
-    action_mode: delete
-    last_watched_threshold: 670
-    added_at_threshold: 360
-    apply_last_watch_threshold_to_collections: false
-    max_actions_per_run: 5
-    sonarr: Sonarr
-    series_type: anime
-    sort: 
-      field: episodes # Delete animes with more episodes first
-      order: desc
-    exclude:
-      titles: ["Dragon Ball", "Dragon Ball Z", "Dragon Ball GT"]
-      tags: []
-      genres: []
-      collections: []
-      actors: []
-      producers: []
-      directors: []
-      writers: []
-      studios: []
-      release_years: 0
-      trakt:
-        max_items_per_list: 50
-        lists:
-          [
-            "https://trakt.tv/shows/trending",
-            "https://trakt.tv/shows/popular",
-            "https://trakt.tv/shows/watched/yearly",
-            "https://trakt.tv/shows/collected/yearly",
-            "https://trakt.tv/users/lwerndly/lists/anime-best-series-of-all-time"
           ]

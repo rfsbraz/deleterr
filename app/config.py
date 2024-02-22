@@ -133,10 +133,22 @@ class Config:
             )
 
         for library in libraries:
-            if "sonarr" not in library and "radarr" not in library:
-                self.log_and_exit(
-                    f"Neither 'sonarr' nor 'radarr' is configured for library '{library.get('name')}'. Please check your configuration."
-                )
+            if "sonarr" in library:
+                if not any(
+                    connection["name"] == library["sonarr"]
+                    for connection in self.settings.get("sonarr", [])
+                ):
+                    self.log_and_exit(
+                        f"Sonarr '{library['sonarr']}' is not configured. Please check your configuration."
+                    )
+            if "radarr" in library:
+                if not any(
+                    connection["name"] == library["radarr"]
+                    for connection in self.settings.get("radarr", [])
+                ):
+                    self.log_and_exit(
+                        f"Radarr '{library['radarr']}' is not configured. Please check your configuration."
+                    )
 
             for item in library.get("disk_size_threshold", []):
                 path = item.get("path")

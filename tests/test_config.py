@@ -5,31 +5,39 @@ from app.constants import VALID_SORT_FIELDS, VALID_SORT_ORDERS, VALID_ACTION_MOD
 
 # Test case for validate_libraries
 @pytest.mark.parametrize(
-    "library_config, expected_exit_code",
+    "library_config",
     [
-        (
-            {
-                "name": "TV Shows",
-                "action_mode": "delete",
-            },
-            True,
-        ),
-        (
-            {
-                "name": "TV Shows",
-                "action_mode": "invalid_mode",
-            },
-            False,  # Expect False as the action_mode is invalid
-        ),
+        {
+            "name": "TV Shows",
+            "action_mode": "delete",
+            "sonarr": "test",
+        }
     ],
 )
-def test_validate_action_modes(library_config, expected_exit_code):
-    validator = Config({"libraries": [library_config]})
+def test_validate_valid_action_modes(library_config):
+    sonarr_config = [
+        {"name": "test", "url": "http://localhost:8989", "api_key": "API_KEY"}
+    ]
+    validator = Config({"libraries": [library_config], "sonarr": sonarr_config})
+
+    assert validator.validate_libraries()
+
+
+def test_validate_valid_action_modes():
+    sonarr_config = [
+        {"name": "test", "url": "http://localhost:8989", "api_key": "API_KEY"}
+    ]
+    library_config = {
+        "name": "TV Shows",
+        "action_mode": "invalid_mode",
+        "sonarr": "test",
+    }
+    validator = Config({"libraries": [library_config], "sonarr": sonarr_config})
 
     with pytest.raises(SystemExit) as exc_info:
         validator.validate_libraries()
 
-        assert exc_info.value.code == expected_exit_code
+        assert exc_info.value.code == 1
 
 
 # Test case for validate_libraries
@@ -74,5 +82,9 @@ def test_valid_sorting_options(sort_field, sort_order):
         "sort": {"field": sort_field, "order": sort_order},
     }
 
-    validator = Config({"libraries": [library_config]})
+    sonarr_config = [
+        {"name": "test", "url": "http://localhost:8989", "api_key": "API_KEY"}
+    ]
+
+    validator = Config({"libraries": [library_config], "sonarr": sonarr_config})
     assert validator.validate_libraries() == True
