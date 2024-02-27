@@ -1,6 +1,4 @@
-[![Coverage Status](https://coveralls.io/repos/github/rfsbraz/deleterr/badge.svg?branch=develop)](https://coveralls.io/github/rfsbraz/deleterr?branch=develop)
-
-# Deleterr
+# Deleterr [![GitHub version](https://badge.fury.io/gh/rfsbraz%2Fdeleterr.svg)](https://badge.fury.io/gh/rfsbraz%2Fdeleterr) [![Coverage Status](https://coveralls.io/repos/github/rfsbraz/deleterr/badge.svg?branch=develop)](https://coveralls.io/github/rfsbraz/deleterr?branch=develop)
 
 Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files based on user-specified criteria. Deleterr is customizable, allowing you to specify metadata based rules for different libraries and sonarr/radarr instances.
 
@@ -61,5 +59,13 @@ Please refer to the [configuration guide](./docs/CONFIGURATION.md) for a full li
 
 The image is available through:
 
-* [GitHub Container Registry](https://github.com/rfsbraz/deleterr/pkgs/container/deleterr)
-* [Docker Hub](https://hub.docker.com/r/rfsbraz/deleterr)
+* [GitHub Container Registry](https://github.com/rfsbraz/deleterr/pkgs/container/deleterr): `ghcr.io/rfsbraz/deleterr:<tag>`
+* [Docker Hub](https://hub.docker.com/r/rfsbraz/deleterr): `rfsbraz/deleterr:<tag>`
+
+### Tags
+
+* `latest`: The latest stable release
+* `nightly`: The latest development release
+* `X.Y.Z`: A specific version
+* `X.Y`: The latest release in the vX.Y series
+* `X`: The latest release in the vX series
