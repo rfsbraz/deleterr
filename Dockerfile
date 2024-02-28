@@ -13,8 +13,8 @@ ENV PLEXAPI_CONFIG_PATH='/app/.plexapi/config.ini'
 # Set the working directory in the container to /app
 WORKDIR /app
 
-# Add the current directory contents into the container at /app
-ADD . /app
+# Copy the current directory contents into the container at /app
+COPY . /app
 
 RUN \
   echo ${BRANCH} > /app/branch.txt && \
@@ -26,7 +26,7 @@ RUN \
   mkdir /config/logs && \
   touch /config/DOCKER
   
-ADD ./config/ /config
+COPY ./config/ /config
 VOLUME /config
 
 # Install any needed packages specified in requirements.txt
