@@ -1,0 +1,5 @@
+[report]
+omit = *tests*
+relative_files = True
+source = app/
+branch = True
