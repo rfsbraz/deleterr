@@ -34,41 +34,35 @@ def test_validate_invalid_action_modes():
     }
     validator = Config({"libraries": [library_config], "sonarr": sonarr_config})
 
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(SystemExit):
         validator.validate_libraries()
-
-        assert exc_info.value.code == 1
 
 
 # Test case for validate_libraries
 @pytest.mark.parametrize(
-    "library_config, expected_exit_code",
+    "library_config",
     [
         (
             {
                 "name": "TV Shows",
                 "action_mode": "delete",
                 "sort": {"field": "invalid_field", "order": "asc"},
-            },
-            1,
+            }
         ),
         (
             {
                 "name": "TV Shows",
                 "action_mode": "delete",
                 "sort": {"field": "title", "order": "invalid_order"},
-            },
-            1,
+            }
         ),
     ],
 )
-def test_invalid_sorting_options(library_config, expected_exit_code):
+def test_invalid_sorting_options(library_config):
     validator = Config({"libraries": [library_config]})
 
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(SystemExit):
         validator.validate_libraries()
-
-        assert exc_info.value.code == expected_exit_code
 
 
 # Test case for validate_libraries

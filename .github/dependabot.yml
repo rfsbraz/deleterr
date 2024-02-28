@@ -8,14 +8,14 @@ updates:
   - package-ecosystem: pip
     directory: "/"
     schedule:
-      interval: weekly
+      interval: daily
     groups:
       python-packages:
         patterns:
           - "*"
-  - package-ecosystem: "docker"
+  - package-ecosystem: docker
     # Look for a `Dockerfile` in the `root` directory
     directory: "/"
     # Check for updates once a week
     schedule:
-      interval: "weekly"
+      interval: daily
