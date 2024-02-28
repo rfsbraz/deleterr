@@ -1,0 +1,7 @@
+[run]
+branch = True
+relative_files = True
+source = app/
+
+[report]
+skip_empty = true
