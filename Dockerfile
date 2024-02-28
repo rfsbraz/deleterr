@@ -14,7 +14,7 @@ ENV PLEXAPI_CONFIG_PATH='/app/.plexapi/config.ini'
 WORKDIR /app
 
 # Copy the current directory contents into the container at /app
-COPY ./app /app
+COPY ./app /app/app
 COPY requirements.txt /app
 
 RUN \
