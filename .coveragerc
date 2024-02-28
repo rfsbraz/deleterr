@@ -1,5 +1,7 @@
-[report]
-omit = *tests*
+[run]
+branch = True
 relative_files = True
 source = app/
-branch = True
+
+[report]
+skip_empty = true
