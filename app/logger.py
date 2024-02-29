@@ -41,7 +41,7 @@ def initLogger(console=False, log_dir=False, verbose=False):
         setup_file_logger(log_dir)
 
     if console:
-        setup_console_logger(console)
+        setup_console_logger()
 
 
 def remove_old_handlers():
