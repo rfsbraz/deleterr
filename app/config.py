@@ -105,17 +105,17 @@ class Config:
 
     def validate_tautulli(self):
         try:
-            tautulliConfig = self.settings.get("tautulli")
-            if not tautulliConfig:
+            tautulli_config = self.settings.get("tautulli")
+            if not tautulli_config:
                 raise KeyError
-            tautulli = Tautulli(tautulliConfig["url"], tautulliConfig["api_key"])
+            tautulli = Tautulli(tautulli_config["url"], tautulli_config["api_key"])
             tautulli.test_connection()
         except KeyError:
             logger.error("Tautulli configuration not found, check your configuration.")
             return False
         except Exception as err:
             logger.error(
-                f"Failed to connect to tautulli at {tautulliConfig['url']}, check your configuration."
+                f"Failed to connect to tautulli at {tautulli_config['url']}, check your configuration."
             )
             logger.debug(f"Error: {err}")
             return False
