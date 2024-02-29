@@ -124,7 +124,6 @@ class Config:
 
     def validate_libraries(self):
         trakt_configured = self.settings.get("trakt") is not None
-
         libraries = self.settings.get("libraries", [])
 
         if not libraries:
@@ -133,72 +132,74 @@ class Config:
             )
 
         for library in libraries:
-            if "sonarr" in library:
-                if not any(
-                    connection["name"] == library["sonarr"]
-                    for connection in self.settings.get("sonarr", [])
-                ):
-                    self.log_and_exit(
-                        f"Sonarr '{library['sonarr']}' is not configured. Please check your configuration."
-                    )
-            if "radarr" in library:
-                if not any(
-                    connection["name"] == library["radarr"]
-                    for connection in self.settings.get("radarr", [])
-                ):
-                    self.log_and_exit(
-                        f"Radarr '{library['radarr']}' is not configured. Please check your configuration."
-                    )
+            self.validate_library_connections(library)
+            self.validate_disk_size_threshold(library)
+            self.validate_trakt_configuration(library, trakt_configured)
+            self.validate_action_mode(library)
+            self.validate_watch_status(library)
+            self.validate_sort_configuration(library)
 
-            for item in library.get("disk_size_threshold", []):
-                path = item.get("path")
-                threshold = item.get("threshold")
+        return True
 
-                try:
-                    validate_units(threshold)
-                except ValueError as err:
-                    self.log_and_exit(
-                        f"Invalid threshold '{threshold}' for path '{path}' in library '{library.get('name')}': {err}"
-                    )
+    def validate_library_connections(self, library):
+        self.validate_connection(library, "sonarr")
+        self.validate_connection(library, "radarr")
 
-            if (
-                len(library.get("exclude", {}).get("trakt_lists", [])) > 0
-                and not trakt_configured
+    def validate_connection(self, library, connection_name):
+        if connection_name in library:
+            if not any(
+                connection["name"] == library[connection_name]
+                for connection in self.settings.get(connection_name, [])
             ):
                 self.log_and_exit(
-                    f"Trakt lists configured for {library['name']} but trakt is not configured, check your configuration."
+                    f"{connection_name.capitalize()} '{library[connection_name]}' is not configured. Please check your configuration."
                 )
 
-            if library["action_mode"] not in VALID_ACTION_MODES:
+    def validate_disk_size_threshold(self, library):
+        for item in library.get("disk_size_threshold", []):
+            path = item.get("path")
+            threshold = item.get("threshold")
+
+            try:
+                validate_units(threshold)
+            except ValueError as err:
                 self.log_and_exit(
-                    f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete'."
+                    f"Invalid threshold '{threshold}' for path '{path}' in library '{library.get('name')}': {err}"
                 )
 
-            if "watch_status" in library and library["watch_status"] not in [
-                "watched",
-                "unwatched",
-            ]:
-                self.log_and_exit(
-                    self.log_and_exit(
-                        f"Invalid watch_status '{library.get('watch_status')}' in library "
-                        f"'{library.get('name')}', it must be either 'watched', 'unwatched', "
-                        "or not set."
-                    )
-                )
+    def validate_trakt_configuration(self, library, trakt_configured):
+        if (
+            len(library.get("exclude", {}).get("trakt_lists", [])) > 0
+            and not trakt_configured
+        ):
+            self.log_and_exit(
+                f"Trakt lists configured for {library['name']} but trakt is not configured, check your configuration."
+            )
 
-            if (
-                "watch_status" in library
-                and "apply_last_watch_threshold_to_collections" in library
-            ):
-                self.log_and_exit(
-                    self.log_and_exit(
-                        f"'apply_last_watch_threshold_to_collections' cannot be used when "
-                        f"'watch_status' is set in library '{library.get('name')}'. This would "
-                        f"mean entire collections would be deleted when a single item in the "
-                        f"collection meets the watch_status criteria."
-                    )
-                )
+    def validate_action_mode(self, library):
+        if library["action_mode"] not in VALID_ACTION_MODES:
+            self.log_and_exit(
+                f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete'."
+            )
 
+    def validate_watch_status(self, library):
+        if "watch_status" in library and library["watch_status"] not in [
+            "watched",
+            "unwatched",
+        ]:
+            self.log_and_exit(
+                f"Invalid watch_status '{library.get('watch_status')}' in library '{library.get('name')}', it must be either 'watched', 'unwatched', or not set."
+            )
+
+        if (
+            "watch_status" in library
+            and "apply_last_watch_threshold_to_collections" in library
+        ):
+            self.log_and_exit(
+                f"'apply_last_watch_threshold_to_collections' cannot be used when 'watch_status' is set in library '{library.get('name')}'. This would mean entire collections would be deleted when a single item in the collection meets the watch_status criteria."
+            )
+
+    def validate_sort_configuration(self, library):
         if sort_config := library.get("sort", {}):
             sort_field = sort_config.get("field")
             sort_order = sort_config.get("order")
@@ -212,5 +213,3 @@ class Config:
                 self.log_and_exit(
                     f"Invalid sort order '{sort_order}' in library '{library['name']}', supported values are {VALID_SORT_ORDERS}."
                 )
-
-        return True
