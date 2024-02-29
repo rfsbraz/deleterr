@@ -1,4 +1,5 @@
-# Deleterr [![GitHub version](https://badge.fury.io/gh/rfsbraz%2Fdeleterr.svg)](https://badge.fury.io/gh/rfsbraz%2Fdeleterr) [![Coverage Status](https://coveralls.io/repos/github/rfsbraz/deleterr/badge.svg?branch=develop)](https://coveralls.io/github/rfsbraz/deleterr?branch=develop)
+# Deleterr [![GitHub version](https://badge.fury.io/gh/rfsbraz%2Fdeleterr.svg)](https://badge.fury.io/gh/rfsbraz%2Fdeleterr) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=rfsbraz_deleterr&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=rfsbraz_deleterr) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=rfsbraz_deleterr&metric=coverage)](https://sonarcloud.io/summary/new_code?id=rfsbraz_deleterr)
+
 
 Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files based on user-specified criteria. Deleterr is customizable, allowing you to specify metadata based rules for different libraries and sonarr/radarr instances.
 
