@@ -146,14 +146,13 @@ class Config:
         self.validate_connection(library, "radarr")
 
     def validate_connection(self, library, connection_name):
-        if connection_name in library:
-            if not any(
-                connection["name"] == library[connection_name]
-                for connection in self.settings.get(connection_name, [])
-            ):
-                self.log_and_exit(
-                    f"{connection_name.capitalize()} '{library[connection_name]}' is not configured. Please check your configuration."
-                )
+        if connection_name in library and not any(
+            connection["name"] == library[connection_name]
+            for connection in self.settings.get(connection_name, [])
+        ):
+            self.log_and_exit(
+                f"{connection_name.capitalize()} '{library[connection_name]}' is not configured. Please check your configuration."
+            )
 
     def validate_disk_size_threshold(self, library):
         for item in library.get("disk_size_threshold", []):
