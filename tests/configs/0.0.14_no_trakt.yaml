@@ -54,7 +54,7 @@ libraries:
       - path: "/data/media/local"
         threshold: 1TB
     sort: 
-      field: year # Deleter older movies first
+      field: release_year # Deleter older movies first
       order: asc
     exclude:
       titles: ["Forrest Gump"]

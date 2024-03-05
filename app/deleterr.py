@@ -340,7 +340,6 @@ class Deleterr:
         alternate_titles=[],
         imdbId=None,
         tvdbId=None,
-        teste=None,
     ):
         if guid:
             for guids, plex_media_item in plex_library:
@@ -424,7 +423,6 @@ class Deleterr:
                 alternate_titles=[t["title"] for t in media_data["alternateTitles"]],
                 imdbId=media_data.get("imdbId"),
                 tvdbId=media_data.get("tvdbId"),
-                teste=media_data,
             )
             if plex_media_item is None:
                 if media_data.get("statistics", {}).get("episodeFileCount", 0) == 0:
@@ -531,16 +529,16 @@ class Deleterr:
                     )
                     return False
 
-            if exclude.get("release_years", 0):
-                if (
-                    plex_media_item.year
-                    and plex_media_item.year
-                    >= datetime.now().year - exclude.get("release_years")
-                ):
-                    logger.debug(
-                        f"{media_data['title']} ({plex_media_item.year}) was released within the threshold years ({datetime.now().year} - {exclude.get('release_years', 0)} = {datetime.now().year - exclude.get('release_years', 0)}), skipping"
-                    )
-                    return False
+            if (
+                exclude.get("release_years", 0)
+                and plex_media_item.year
+                and plex_media_item.year
+                >= datetime.now().year - exclude.get("release_years")
+            ):
+                logger.debug(
+                    f"{media_data['title']} ({plex_media_item.year}) was released within the threshold years ({datetime.now().year} - {exclude.get('release_years', 0)} = {datetime.now().year - exclude.get('release_years', 0)}), skipping"
+                )
+                return False
 
             if plex_media_item.studio and plex_media_item.studio.lower() in exclude.get(
                 "studios", []
@@ -631,14 +629,14 @@ def find_watched_data(plex_media_item, activity_data):
         if guid in plex_media_item.guid:
             return history
 
-        if history["title"] == plex_media_item.title:
-            if (
-                history["year"]
-                and plex_media_item.year
-                and plex_media_item.year != history["year"]
-            ):
-                if (abs(plex_media_item.year - history["year"])) <= 1:
-                    return history
+        if (
+            history["title"] == plex_media_item.title
+            and history["year"]
+            and plex_media_item.year
+            and plex_media_item.year != history["year"]
+            and (abs(plex_media_item.year - history["year"])) <= 1
+        ):
+            return history
 
     return None
 
