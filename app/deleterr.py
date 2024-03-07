@@ -457,22 +457,31 @@ class Deleterr:
         logger.debug(f"{guid} not found in Plex")
         return None
 
+    def match_title_and_year(self, plex_media_item, title, year):
+        if (
+            title.lower() == plex_media_item.title.lower()
+            or f"{title.lower()} ({year})" == plex_media_item.title.lower()
+        ):
+            return True
+        return False
+
+    def match_year(self, plex_media_item, year):
+        if (
+            not year
+            or not plex_media_item.year
+            or plex_media_item.year == year
+            or (abs(plex_media_item.year - year)) <= 1
+        ):
+            return True
+        return False
+
     def find_by_title_and_year(self, plex_library, title, year, alternate_titles):
         for _, plex_media_item in plex_library:
             for t in [title] + alternate_titles:
-                if (
-                    t.lower() == plex_media_item.title.lower()
-                    or f"{t.lower()} ({year})" == plex_media_item.title.lower()
-                ):
-                    if (
-                        not year
-                        or not plex_media_item.year
-                        or plex_media_item.year == year
-                    ):
-                        return plex_media_item
-
-                    if (abs(plex_media_item.year - year)) <= 1:
-                        return plex_media_item
+                if self.match_title_and_year(
+                    plex_media_item, t, year
+                ) and self.match_year(plex_media_item, year):
+                    return plex_media_item
         return None
 
     def find_by_tvdb_id(self, plex_library, tvdb_id):
