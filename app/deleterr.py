@@ -727,7 +727,7 @@ def main():
     locale.setlocale(locale.LC_ALL, "")
 
     log_level = os.environ.get("LOG_LEVEL", "info").upper()
-    logger.initLogger(
+    logger.init_logger(
         console=True, log_dir="/config/logs", verbose=log_level == "DEBUG"
     )
 

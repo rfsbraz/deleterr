@@ -22,7 +22,7 @@ class LogLevelFilter(logging.Filter):
         return record.levelno <= self.max_level
 
 
-def initLogger(console=False, log_dir=False, verbose=False):
+def init_logger(console=False, log_dir=False, verbose=False):
     """
     Setup logging for Deleterr. It uses the logger instance with the name
     'deleterr'. Two log handlers are added:
