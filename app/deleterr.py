@@ -1,6 +1,5 @@
 # encoding: utf-8
 
-import logging
 import locale
 import time
 import os
@@ -20,7 +19,7 @@ from app.config import load_config
 from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 
 
-logging.basicConfig()
+
 
 DEFAULT_MAX_ACTIONS_PER_RUN = 10
 DEFAULT_SONARR_SERIES_TYPE = "standard"

@@ -8,6 +8,8 @@ FILENAME = "deleterr.log"
 MAX_SIZE = 5000000  # 5 MB
 MAX_FILES = 5
 
+logging.basicConfig()
+
 # Deleterr logger
 logger = logging.getLogger("deleterr")
 
