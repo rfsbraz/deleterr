@@ -17,11 +17,10 @@ class Trakt:
         # Test connection
         trakt.Trakt["lists"].trending(exceptions=True, per_page=1)
 
-    def get_all_movies_for_url(self, trakt_config):
-        return self._get_all_items_for_url("movie", trakt_config)
-
-    def get_all_shows_for_url(self, trakt_config):
-        return self._get_all_items_for_url("show", trakt_config)
+    def get_all_items_for_url(self, media_type, trakt_config):
+        if media_type not in ["movie", "show"]:
+            raise ValueError("Invalid media type. Expected 'movie' or 'show'.")
+        return self._get_all_items_for_url(media_type, trakt_config)
 
     def _get_all_items_for_url(self, media_type, trakt_config):
         items = {}

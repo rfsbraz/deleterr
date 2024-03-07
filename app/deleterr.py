@@ -107,219 +107,304 @@ class Deleterr:
             saved_space = 0
             for library in self.config.settings.get("libraries", []):
                 if library.get("sonarr") == name:
-                    if not library_meets_disk_space_threshold(library, sonarr):
-                        continue
-
-                    all_show_data = [
-                        show
-                        for show in unfiltered_all_show_data
-                        if show["seriesType"]
-                        == library.get("series_type", DEFAULT_SONARR_SERIES_TYPE)
-                    ]
-                    logger.info("Instance has %s items to process", len(all_show_data))
-
-                    max_actions_per_run = _get_config_value(
-                        library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN
+                    saved_space += self.process_library(
+                        library, sonarr, unfiltered_all_show_data
                     )
 
-                    logger.info("Processing library '%s'", library.get("name"))
+            logger.info(
+                "Freed %s of space by deleting shows",
+                print_readable_freed_space(saved_space),
+            )
 
-                    trakt_items = self.trakt.get_all_shows_for_url(
-                        library.get("exclude", {}).get("trakt", {})
-                    )
-                    logger.info("Got %s trakt items to exclude", len(trakt_items))
+    def process_library(self, library, sonarr_instance, unfiltered_all_show_data):
+        if not library_meets_disk_space_threshold(library, sonarr_instance):
+            return 0
 
-                    plex_library = self.plex.library.section(library.get("name"))
-                    logger.info("Got %s items in plex library", plex_library.totalSize)
+        all_show_data = self.filter_shows(library, unfiltered_all_show_data)
+        logger.info("Instance has %s items to process", len(all_show_data))
 
-                    show_activity = self.tautulli.get_activity(
-                        library, plex_library.key
-                    )
-                    logger.info("Got %s items in tautulli activity", len(show_activity))
+        max_actions_per_run = _get_config_value(
+            library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN
+        )
 
-                    actions_performed = 0
-                    for sonarr_show in self.process_library_rules(
-                        library, plex_library, all_show_data, show_activity, trakt_items
-                    ):
-                        disk_size = sonarr_show.get("statistics", {}).get(
-                            "sizeOnDisk", 0
-                        )
-                        total_episodes = sonarr_show.get("statistics", {}).get(
-                            "episodeFileCount", 0
-                        )
+        logger.info("Processing library '%s'", library.get("name"))
 
-                        if (
-                            max_actions_per_run
-                            and actions_performed >= max_actions_per_run
-                        ):
-                            logger.info(
-                                f"Reached max actions per run ({max_actions_per_run}), stopping"
-                            )
-                            break
-                        if not self.config.settings.get("dry_run"):
-                            logger.info(
-                                "[%s/%s] Deleting show '%s' from sonarr instance  '%s' (%s - %s episodes)",
-                                actions_performed,
-                                max_actions_per_run,
-                                sonarr_show["title"],
-                                name,
-                                print_readable_freed_space(disk_size),
-                                total_episodes,
-                            )
-                            if self.config.settings.get("interactive"):
-                                logger.info(
-                                    "Would you like to delete show '%s' from sonarr instance '%s'? (y/n)",
-                                    sonarr_show["title"],
-                                    name,
-                                )
-                                if input().lower() == "y":
-                                    self.delete_series(sonarr, sonarr_show)
-                            else:
-                                self.delete_series(sonarr, sonarr_show)
-                        else:
-                            logger.info(
-                                "[DRY-RUN] [%s/%s] Would have deleted show '%s' from sonarr instance '%s'  (%s - %s episodes) ",
-                                actions_performed,
-                                max_actions_per_run,
-                                sonarr_show["title"],
-                                name,
-                                print_readable_freed_space(disk_size),
-                                total_episodes,
-                            )
+        trakt_items = self.get_trakt_items("show", library)
+        logger.info("Got %s trakt items to exclude", len(trakt_items))
 
-                        saved_space += disk_size
-                        actions_performed += 1
+        plex_library = self.get_plex_library(library)
+        logger.info("Got %s items in plex library", plex_library.totalSize)
 
-                        if self.config.settings.get("action_delay"):
-                            # sleep in seconds
-                            time.sleep(self.config.settings.get("action_delay"))
+        show_activity = self.get_show_activity(library, plex_library)
+        logger.info("Got %s items in tautulli activity", len(show_activity))
 
-                    logger.info(
-                        "Freed %s of space by deleting %s shows",
-                        print_readable_freed_space(saved_space),
-                        actions_performed,
-                    )
+        return self.process_shows(
+            library,
+            sonarr_instance,
+            plex_library,
+            all_show_data,
+            show_activity,
+            trakt_items,
+            max_actions_per_run,
+        )
+
+    def filter_shows(self, library, unfiltered_all_show_data):
+        return [
+            show
+            for show in unfiltered_all_show_data
+            if show["seriesType"]
+            == library.get("series_type", DEFAULT_SONARR_SERIES_TYPE)
+        ]
+
+    def get_trakt_items(self, media_type, library):
+        return self.trakt.get_all_items_for_url(
+            media_type, library.get("exclude", {}).get("trakt", {})
+        )
+
+    def get_plex_library(self, library):
+        return self.plex.library.section(library.get("name"))
+
+    def get_show_activity(self, library, plex_library):
+        return self.tautulli.get_activity(library, plex_library.key)
+
+    def process_shows(
+        self,
+        library,
+        sonarr_instance,
+        plex_library,
+        all_show_data,
+        show_activity,
+        trakt_items,
+        max_actions_per_run,
+    ):
+        saved_space = 0
+        actions_performed = 0
+        for sonarr_show in self.process_library_rules(
+            library, plex_library, all_show_data, show_activity, trakt_items
+        ):
+            if max_actions_per_run and actions_performed >= max_actions_per_run:
+                logger.info(
+                    f"Reached max actions per run ({max_actions_per_run}), stopping"
+                )
+                break
+
+            saved_space += self.process_show(
+                library,
+                sonarr_instance,
+                sonarr_show,
+                actions_performed,
+                max_actions_per_run,
+            )
+            actions_performed += 1
+
+            if self.config.settings.get("action_delay"):
+                # sleep in seconds
+                time.sleep(self.config.settings.get("action_delay"))
+
+        return saved_space
+
+    def process_show(
+        self,
+        library,
+        sonarr_instance,
+        sonarr_show,
+        actions_performed,
+        max_actions_per_run,
+    ):
+        disk_size = sonarr_show.get("statistics", {}).get("sizeOnDisk", 0)
+        total_episodes = sonarr_show.get("statistics", {}).get("episodeFileCount", 0)
+
+        if not self.config.settings.get("dry_run"):
+            self.delete_show_if_allowed(
+                library,
+                sonarr_instance,
+                sonarr_show,
+                actions_performed,
+                max_actions_per_run,
+                disk_size,
+                total_episodes,
+            )
+        else:
+            logger.info(
+                "[DRY-RUN] [%s/%s] Would have deleted show '%s' from sonarr instance '%s'  (%s - %s episodes) ",
+                actions_performed,
+                max_actions_per_run,
+                sonarr_show["title"],
+                library.get("name"),
+                print_readable_freed_space(disk_size),
+                total_episodes,
+            )
+
+        return disk_size
+
+    def delete_show_if_allowed(
+        self,
+        library,
+        sonarr_instance,
+        sonarr_show,
+        actions_performed,
+        max_actions_per_run,
+        disk_size,
+        total_episodes,
+    ):
+        logger.info(
+            "[%s/%s] Deleting show '%s' from sonarr instance  '%s' (%s - %s episodes)",
+            actions_performed,
+            max_actions_per_run,
+            sonarr_show["title"],
+            library.get("name"),
+            print_readable_freed_space(disk_size),
+            total_episodes,
+        )
+        if self.config.settings.get("interactive"):
+            logger.info(
+                "Would you like to delete show '%s' from sonarr instance '%s'? (y/n)",
+                sonarr_show["title"],
+                library.get("name"),
+            )
+            if input().lower() == "y":
+                self.delete_series(sonarr_instance, sonarr_show)
+        else:
+            self.delete_series(sonarr_instance, sonarr_show)
 
     def process_radarr(self):
         for name, radarr in self.radarr.items():
             logger.info("Processing radarr instance: '%s'", name)
             all_movie_data = radarr.get_movie()
 
-            logger.info("[%s] Got %s movies to process", name, len(all_movie_data))
-
             saved_space = 0
             for library in self.config.settings.get("libraries", []):
                 if library.get("radarr") == name:
-                    if not library_meets_disk_space_threshold(library, radarr):
-                        continue
-
-                    max_actions_per_run = _get_config_value(
-                        library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN
+                    saved_space += self.process_library_movies(
+                        library, radarr, all_movie_data
                     )
 
-                    logger.info("Processing library '%s'", library.get("name"))
+            logger.info(
+                "Freed %s of space by deleting movies",
+                print_readable_freed_space(saved_space),
+            )
 
-                    trakt_movies = self.trakt.get_all_movies_for_url(
-                        library.get("exclude", {}).get("trakt", {})
-                    )
-                    logger.info("Got %s trakt movies to exclude", len(trakt_movies))
+    def process_library_movies(self, library, radarr_instance, all_movie_data):
+        if not library_meets_disk_space_threshold(library, radarr_instance):
+            return 0
 
-                    movies_library = self.plex.library.section(library.get("name"))
-                    logger.info(
-                        "Got %s movies in plex library", movies_library.totalSize
-                    )
+        max_actions_per_run = _get_config_value(
+            library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN
+        )
 
-                    movie_activity = self.tautulli.get_activity(
-                        library, movies_library.key
-                    )
-                    logger.info(
-                        "Got %s movies in tautulli activity", len(movie_activity)
-                    )
+        logger.info("Processing library '%s'", library.get("name"))
 
-                    actions_performed = 0
-                    for radarr_movie in self.process_library_rules(
-                        library,
-                        movies_library,
-                        all_movie_data,
-                        movie_activity,
-                        trakt_movies,
-                    ):
-                        disk_size = radarr_movie.get("sizeOnDisk", 0)
+        trakt_movies = self.get_trakt_items("movie", library)
+        movies_library = self.get_plex_library(library)
+        movie_activity = self.get_movie_activity(library, movies_library)
 
-                        if (
-                            max_actions_per_run
-                            and actions_performed >= max_actions_per_run
-                        ):
-                            logger.info(
-                                f"Reached max actions per run ({max_actions_per_run}), stopping"
-                            )
-                            break
-                        if not self.config.settings.get("dry_run"):
-                            logger.info(
-                                "[%s/%s] Deleting movie '%s' from radarr instance  '%s' (%s)",
-                                actions_performed,
-                                max_actions_per_run,
-                                radarr_movie["title"],
-                                name,
-                                print_readable_freed_space(disk_size),
-                            )
-                            if self.config.settings.get("interactive"):
-                                logger.info(
-                                    "Would you like to delete movie '%s' from radarr instance '%s'? (y/n)",
-                                    radarr_movie["title"],
-                                    name,
-                                )
-                                if input().lower() == "y":
-                                    radarr.del_movie(
-                                        radarr_movie["id"], delete_files=True
-                                    )
-                            else:
-                                radarr.del_movie(radarr_movie["id"], delete_files=True)
-                        else:
-                            logger.info(
-                                "[DRY-RUN] [%s/%s] Would have deleted movie '%s' from radarr instance '%s' (%s)",
-                                actions_performed,
-                                max_actions_per_run,
-                                radarr_movie["title"],
-                                name,
-                                print_readable_freed_space(disk_size),
-                            )
+        return self.process_movies(
+            library,
+            radarr_instance,
+            movies_library,
+            all_movie_data,
+            movie_activity,
+            trakt_movies,
+            max_actions_per_run,
+        )
 
-                        saved_space += disk_size
-                        actions_performed += 1
+    def get_movie_activity(self, library, movies_library):
+        return self.tautulli.get_activity(library, movies_library.key)
 
-                        if self.config.settings.get("action_delay"):
-                            # sleep in seconds
-                            time.sleep(self.config.settings.get("action_delay"))
-
-                    logger.info(
-                        "Freed %s of space by deleting %s movies",
-                        print_readable_freed_space(saved_space),
-                        actions_performed,
-                    )
-
-            if self.config.settings.get("dry_run"):
-                logger.info("[DRY-RUN] Would have updated plex library")
-                logger.info("[DRY-RUN] Would have updated tautulli library")
-
-            elif self.config.settings.get("interactive"):
+    def process_movies(
+        self,
+        library,
+        radarr_instance,
+        movies_library,
+        all_movie_data,
+        movie_activity,
+        trakt_movies,
+        max_actions_per_run,
+    ):
+        saved_space = 0
+        actions_performed = 0
+        for radarr_movie in self.process_library_rules(
+            library, movies_library, all_movie_data, movie_activity, trakt_movies
+        ):
+            if max_actions_per_run and actions_performed >= max_actions_per_run:
                 logger.info(
-                    "Would you like to refresh plex library '%s'? (y/n)",
-                    movies_library.title,
+                    f"Reached max actions per run ({max_actions_per_run}), stopping"
                 )
-                if input().lower() == "y":
-                    movies_library.refresh()
-                logger.info(
-                    "Would you like to refresh tautulli library '%s'? (y/n)",
-                    movies_library.title,
-                )
-                if input().lower() == "y":
-                    self.tautulli.refresh_library(movies_library.key)
-            else:
-                if self.config.settings.get("plex_library_scan_after_actions"):
-                    movies_library.refresh()
-                if self.config.settings.get("tautulli_library_scan_after_actions"):
-                    self.tautulli.refresh_library(movies_library.key)
+                break
+
+            saved_space += self.process_movie(
+                library,
+                radarr_instance,
+                radarr_movie,
+                actions_performed,
+                max_actions_per_run,
+            )
+            actions_performed += 1
+
+            if self.config.settings.get("action_delay"):
+                # sleep in seconds
+                time.sleep(self.config.settings.get("action_delay"))
+
+        return saved_space
+
+    def process_movie(
+        self,
+        library,
+        radarr_instance,
+        radarr_movie,
+        actions_performed,
+        max_actions_per_run,
+    ):
+        disk_size = radarr_movie.get("sizeOnDisk", 0)
+
+        if not self.config.settings.get("dry_run"):
+            self.delete_movie_if_allowed(
+                library,
+                radarr_instance,
+                radarr_movie,
+                actions_performed,
+                max_actions_per_run,
+                disk_size,
+            )
+        else:
+            logger.info(
+                "[DRY-RUN] [%s/%s] Would have deleted movie '%s' from radarr instance '%s' (%s)",
+                actions_performed,
+                max_actions_per_run,
+                radarr_movie["title"],
+                library.get("name"),
+                print_readable_freed_space(disk_size),
+            )
+
+        return disk_size
+
+    def delete_movie_if_allowed(
+        self,
+        library,
+        radarr_instance,
+        radarr_movie,
+        actions_performed,
+        max_actions_per_run,
+        disk_size,
+    ):
+        logger.info(
+            "[%s/%s] Deleting movie '%s' from radarr instance  '%s' (%s)",
+            actions_performed,
+            max_actions_per_run,
+            radarr_movie["title"],
+            library.get("name"),
+            print_readable_freed_space(disk_size),
+        )
+        if self.config.settings.get("interactive"):
+            logger.info(
+                "Would you like to delete movie '%s' from radarr instance '%s'? (y/n)",
+                radarr_movie["title"],
+                library.get("name"),
+            )
+            if input().lower() == "y":
+                radarr_instance.del_movie(radarr_movie["id"], delete_files=True)
+        else:
+            radarr_instance.del_movie(radarr_movie["id"], delete_files=True)
 
     def get_library_config(self, config, show):
         return next(
