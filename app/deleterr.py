@@ -659,42 +659,23 @@ class Deleterr:
         return True
 
     def check_exclusions(self, library, media_data, plex_media_item):
-        if exclude := library.get("exclude", {}):
-            if not self.check_excluded_titles(media_data, plex_media_item, exclude):
-                return False
+        exclude = library.get("exclude", {})
+        exclusion_checks = [
+            self.check_excluded_titles,
+            self.check_excluded_genres,
+            self.check_excluded_collections,
+            self.check_excluded_labels,
+            self.check_excluded_release_years,
+            self.check_excluded_studios,
+            self.check_excluded_producers,
+            self.check_excluded_directors,
+            self.check_excluded_writers,
+            self.check_excluded_actors,
+        ]
 
-            if not self.check_excluded_genres(media_data, plex_media_item, exclude):
-                return False
-
-            if not self.check_excluded_collections(
-                media_data, plex_media_item, exclude
-            ):
-                return False
-
-            if not self.check_excluded_labels(media_data, plex_media_item, exclude):
-                return False
-
-            if not self.check_excluded_release_years(
-                media_data, plex_media_item, exclude
-            ):
-                return False
-
-            if not self.check_excluded_studios(media_data, plex_media_item, exclude):
-                return False
-
-            if not self.check_excluded_producers(media_data, plex_media_item, exclude):
-                return False
-
-            if not self.check_excluded_directors(media_data, plex_media_item, exclude):
-                return False
-
-            if not self.check_excluded_writers(media_data, plex_media_item, exclude):
-                return False
-
-            if not self.check_excluded_actors(media_data, plex_media_item, exclude):
-                return False
-
-        return True
+        return all(
+            check(media_data, plex_media_item, exclude) for check in exclusion_checks
+        )
 
     def check_excluded_titles(self, media_data, plex_media_item, exclude):
         for title in exclude.get("titles", []):
