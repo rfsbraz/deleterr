@@ -736,35 +736,39 @@ def sort_media(media_list, sort_config):
 
     logger.debug(f"Sorting media by {sort_field} {sort_order}")
 
-    def sort_key(media_item):
-        if sort_field == "title":
-            return media_item.get("sortTitle", "")
-        elif sort_field == "size":
-            return media_item.get("sizeOnDisk") or media_item.get("statistics", {}).get(
-                "sizeOnDisk", 0
-            )
-        elif sort_field == "release_year":
-            return media_item.get("year", 0)
-        elif sort_field == "runtime":
-            return media_item.get("runtime", 0)
-        elif sort_field == "added_date":
-            return media_item.get("added", "")
-        elif sort_field == "rating":
-            ratings = media_item.get("ratings", {})
-            return (
-                ratings.get("imdb", {}).get("value", 0)
-                or ratings.get("tmdb", {}).get("value", 0)
-                or ratings.get("value", 0)
-            )
-        elif sort_field == "seasons":
-            return media_item.get("statistics", {}).get("seasonCount", 1)
-        elif sort_field == "episodes":
-            return media_item.get("statistics", {}).get("totalEpisodeCount", 1)
-        else:
-            return media_item.get("sortTitle", "")
+    sort_key = get_sort_key_function(sort_field)
 
     sorted_media = sorted(media_list, key=sort_key, reverse=(sort_order == "desc"))
     return sorted_media
+
+
+def get_sort_key_function(sort_field):
+    sort_key_functions = {
+        "title": lambda media_item: media_item.get("sortTitle", ""),
+        "size": lambda media_item: media_item.get("sizeOnDisk")
+        or media_item.get("statistics", {}).get("sizeOnDisk", 0),
+        "release_year": lambda media_item: media_item.get("year", 0),
+        "runtime": lambda media_item: media_item.get("runtime", 0),
+        "added_date": lambda media_item: media_item.get("added", ""),
+        "rating": lambda media_item: get_rating(media_item),
+        "seasons": lambda media_item: media_item.get("statistics", {}).get(
+            "seasonCount", 1
+        ),
+        "episodes": lambda media_item: media_item.get("statistics", {}).get(
+            "totalEpisodeCount", 1
+        ),
+    }
+
+    return sort_key_functions.get(sort_field, sort_key_functions["title"])
+
+
+def get_rating(media_item):
+    ratings = media_item.get("ratings", {})
+    return (
+        ratings.get("imdb", {}).get("value", 0)
+        or ratings.get("tmdb", {}).get("value", 0)
+        or ratings.get("value", 0)
+    )
 
 
 def get_file_contents(file_path):
