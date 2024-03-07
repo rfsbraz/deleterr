@@ -338,8 +338,8 @@ class Deleterr:
         title=None,
         year=None,
         alternate_titles=[],
-        imdbId=None,
-        tvdbId=None,
+        imdb_id=None,
+        tvdb_id=None,
     ):
         if guid:
             for guids, plex_media_item in plex_library:
@@ -366,14 +366,14 @@ class Deleterr:
 
                     if (abs(plex_media_item.year - year)) <= 1:
                         return plex_media_item
-            # Check tvdbId is in any of the guids
-            if tvdbId:
+            # Check tvdb_id is in any of the guids
+            if tvdb_id:
                 for guid in plex_media_item.guids:
-                    if f"tvdb://{tvdbId}" in guid.id:
+                    if f"tvdb://{tvdb_id}" in guid.id:
                         return plex_media_item
-            if imdbId:
+            if imdb_id:
                 for guid in plex_media_item.guids:
-                    if f"imdb://{imdbId}" in guid.id:
+                    if f"imdb://{imdb_id}" in guid.id:
                         return plex_media_item
 
         return None
@@ -421,8 +421,8 @@ class Deleterr:
                 title=media_data["title"],
                 year=media_data["year"],
                 alternate_titles=[t["title"] for t in media_data["alternateTitles"]],
-                imdbId=media_data.get("imdbId"),
-                tvdbId=media_data.get("tvdbId"),
+                imdb_id=media_data.get("imdb_id"),
+                tvdb_id=media_data.get("tvdb_id"),
             )
             if plex_media_item is None:
                 if media_data.get("statistics", {}).get("episodeFileCount", 0) == 0:
@@ -486,9 +486,9 @@ class Deleterr:
                 return False
 
         # Check if the movie tmdb id is in the trakt watched list
-        if media_data.get("tvdbId", media_data.get("tmdbId")) in trakt_movies:
+        if media_data.get("tvdb_id", media_data.get("tmdbId")) in trakt_movies:
             logger.debug(
-                f"{media_data['title']} found in trakt watched list {trakt_movies[media_data.get('tvdbId', media_data.get('tmdbId'))]['list']}, skipping"
+                f"{media_data['title']} found in trakt watched list {trakt_movies[media_data.get('tvdb_id', media_data.get('tmdbId'))]['list']}, skipping"
             )
             return False
 
