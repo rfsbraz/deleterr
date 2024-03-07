@@ -427,16 +427,38 @@ class Deleterr:
         tvdb_id=None,
     ):
         if guid:
-            for guids, plex_media_item in plex_library:
-                # Check if any guid cmatches
-                for plex_guid in guids:
-                    if guid in plex_guid:
-                        return plex_media_item
-            logger.debug(f"{guid} not found in Plex")
+            plex_media_item = self.find_by_guid(plex_library, guid)
+            if plex_media_item:
+                return plex_media_item
 
-        # Plex may pick some different titles sometimes, and since we can't only fetch by title, we need to check all of them
+        plex_media_item = self.find_by_title_and_year(
+            plex_library, title, year, alternate_titles
+        )
+        if plex_media_item:
+            return plex_media_item
+
+        if tvdb_id:
+            plex_media_item = self.find_by_tvdb_id(plex_library, tvdb_id)
+            if plex_media_item:
+                return plex_media_item
+
+        if imdb_id:
+            plex_media_item = self.find_by_imdb_id(plex_library, imdb_id)
+            if plex_media_item:
+                return plex_media_item
+
+        return None
+
+    def find_by_guid(self, plex_library, guid):
+        for guids, plex_media_item in plex_library:
+            for plex_guid in guids:
+                if guid in plex_guid:
+                    return plex_media_item
+        logger.debug(f"{guid} not found in Plex")
+        return None
+
+    def find_by_title_and_year(self, plex_library, title, year, alternate_titles):
         for _, plex_media_item in plex_library:
-            # Check if any title matches
             for t in [title] + alternate_titles:
                 if (
                     t.lower() == plex_media_item.title.lower()
@@ -451,16 +473,20 @@ class Deleterr:
 
                     if (abs(plex_media_item.year - year)) <= 1:
                         return plex_media_item
-            # Check tvdb_id is in any of the guids
-            if tvdb_id:
-                for guid in plex_media_item.guids:
-                    if f"tvdb://{tvdb_id}" in guid.id:
-                        return plex_media_item
-            if imdb_id:
-                for guid in plex_media_item.guids:
-                    if f"imdb://{imdb_id}" in guid.id:
-                        return plex_media_item
+        return None
 
+    def find_by_tvdb_id(self, plex_library, tvdb_id):
+        for _, plex_media_item in plex_library:
+            for guid in plex_media_item.guids:
+                if f"tvdb://{tvdb_id}" in guid.id:
+                    return plex_media_item
+        return None
+
+    def find_by_imdb_id(self, plex_library, imdb_id):
+        for _, plex_media_item in plex_library:
+            for guid in plex_media_item.guids:
+                if f"imdb://{imdb_id}" in guid.id:
+                    return plex_media_item
         return None
 
     def process_library_rules(
