@@ -3,8 +3,7 @@ import time
 
 from app import logger
 from app.utils import print_readable_freed_space, parse_size_to_bytes
-from datetime import datetime, timedelta
-from plexapi.exceptions import NotFound
+from datetime import datetime
 from plexapi.server import PlexServer
 from app.modules.trakt import Trakt
 from app.modules.tautulli import Tautulli

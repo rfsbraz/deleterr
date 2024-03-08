@@ -34,7 +34,7 @@ class Deleterr:
         self.process_radarr()
 
     def delete_series(self, sonarr, sonarr_show):
-        ## PyArr doesn't support deleting the series files, so we need to do it manually
+        # PyArr doesn't support deleting the series files, so we need to do it manually
         episodes = sonarr.get_episode(sonarr_show["id"], series=True)
 
         # Mark all episodes as unmonitored so they don't get re-downloaded while we're deleting them
