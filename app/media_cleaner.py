@@ -1,12 +1,44 @@
+import requests
+import time
+
 from app import logger
 from app.utils import print_readable_freed_space, parse_size_to_bytes
+from datetime import datetime, timedelta
+from plexapi.exceptions import NotFound
+from plexapi.server import PlexServer
+from app.modules.trakt import Trakt
+from app.modules.tautulli import Tautulli
 
 DEFAULT_MAX_ACTIONS_PER_RUN = 10
+DEFAULT_SONARR_SERIES_TYPE = "standard"
 
 
 class MediaCleaner:
     def __init__(self, config):
         self.config = config
+
+        # Setup connections
+        self.tautulli = Tautulli(
+            config.settings.get("tautulli").get("url"),
+            config.settings.get("tautulli").get("api_key"),
+        )
+
+        self.trakt = Trakt(
+            config.settings.get("trakt", {}).get("client_id"),
+            config.settings.get("trakt", {}).get("client_secret"),
+        )
+
+        # Disable SSL verification to support required secure connections
+        # Certificates are not always valid for local connections
+        session = requests.Session()
+        session.verify = False
+
+        self.plex = PlexServer(
+            config.settings.get("plex").get("url"),
+            config.settings.get("plex").get("token"),
+            timeout=120,
+            session=session,
+        )
 
     def get_trakt_items(self, media_type, library):
         return self.trakt.get_all_items_for_url(

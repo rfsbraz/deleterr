@@ -1,26 +1,16 @@
 # encoding: utf-8
 
 import locale
-import time
 import os
-import requests
 import argparse
 
-from datetime import datetime, timedelta
 from pyarr.sonarr import SonarrAPI
 from pyarr.radarr import RadarrAPI
-from app.modules.tautulli import Tautulli
-from app.modules.trakt import Trakt
 from app import logger
-from plexapi.server import PlexServer
-from plexapi.exceptions import NotFound
-from app.utils import print_readable_freed_space, parse_size_to_bytes
+from app.utils import print_readable_freed_space
 from app.media_cleaner import MediaCleaner
 from app.config import load_config
 from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
-
-
-DEFAULT_SONARR_SERIES_TYPE = "standard"
 
 
 class Deleterr:
@@ -28,23 +18,6 @@ class Deleterr:
         self.config = config
 
         self.media_cleaner = MediaCleaner(config)
-
-        # Setup connections
-        self.tautulli = Tautulli(
-            config.settings.get("tautulli").get("url"),
-            config.settings.get("tautulli").get("api_key"),
-        )
-
-        # Disable SSL verification to support required secure connections
-        # Certificates are not always valid for local connections
-        session = requests.Session()
-        session.verify = False
-        self.plex = PlexServer(
-            config.settings.get("plex").get("url"),
-            config.settings.get("plex").get("token"),
-            timeout=120,
-            session=session,
-        )
 
         self.sonarr = {
             connection["name"]: SonarrAPI(connection["url"], connection["api_key"])
@@ -54,10 +27,7 @@ class Deleterr:
             connection["name"]: RadarrAPI(connection["url"], connection["api_key"])
             for connection in config.settings.get("radarr", [])
         }
-        self.trakt = Trakt(
-            config.settings.get("trakt", {}).get("client_id"),
-            config.settings.get("trakt", {}).get("client_secret"),
-        )
+
         self.watched_collections = set()
 
         self.process_sonarr()
@@ -106,7 +76,7 @@ class Deleterr:
             saved_space = 0
             for library in self.config.settings.get("libraries", []):
                 if library.get("radarr") == name:
-                    saved_space += self.process_library_movies(
+                    saved_space += self.media_cleaner.process_library_movies(
                         library, radarr, all_movie_data
                     )
 
@@ -123,7 +93,7 @@ class Deleterr:
             saved_space = 0
             for library in self.config.settings.get("libraries", []):
                 if library.get("sonarr") == name:
-                    saved_space += self.process_library(
+                    saved_space += self.media_cleaner.process_library(
                         library, sonarr, unfiltered_all_show_data
                     )
 
