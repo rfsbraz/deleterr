@@ -1,5 +1,7 @@
-import trakt
 import re
+
+import trakt
+
 from app import logger
 
 

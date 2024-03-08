@@ -1,7 +1,9 @@
-import pytest
-from unittest.mock import patch, Mock
-from app.modules.tautulli import Tautulli, filter_by_most_recent
 from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
+
+import pytest
+
+from app.modules.tautulli import Tautulli, filter_by_most_recent
 
 
 @pytest.mark.parametrize(

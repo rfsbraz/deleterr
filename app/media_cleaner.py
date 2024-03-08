@@ -1,12 +1,13 @@
-import requests
 import time
+from datetime import datetime
+
+import requests
+from plexapi.server import PlexServer
 
 from app import logger
-from app.utils import print_readable_freed_space, parse_size_to_bytes
-from datetime import datetime
-from plexapi.server import PlexServer
-from app.modules.trakt import Trakt
 from app.modules.tautulli import Tautulli
+from app.modules.trakt import Trakt
+from app.utils import parse_size_to_bytes, print_readable_freed_space
 
 DEFAULT_MAX_ACTIONS_PER_RUN = 10
 DEFAULT_SONARR_SERIES_TYPE = "standard"

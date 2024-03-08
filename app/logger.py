@@ -1,7 +1,7 @@
-from logging import handlers
 import logging
 import os
 import sys
+from logging import handlers
 
 # These settings are for file logging only
 FILENAME = "deleterr.log"

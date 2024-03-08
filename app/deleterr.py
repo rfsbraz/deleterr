@@ -1,16 +1,17 @@
 # encoding: utf-8
 
+import argparse
 import locale
 import os
-import argparse
 
-from pyarr.sonarr import SonarrAPI
-from pyarr.radarr import RadarrAPI
-from app import logger
-from app.utils import print_readable_freed_space
-from app.media_cleaner import MediaCleaner
-from app.config import load_config
 from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
+from pyarr.radarr import RadarrAPI
+from pyarr.sonarr import SonarrAPI
+
+from app import logger
+from app.config import load_config
+from app.media_cleaner import MediaCleaner
+from app.utils import print_readable_freed_space
 
 
 class Deleterr:

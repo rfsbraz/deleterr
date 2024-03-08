@@ -1,13 +1,15 @@
 # encoding: utf-8
 
-import yaml
-from app import logger
-import sys
 import os
+import sys
+
 import requests
-from app.modules.trakt import Trakt
+import yaml
+
+from app import logger
+from app.constants import VALID_ACTION_MODES, VALID_SORT_FIELDS, VALID_SORT_ORDERS
 from app.modules.tautulli import Tautulli
-from app.constants import VALID_SORT_FIELDS, VALID_SORT_ORDERS, VALID_ACTION_MODES
+from app.modules.trakt import Trakt
 from app.utils import validate_units
 
 

@@ -1,5 +1,6 @@
 import pytest
-from app.utils import print_readable_freed_space, parse_size_to_bytes, validate_units
+
+from app.utils import parse_size_to_bytes, print_readable_freed_space, validate_units
 
 
 @pytest.mark.parametrize(

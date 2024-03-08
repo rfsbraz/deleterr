@@ -1,15 +1,17 @@
 import unittest
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
+from plexapi.server import PlexServer
+
+from app.config import Config
 from app.media_cleaner import (
+    DEFAULT_MAX_ACTIONS_PER_RUN,
+    MediaCleaner,
     find_watched_data,
     library_meets_disk_space_threshold,
-    MediaCleaner,
-    DEFAULT_MAX_ACTIONS_PER_RUN,
 )
-from unittest.mock import Mock, patch, MagicMock
-from app.config import Config
-from app.modules import trakt, tautulli
-from plexapi.server import PlexServer
+from app.modules import tautulli, trakt
 
 
 @pytest.fixture
