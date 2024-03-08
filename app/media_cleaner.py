@@ -577,118 +577,119 @@ class MediaCleaner:
     def check_exclusions(self, library, media_data, plex_media_item):
         exclude = library.get("exclude", {})
         exclusion_checks = [
-            self.check_excluded_titles,
-            self.check_excluded_genres,
-            self.check_excluded_collections,
-            self.check_excluded_labels,
-            self.check_excluded_release_years,
-            self.check_excluded_studios,
-            self.check_excluded_producers,
-            self.check_excluded_directors,
-            self.check_excluded_writers,
-            self.check_excluded_actors,
+            check_excluded_titles,
+            check_excluded_genres,
+            check_excluded_collections,
+            check_excluded_labels,
+            check_excluded_release_years,
+            check_excluded_studios,
+            check_excluded_producers,
+            check_excluded_directors,
+            check_excluded_writers,
+            check_excluded_actors,
         ]
 
         return all(
             check(media_data, plex_media_item, exclude) for check in exclusion_checks
         )
 
-    def check_excluded_titles(self, media_data, plex_media_item, exclude):
-        for title in exclude.get("titles", []):
-            if title.lower() == plex_media_item.title.lower():
-                logger.debug(
-                    f"{media_data['title']} has excluded title {title}, skipping"
-                )
-                return False
-        return True
 
-    def check_excluded_genres(self, media_data, plex_media_item, exclude):
-        for genre in exclude.get("genres", []):
-            if genre.lower() in (g.tag.lower() for g in plex_media_item.genres):
-                logger.debug(
-                    f"{media_data['title']} has excluded genre {genre}, skipping"
-                )
-                return False
-        return True
+def check_excluded_titles(media_data, plex_media_item, exclude):
+    for title in exclude.get("titles", []):
+        if title.lower() == plex_media_item.title.lower():
+            logger.debug(f"{media_data['title']} has excluded title {title}, skipping")
+            return False
+    return True
 
-    def check_excluded_collections(self, media_data, plex_media_item, exclude):
-        for collection in exclude.get("collections", []):
-            if collection.lower() in (
-                g.tag.lower() for g in plex_media_item.collections
-            ):
-                logger.debug(
-                    f"{media_data['title']} has excluded collection {collection}, skipping"
-                )
-                return False
-        return True
 
-    def check_excluded_labels(self, media_data, plex_media_item, exclude):
-        for label in exclude.get("plex_labels", []):
-            if label.lower() in (g.tag.lower() for g in plex_media_item.labels):
-                logger.debug(
-                    f"{media_data['title']} has excluded label {label}, skipping"
-                )
-                return False
-        return True
+def check_excluded_genres(media_data, plex_media_item, exclude):
+    for genre in exclude.get("genres", []):
+        if genre.lower() in (g.tag.lower() for g in plex_media_item.genres):
+            logger.debug(f"{media_data['title']} has excluded genre {genre}, skipping")
+            return False
+    return True
 
-    def check_excluded_release_years(self, media_data, plex_media_item, exclude):
-        if (
-            exclude.get("release_years", 0)
-            and plex_media_item.year
-            and plex_media_item.year
-            >= datetime.now().year - exclude.get("release_years")
-        ):
+
+def check_excluded_collections(media_data, plex_media_item, exclude):
+    for collection in exclude.get("collections", []):
+        if collection.lower() in (g.tag.lower() for g in plex_media_item.collections):
             logger.debug(
-                f"{media_data['title']} ({plex_media_item.year}) was released within the threshold years ({datetime.now().year} - {exclude.get('release_years', 0)} = {datetime.now().year - exclude.get('release_years', 0)}), skipping"
+                f"{media_data['title']} has excluded collection {collection}, skipping"
             )
             return False
-        return True
+    return True
 
-    def check_excluded_studios(self, media_data, plex_media_item, exclude):
-        if plex_media_item.studio and plex_media_item.studio.lower() in exclude.get(
-            "studios", []
-        ):
+
+def check_excluded_labels(media_data, plex_media_item, exclude):
+    for label in exclude.get("plex_labels", []):
+        if label.lower() in (g.tag.lower() for g in plex_media_item.labels):
+            logger.debug(f"{media_data['title']} has excluded label {label}, skipping")
+            return False
+    return True
+
+
+def check_excluded_release_years(media_data, plex_media_item, exclude):
+    if (
+        exclude.get("release_years", 0)
+        and plex_media_item.year
+        and plex_media_item.year >= datetime.now().year - exclude.get("release_years")
+    ):
+        logger.debug(
+            f"{media_data['title']} ({plex_media_item.year}) was released within the threshold years ({datetime.now().year} - {exclude.get('release_years', 0)} = {datetime.now().year - exclude.get('release_years', 0)}), skipping"
+        )
+        return False
+    return True
+
+
+def check_excluded_studios(media_data, plex_media_item, exclude):
+    if plex_media_item.studio and plex_media_item.studio.lower() in exclude.get(
+        "studios", []
+    ):
+        logger.debug(
+            f"{media_data['title']} has excluded studio {plex_media_item.studio}, skipping"
+        )
+        return False
+    return True
+
+
+def check_excluded_producers(media_data, plex_media_item, exclude):
+    for producer in exclude.get("producers", []):
+        if producer.lower() in (g.tag.lower() for g in plex_media_item.producers):
             logger.debug(
-                f"{media_data['title']} has excluded studio {plex_media_item.studio}, skipping"
+                f"{media_data['title']} [{plex_media_item}] has excluded producer {producer}, skipping"
             )
             return False
-        return True
+    return True
 
-    def check_excluded_producers(self, media_data, plex_media_item, exclude):
-        for producer in exclude.get("producers", []):
-            if producer.lower() in (g.tag.lower() for g in plex_media_item.producers):
-                logger.debug(
-                    f"{media_data['title']} [{plex_media_item}] has excluded producer {producer}, skipping"
-                )
-                return False
-        return True
 
-    def check_excluded_directors(self, media_data, plex_media_item, exclude):
-        for director in exclude.get("directors", []):
-            if director.lower() in (g.tag.lower() for g in plex_media_item.directors):
-                logger.debug(
-                    f"{media_data['title']} [{plex_media_item}] has excluded director {director}, skipping"
-                )
-                return False
-        return True
+def check_excluded_directors(media_data, plex_media_item, exclude):
+    for director in exclude.get("directors", []):
+        if director.lower() in (g.tag.lower() for g in plex_media_item.directors):
+            logger.debug(
+                f"{media_data['title']} [{plex_media_item}] has excluded director {director}, skipping"
+            )
+            return False
+    return True
 
-    def check_excluded_writers(self, media_data, plex_media_item, exclude):
-        for writer in exclude.get("writers", []):
-            if writer.lower() in (g.tag.lower() for g in plex_media_item.writers):
-                logger.debug(
-                    f"{media_data['title']} [{plex_media_item}] has excluded writer {writer}, skipping"
-                )
-                return False
-        return True
 
-    def check_excluded_actors(self, media_data, plex_media_item, exclude):
-        for actor in exclude.get("actors", []):
-            if actor.lower() in (g.tag.lower() for g in plex_media_item.roles):
-                logger.debug(
-                    f"{media_data['title']} [{plex_media_item}] has excluded actor {actor}, skipping"
-                )
-                return False
-        return True
+def check_excluded_writers(media_data, plex_media_item, exclude):
+    for writer in exclude.get("writers", []):
+        if writer.lower() in (g.tag.lower() for g in plex_media_item.writers):
+            logger.debug(
+                f"{media_data['title']} [{plex_media_item}] has excluded writer {writer}, skipping"
+            )
+            return False
+    return True
+
+
+def check_excluded_actors(media_data, plex_media_item, exclude):
+    for actor in exclude.get("actors", []):
+        if actor.lower() in (g.tag.lower() for g in plex_media_item.roles):
+            logger.debug(
+                f"{media_data['title']} [{plex_media_item}] has excluded actor {actor}, skipping"
+            )
+            return False
+    return True
 
 
 def find_watched_data(plex_media_item, activity_data):

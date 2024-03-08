@@ -1,9 +1,11 @@
 import unittest
+from datetime import datetime
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from plexapi.server import PlexServer
 
+import app.media_cleaner
 from app.config import Config
 from app.media_cleaner import (
     DEFAULT_MAX_ACTIONS_PER_RUN,
@@ -190,3 +192,286 @@ def test_process_library(mocker, standard_config):
         mock_get_config_value.return_value,
     )
     assert result == 5
+
+
+def test_check_exclusions(mocker, standard_config):
+    # Arrange
+    library = {"name": "Test Library", "exclude": {}}
+    media_data = MagicMock()
+    plex_media_item = MagicMock()
+
+    mocker.patch.object(trakt.Trakt, "test_connection")
+    mocker.patch.object(Config, "test_api_connection")
+    mocker.patch.object(tautulli.Tautulli, "test_connection")
+
+    # Mock plex server constructor
+    mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
+
+    mock_check_excluded_titles = mocker.patch("app.media_cleaner.check_excluded_titles")
+    mock_check_excluded_genres = mocker.patch("app.media_cleaner.check_excluded_genres")
+    mock_check_excluded_collections = mocker.patch(
+        "app.media_cleaner.check_excluded_collections"
+    )
+    mock_check_excluded_labels = mocker.patch("app.media_cleaner.check_excluded_labels")
+    mock_check_excluded_release_years = mocker.patch(
+        "app.media_cleaner.check_excluded_release_years"
+    )
+    mock_check_excluded_studios = mocker.patch(
+        "app.media_cleaner.check_excluded_studios"
+    )
+    mock_check_excluded_producers = mocker.patch(
+        "app.media_cleaner.check_excluded_producers"
+    )
+    mock_check_excluded_directors = mocker.patch(
+        "app.media_cleaner.check_excluded_directors"
+    )
+    mock_check_excluded_writers = mocker.patch(
+        "app.media_cleaner.check_excluded_writers"
+    )
+    mock_check_excluded_actors = mocker.patch("app.media_cleaner.check_excluded_actors")
+
+    # Act
+    media_cleaner = MediaCleaner(standard_config)
+    media_cleaner.check_exclusions(library, media_data, plex_media_item)
+
+    # Assert
+    mock_check_excluded_titles.assert_called_once_with(
+        media_data, plex_media_item, library.get("exclude")
+    )
+    mock_check_excluded_genres.assert_called_once_with(
+        media_data, plex_media_item, library.get("exclude")
+    )
+    mock_check_excluded_collections.assert_called_once_with(
+        media_data, plex_media_item, library.get("exclude")
+    )
+    mock_check_excluded_labels.assert_called_once_with(
+        media_data, plex_media_item, library.get("exclude")
+    )
+    mock_check_excluded_release_years.assert_called_once_with(
+        media_data, plex_media_item, library.get("exclude")
+    )
+    mock_check_excluded_studios.assert_called_once_with(
+        media_data, plex_media_item, library.get("exclude")
+    )
+    mock_check_excluded_producers.assert_called_once_with(
+        media_data, plex_media_item, library.get("exclude")
+    )
+    mock_check_excluded_directors.assert_called_once_with(
+        media_data, plex_media_item, library.get("exclude")
+    )
+    mock_check_excluded_writers.assert_called_once_with(
+        media_data, plex_media_item, library.get("exclude")
+    )
+    mock_check_excluded_actors.assert_called_once_with(
+        media_data, plex_media_item, library.get("exclude")
+    )
+
+
+def test_check_excluded_titles(mocker):
+    # Arrange
+    media_data = {"title": "Test Title"}
+    plex_media_item = MagicMock()
+    plex_media_item.title = "Test Title"
+    exclude = {"titles": ["Test Title"]}
+
+    mock_logger = mocker.patch("app.media_cleaner.logger")
+
+    # Act
+    result = app.media_cleaner.check_excluded_titles(
+        media_data, plex_media_item, exclude
+    )
+
+    # Assert
+    mock_logger.debug.assert_called_once_with(
+        f"{media_data['title']} has excluded title {exclude['titles'][0]}, skipping"
+    )
+    assert result is False
+
+
+def test_check_excluded_genres(mocker):
+    # Arrange
+    media_data = {"title": "Test Title"}
+    plex_media_item = MagicMock()
+    plex_media_item.genres = [MagicMock(tag="Test Genre")]
+    exclude = {"genres": ["Test Genre"]}
+
+    mock_logger = mocker.patch("app.media_cleaner.logger")
+
+    # Act
+    result = app.media_cleaner.check_excluded_genres(
+        media_data, plex_media_item, exclude
+    )
+
+    # Assert
+    mock_logger.debug.assert_called_once_with(
+        f"{media_data['title']} has excluded genre {exclude['genres'][0]}, skipping"
+    )
+    assert result is False
+
+
+def test_check_excluded_collections(mocker):
+    # Arrange
+    media_data = {"title": "Test Title"}
+    plex_media_item = MagicMock()
+    plex_media_item.collections = [MagicMock(tag="Test collection")]
+    exclude = {"collections": ["Test collection"]}
+
+    mock_logger = mocker.patch("app.media_cleaner.logger")
+
+    # Act
+    result = app.media_cleaner.check_excluded_collections(
+        media_data, plex_media_item, exclude
+    )
+
+    # Assert
+    mock_logger.debug.assert_called_once_with(
+        f"{media_data['title']} has excluded collection {exclude['collections'][0]}, skipping"
+    )
+    assert result is False
+
+
+def test_check_excluded_labels(mocker):
+    # Arrange
+    media_data = {"title": "Test Title"}
+    plex_media_item = MagicMock()
+    plex_media_item.labels = [MagicMock(tag="Test label")]
+    exclude = {"plex_labels": ["Test label"]}
+
+    mock_logger = mocker.patch("app.media_cleaner.logger")
+
+    # Act
+    result = app.media_cleaner.check_excluded_labels(
+        media_data, plex_media_item, exclude
+    )
+
+    # Assert
+    mock_logger.debug.assert_called_once_with(
+        f"{media_data['title']} has excluded label {exclude['plex_labels'][0]}, skipping"
+    )
+    assert result is False
+
+
+def test_check_excluded_release_years(mocker):
+    # Arrange
+    media_data = {"title": "Test Title"}
+    plex_media_item = MagicMock()
+    plex_media_item.year = datetime.now().year
+    exclude = {"release_years": 1}
+
+    mock_logger = mocker.patch("app.media_cleaner.logger")
+
+    # Act
+    result = app.media_cleaner.check_excluded_release_years(
+        media_data, plex_media_item, exclude
+    )
+
+    # Assert
+    mock_logger.debug.assert_called_once_with(
+        f"{media_data['title']} ({plex_media_item.year}) was released within the threshold years ({datetime.now().year} - {exclude.get('release_years', 0)} = {datetime.now().year - exclude.get('release_years', 0)}), skipping"
+    )
+    assert result is False
+
+
+def test_check_excluded_studios(mocker):
+    # Arrange
+    media_data = {"title": "Test Title"}
+    plex_media_item = MagicMock()
+    plex_media_item.studio = "Test Studio"
+    exclude = {"studios": ["test studio"]}
+
+    mock_logger = mocker.patch("app.media_cleaner.logger")
+
+    # Act
+    result = app.media_cleaner.check_excluded_studios(
+        media_data, plex_media_item, exclude
+    )
+
+    # Assert
+    mock_logger.debug.assert_called_once_with(
+        f"{media_data['title']} has excluded studio {plex_media_item.studio}, skipping"
+    )
+    assert result is False
+
+
+def test_check_excluded_producers(mocker):
+    # Arrange
+    media_data = {"title": "Test Title"}
+    plex_media_item = MagicMock()
+    plex_media_item.producers = [MagicMock(tag="Test Producer")]
+    exclude = {"producers": ["Test Producer"]}
+
+    mock_logger = mocker.patch("app.media_cleaner.logger")
+
+    # Act
+    result = app.media_cleaner.check_excluded_producers(
+        media_data, plex_media_item, exclude
+    )
+
+    # Assert
+    mock_logger.debug.assert_called_once_with(
+        f"{media_data['title']} [{plex_media_item}] has excluded producer {exclude['producers'][0]}, skipping"
+    )
+    assert result is False
+
+
+def test_check_excluded_directors(mocker):
+    # Arrange
+    media_data = {"title": "Test Title"}
+    plex_media_item = MagicMock()
+    plex_media_item.directors = [MagicMock(tag="Test director")]
+    exclude = {"directors": ["Test director"]}
+
+    mock_logger = mocker.patch("app.media_cleaner.logger")
+
+    # Act
+    result = app.media_cleaner.check_excluded_directors(
+        media_data, plex_media_item, exclude
+    )
+
+    # Assert
+    mock_logger.debug.assert_called_once_with(
+        f"{media_data['title']} [{plex_media_item}] has excluded director {exclude['directors'][0]}, skipping"
+    )
+    assert result is False
+
+
+def test_check_excluded_writers(mocker):
+    # Arrange
+    media_data = {"title": "Test Title"}
+    plex_media_item = MagicMock()
+    plex_media_item.writers = [MagicMock(tag="Test writer")]
+    exclude = {"writers": ["Test writer"]}
+
+    mock_logger = mocker.patch("app.media_cleaner.logger")
+
+    # Act
+    result = app.media_cleaner.check_excluded_writers(
+        media_data, plex_media_item, exclude
+    )
+
+    # Assert
+    mock_logger.debug.assert_called_once_with(
+        f"{media_data['title']} [{plex_media_item}] has excluded writer {exclude['writers'][0]}, skipping"
+    )
+    assert result is False
+
+
+def test_check_excluded_actors(mocker):
+    # Arrange
+    media_data = {"title": "Test Title"}
+    plex_media_item = MagicMock()
+    plex_media_item.roles = [MagicMock(tag="Test actor")]
+    exclude = {"actors": ["Test actor"]}
+
+    mock_logger = mocker.patch("app.media_cleaner.logger")
+
+    # Act
+    result = app.media_cleaner.check_excluded_actors(
+        media_data, plex_media_item, exclude
+    )
+
+    # Assert
+    mock_logger.debug.assert_called_once_with(
+        f"{media_data['title']} [{plex_media_item}] has excluded actor {exclude['actors'][0]}, skipping"
+    )
+    assert result is False
