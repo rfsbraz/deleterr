@@ -3,6 +3,7 @@ from datetime import datetime
 
 import requests
 from plexapi.server import PlexServer
+from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 
 from app import logger
 from app.modules.tautulli import Tautulli
@@ -284,6 +285,41 @@ class MediaCleaner:
             )
 
         return disk_size
+
+    def delete_series(self, sonarr, sonarr_show):
+        # PyArr doesn't support deleting the series files, so we need to do it manually
+        episodes = sonarr.get_episode(sonarr_show["id"], series=True)
+
+        # Mark all episodes as unmonitored so they don't get re-downloaded while we're deleting them
+        sonarr.upd_episode_monitor([episode["id"] for episode in episodes], False)
+
+        # delete the files
+        skip_deleting_show = False
+        for episode in episodes:
+            try:
+                if episode["episodeFileId"] != 0:
+                    sonarr.del_episode_file(episode["episodeFileId"])
+            except PyarrResourceNotFound as e:
+                # If the episode file doesn't exist, it's probably because it was already deleted by sonarr
+                # Sometimes happens for multi-episode files
+                logger.debug(
+                    f"Failed to delete episode file {episode['episodeFileId']} for show {sonarr_show['id']} ({sonarr_show['title']}): {e}"
+                )
+            except PyarrServerError as e:
+                # If the episode file is still in use, we can't delete the show
+                logger.error(
+                    f"Failed to delete episode file {episode['episodeFileId']} for show {sonarr_show['id']} ({sonarr_show['title']}): {e}"
+                )
+                skip_deleting_show = True
+                break
+
+        # delete the series
+        if not skip_deleting_show:
+            sonarr.del_series(sonarr_show["id"], delete_files=True)
+        else:
+            logger.info(
+                f"Skipping deleting show {sonarr_show['id']} ({sonarr_show['title']}) due to errors deleting episode files. It will be deleted on the next run."
+            )
 
     def delete_movie_if_allowed(
         self,

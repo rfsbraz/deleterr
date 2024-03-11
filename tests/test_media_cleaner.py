@@ -3,7 +3,6 @@ from datetime import datetime
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from plexapi.server import PlexServer
 
 import app.media_cleaner
 from app.config import Config
@@ -13,7 +12,6 @@ from app.media_cleaner import (
     find_watched_data,
     library_meets_disk_space_threshold,
 )
-from app.modules import tautulli, trakt
 
 
 @pytest.fixture
@@ -21,13 +19,6 @@ def standard_config():
     return MagicMock(
         settings={
             "max_actions_per_run": 10,
-            "library": {
-                "name": "Test Library",
-                "exclude": {},
-                "max_age_days": 30,
-                "max_size_gb": 500,
-                "min_disk_space_gb": 100,
-            },
             "sonarr": {"api_key": "test_api_key", "url": "http://localhost:8989"},
             "plex": {
                 "url": "http://localhost:32400",
@@ -36,6 +27,12 @@ def standard_config():
             "tautulli": {"url": "http://localhost:8181", "api_key": "test_api_key"},
         }
     )
+
+
+@pytest.fixture(autouse=True)
+def mock_plex_server():
+    with patch("app.media_cleaner.PlexServer", return_value=MagicMock()) as mock_plex:
+        yield mock_plex
 
 
 class TestLibraryMeetsDiskSpaceThreshold(unittest.TestCase):
@@ -125,42 +122,27 @@ class TestFindWatchedData(unittest.TestCase):
         self.assertIsNone(find_watched_data(plex_media_item, self.activity_data))
 
 
-def test_process_library(mocker, standard_config):
+@patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True)
+@patch("app.media_cleaner._get_config_value", return_value=10)
+@patch.object(MediaCleaner, "filter_shows")
+@patch.object(MediaCleaner, "get_trakt_items")
+@patch.object(MediaCleaner, "get_plex_library")
+@patch.object(MediaCleaner, "get_show_activity")
+@patch.object(MediaCleaner, "process_shows", return_value=5)
+def test_process_library(
+    mock_process_shows,
+    mock_get_show_activity,
+    mock_get_plex_library,
+    mock_get_trakt_items,
+    mock_filter_shows,
+    mock_get_config_value,
+    mock_library_meets_disk_space_threshold,
+    standard_config,
+):
     # Arrange
     library = {"name": "Test Library"}
     sonarr_instance = Mock()
     unfiltered_all_show_data = MagicMock()
-
-    mocker.patch.object(trakt.Trakt, "test_connection")
-    mocker.patch.object(Config, "test_api_connection")
-    mocker.patch.object(tautulli.Tautulli, "test_connection")
-
-    # Mock plex server constructor
-    mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
-
-    mock_library_meets_disk_space_threshold = mocker.patch(
-        "app.media_cleaner.library_meets_disk_space_threshold", return_value=True
-    )
-    mock_get_config_value = mocker.patch(
-        "app.media_cleaner._get_config_value", return_value=10
-    )
-    mock_filter_shows = mocker.patch.object(
-        MediaCleaner, "filter_shows", return_value=MagicMock()
-    )
-    mock_get_trakt_items = mocker.patch.object(
-        MediaCleaner, "get_trakt_items", return_value=MagicMock()
-    )
-    mock_get_plex_library = mocker.patch.object(
-        MediaCleaner, "get_plex_library", return_value=MagicMock(totalSize=20)
-    )
-    mock_get_show_activity = mocker.patch.object(
-        MediaCleaner, "get_show_activity", return_value=MagicMock()
-    )
-    mock_process_shows = mocker.patch.object(
-        MediaCleaner, "process_shows", return_value=5
-    )
-
-    mock_logger = mocker.patch("app.media_cleaner.logger")
 
     # Act
     media_cleaner = MediaCleaner(standard_config)
@@ -194,15 +176,272 @@ def test_process_library(mocker, standard_config):
     assert result == 5
 
 
+@patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=False)
+@patch.object(MediaCleaner, "process_shows")
+def test_process_library_no_threshold(
+    mock_process_shows,
+    mock_library_meets_disk_space_threshold,
+    standard_config,
+):
+    # Arrange
+    library = {"name": "Test Library"}
+    sonarr_instance = Mock()
+    unfiltered_all_show_data = MagicMock()
+
+    # Act
+    media_cleaner = MediaCleaner(standard_config)
+
+    result = media_cleaner.process_library(
+        library, sonarr_instance, unfiltered_all_show_data
+    )
+
+    # Assert
+    mock_library_meets_disk_space_threshold.assert_called_once_with(
+        library, sonarr_instance
+    )
+    mock_process_shows.assert_not_called()
+    assert result == 0
+
+
+@patch.object(MediaCleaner, "process_library_rules", return_value=[MagicMock()])
+@patch.object(MediaCleaner, "process_show", return_value=10)
+def test_process_shows(mock_process_show, mock_process_library_rules, standard_config):
+    # Arrange
+    library = {}
+    sonarr_instance = MagicMock()
+    plex_library = MagicMock()
+    all_show_data = MagicMock()
+    show_activity = MagicMock()
+    trakt_items = MagicMock()
+    max_actions_per_run = 1
+
+    media_cleaner = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner.process_shows(
+        library,
+        sonarr_instance,
+        plex_library,
+        all_show_data,
+        show_activity,
+        trakt_items,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_process_library_rules.assert_called_once_with(
+        library, plex_library, all_show_data, show_activity, trakt_items
+    )
+    mock_process_show.assert_called_once()
+    assert result == 10
+
+
+@patch.object(MediaCleaner, "process_library_rules", return_value=[MagicMock()])
+@patch.object(MediaCleaner, "process_show", return_value=10)
+@patch("time.sleep")
+def test_process_shows_with_delay(
+    mock_sleep, mock_process_show, mock_process_library_rules, standard_config
+):
+    # Arrange
+    library = {}
+    sonarr_instance = MagicMock()
+    plex_library = MagicMock()
+    all_show_data = MagicMock()
+    show_activity = MagicMock()
+    trakt_items = MagicMock()
+    max_actions_per_run = 1
+
+    media_cleaner = MediaCleaner(standard_config)
+    media_cleaner.config.settings = {"action_delay": 10}
+
+    # Act
+    result = media_cleaner.process_shows(
+        library,
+        sonarr_instance,
+        plex_library,
+        all_show_data,
+        show_activity,
+        trakt_items,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_process_library_rules.assert_called_once_with(
+        library, plex_library, all_show_data, show_activity, trakt_items
+    )
+    mock_process_show.assert_called_once()
+    mock_sleep.assert_called_once_with(10)
+    assert result == 10
+
+
+@patch.object(
+    MediaCleaner,
+    "process_library_rules",
+    return_value=[MagicMock() for _ in range(100)],
+)
+@patch.object(MediaCleaner, "process_show", return_value=5)
+def test_process_shows_max_actions(
+    mock_process_show, mock_process_library_rules, standard_config
+):
+    # Arrange
+    library = {}
+    sonarr_instance = MagicMock()
+    plex_library = MagicMock()
+    all_show_data = MagicMock()
+    show_activity = MagicMock()
+    trakt_items = MagicMock()
+    max_actions_per_run = 10
+
+    media_cleaner = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner.process_shows(
+        library,
+        sonarr_instance,
+        plex_library,
+        all_show_data,
+        show_activity,
+        trakt_items,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_process_library_rules.assert_called_once_with(
+        library, plex_library, all_show_data, show_activity, trakt_items
+    )
+    assert mock_process_show.call_count == 10
+    assert result == 10 * 5
+
+
+@patch.object(MediaCleaner, "delete_show_if_allowed")
+def test_process_show_dry_run(mock_delete_show_if_allowed, standard_config):
+    # Arrange
+    library = {}
+    sonarr_instance = MagicMock()
+    sonarr_show = {
+        "title": "Test Show",
+        "statistics": {"sizeOnDisk": 100, "episodeFileCount": 10},
+    }
+    actions_performed = 0
+    max_actions_per_run = 1
+
+    media_cleaner = MediaCleaner(standard_config)
+    media_cleaner.config.settings = {"dry_run": True}
+
+    # Act
+    result = media_cleaner.process_show(
+        library,
+        sonarr_instance,
+        sonarr_show,
+        actions_performed,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_delete_show_if_allowed.assert_not_called()
+    assert result == 100
+
+
+@patch.object(MediaCleaner, "delete_show_if_allowed")
+def test_process_show_not_dry_run(mock_delete_show_if_allowed, standard_config):
+    # Arrange
+    library = {}
+    sonarr_instance = MagicMock()
+    sonarr_show = {
+        "title": "Test Show",
+        "statistics": {"sizeOnDisk": 100, "episodeFileCount": 10},
+    }
+    actions_performed = 0
+    max_actions_per_run = 1
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+    media_cleaner_instance.config.settings = {"dry_run": False}
+
+    # Act
+    result = media_cleaner_instance.process_show(
+        library,
+        sonarr_instance,
+        sonarr_show,
+        actions_performed,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_delete_show_if_allowed.assert_called_once()
+    assert result == 100
+
+
+@patch.object(MediaCleaner, "delete_series")
+@patch("builtins.input", return_value="y")
+def test_delete_show_if_allowed_interactive_yes(
+    mock_input, mock_delete_series, standard_config
+):
+    # Arrange
+    library = {"name": "Test Library"}
+    sonarr_instance = MagicMock()
+    sonarr_show = {"title": "Test Show"}
+    actions_performed = 0
+    max_actions_per_run = 1
+    disk_size = 100
+    total_episodes = 10
+
+    media_cleaner = MediaCleaner(standard_config)
+    media_cleaner.config.settings = {"interactive": True}
+
+    # Act
+    media_cleaner.delete_show_if_allowed(
+        library,
+        sonarr_instance,
+        sonarr_show,
+        actions_performed,
+        max_actions_per_run,
+        disk_size,
+        total_episodes,
+    )
+
+    # Assert
+    mock_delete_series.assert_called_once_with(sonarr_instance, sonarr_show)
+    mock_input.assert_called_once_with()
+
+
+@patch.object(MediaCleaner, "delete_series")
+@patch("builtins.input", return_value="n")
+def test_delete_show_if_allowed_not_interactive_yes(
+    mock_input, mock_delete_series, standard_config
+):
+    # Arrange
+    library = {"name": "Test Library"}
+    sonarr_instance = MagicMock()
+    sonarr_show = {"title": "Test Show"}
+    actions_performed = 0
+    max_actions_per_run = 1
+    disk_size = 100
+    total_episodes = 10
+
+    media_cleaner = MediaCleaner(standard_config)
+    media_cleaner.config.settings = {"interactive": False}
+
+    # Act
+    media_cleaner.delete_show_if_allowed(
+        library,
+        sonarr_instance,
+        sonarr_show,
+        actions_performed,
+        max_actions_per_run,
+        disk_size,
+        total_episodes,
+    )
+
+    # Assert
+    mock_delete_series.assert_called_once_with(sonarr_instance, sonarr_show)
+    mock_input.assert_not_called()
+
+
 def test_check_exclusions(mocker, standard_config):
     # Arrange
     library = {"name": "Test Library", "exclude": {}}
     media_data = MagicMock()
     plex_media_item = MagicMock()
-
-    mocker.patch.object(trakt.Trakt, "test_connection")
-    mocker.patch.object(Config, "test_api_connection")
-    mocker.patch.object(tautulli.Tautulli, "test_connection")
 
     # Mock plex server constructor
     mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
@@ -475,3 +714,51 @@ def test_check_excluded_actors(mocker):
         f"{media_data['title']} [{plex_media_item}] has excluded actor {exclude['actors'][0]}, skipping"
     )
     assert result is False
+
+
+@pytest.mark.parametrize(
+    "media_type, library, expected",
+    [
+        (
+            "movies",
+            {"exclude": {"trakt": {"titles": ["test_title"]}}},
+            {"titles": ["test_title"]},
+        ),
+        (
+            "shows",
+            {"exclude": {"trakt": {"titles": ["test_title"]}}},
+            {"titles": ["test_title"]},
+        ),
+        (
+            "movies",
+            {},
+            {},
+        ),
+        (
+            "shows",
+            {},
+            {},
+        ),
+    ],
+)
+@patch("app.media_cleaner.Trakt")
+def test_get_trakt_items_with_exclusions(
+    mock_trakt,
+    standard_config,
+    media_type,
+    library,
+    expected,
+):
+    # Arrange
+    mock_trakt_instance = mock_trakt.return_value
+    mock_trakt_instance.get_all_items_for_url.return_value = []
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    media_cleaner_instance.get_trakt_items(media_type, library)
+
+    # Assert
+    mock_trakt_instance.get_all_items_for_url.assert_called_once_with(
+        media_type, expected
+    )
