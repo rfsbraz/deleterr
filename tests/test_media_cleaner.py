@@ -1,8 +1,9 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 
 import app.media_cleaner
 from app.config import Config
@@ -762,3 +763,777 @@ def test_get_trakt_items_with_exclusions(
     mock_trakt_instance.get_all_items_for_url.assert_called_once_with(
         media_type, expected
     )
+
+
+@patch("app.media_cleaner.MediaCleaner.get_trakt_items")
+@patch("app.media_cleaner.MediaCleaner.get_plex_library")
+@patch("app.media_cleaner.MediaCleaner.get_movie_activity")
+@patch("app.media_cleaner.MediaCleaner.process_movies", return_value=10)
+@patch("app.media_cleaner._get_config_value", return_value=1)
+@patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True)
+def test_process_library_movies(
+    mock_library_meets_disk_space_threshold,
+    mock_get_config_value,
+    mock_process_movies,
+    mock_get_movie_activity,
+    mock_get_plex_library,
+    mock_get_trakt_items,
+    standard_config,
+):
+    # Arrange
+    library = {"name": "Test Library"}
+    radarr_instance = MagicMock()
+    all_movie_data = MagicMock()
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.process_library_movies(
+        library, radarr_instance, all_movie_data
+    )
+
+    # Assert
+    mock_library_meets_disk_space_threshold.assert_called_once_with(
+        library, radarr_instance
+    )
+    mock_get_config_value.assert_called_once_with(
+        library, "max_actions_per_run", app.media_cleaner.DEFAULT_MAX_ACTIONS_PER_RUN
+    )
+    mock_get_trakt_items.assert_called_once_with("movie", library)
+    mock_get_plex_library.assert_called_once_with(library)
+    mock_get_movie_activity.assert_called_once_with(
+        library, mock_get_plex_library.return_value
+    )
+    mock_process_movies.assert_called_once()
+    assert result == 10
+
+
+@patch("app.media_cleaner.MediaCleaner.get_trakt_items")
+@patch("app.media_cleaner.MediaCleaner.get_plex_library")
+@patch("app.media_cleaner.MediaCleaner.get_movie_activity")
+@patch("app.media_cleaner.MediaCleaner.process_movies", return_value=10)
+@patch("app.media_cleaner._get_config_value", return_value=1)
+@patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=False)
+def test_process_library_movies_no_space(
+    mock_library_meets_disk_space_threshold,
+    mock_get_config_value,
+    mock_process_movies,
+    mock_get_movie_activity,
+    mock_get_plex_library,
+    mock_get_trakt_items,
+    standard_config,
+):
+    # Arrange
+    library = {"name": "Test Library"}
+    radarr_instance = MagicMock()
+    all_movie_data = MagicMock()
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.process_library_movies(
+        library, radarr_instance, all_movie_data
+    )
+
+    # Assert
+    mock_library_meets_disk_space_threshold.assert_called_once_with(
+        library, radarr_instance
+    )
+    mock_get_config_value.assert_not_called()
+    mock_get_trakt_items.assert_not_called()
+    mock_get_plex_library.assert_not_called()
+    mock_get_movie_activity.assert_not_called()
+    mock_process_movies.assert_not_called()
+    assert result == 0
+
+
+@patch("app.media_cleaner.MediaCleaner.process_library_rules")
+@patch("app.media_cleaner.MediaCleaner.process_movie")
+@patch("time.sleep")
+def test_process_movies(
+    mock_sleep,
+    mock_process_movie,
+    mock_process_library_rules,
+    standard_config,
+):
+    # Arrange
+    library = {"name": "Test Library"}
+    radarr_instance = MagicMock()
+    movies_library = MagicMock()
+    all_movie_data = MagicMock()
+    movie_activity = MagicMock()
+    trakt_movies = MagicMock()
+    max_actions_per_run = 2
+
+    mock_process_library_rules.return_value = [MagicMock(), MagicMock(), MagicMock()]
+    mock_process_movie.return_value = 100
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+    media_cleaner_instance.config.settings = {"action_delay": 1}
+
+    # Act
+    result = media_cleaner_instance.process_movies(
+        library,
+        radarr_instance,
+        movies_library,
+        all_movie_data,
+        movie_activity,
+        trakt_movies,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_process_library_rules.assert_called_once_with(
+        library, movies_library, all_movie_data, movie_activity, trakt_movies
+    )
+    assert mock_process_movie.call_count == max_actions_per_run
+    assert mock_sleep.call_count == max_actions_per_run
+    assert result == 200
+
+
+@patch("app.media_cleaner.MediaCleaner.delete_movie_if_allowed")
+def test_process_movie_not_dry_run(mock_delete_movie_if_allowed, standard_config):
+    # Arrange
+    library = {"name": "Test Library"}
+    radarr_instance = MagicMock()
+    radarr_movie = {"title": "Test Movie", "sizeOnDisk": 100}
+    actions_performed = 0
+    max_actions_per_run = 1
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+    media_cleaner_instance.config.settings = {"dry_run": False}
+
+    # Act
+    result = media_cleaner_instance.process_movie(
+        library,
+        radarr_instance,
+        radarr_movie,
+        actions_performed,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_delete_movie_if_allowed.assert_called_once_with(
+        library,
+        radarr_instance,
+        radarr_movie,
+        actions_performed,
+        max_actions_per_run,
+        radarr_movie["sizeOnDisk"],
+    )
+    assert result == radarr_movie["sizeOnDisk"]
+
+
+@patch("app.media_cleaner.MediaCleaner.delete_movie_if_allowed")
+def test_process_movie_dry_run(mock_delete_movie_if_allowed, standard_config):
+    # Arrange
+    library = {"name": "Test Library"}
+    radarr_instance = MagicMock()
+    radarr_movie = {"title": "Test Movie", "sizeOnDisk": 100}
+    actions_performed = 0
+    max_actions_per_run = 1
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+    media_cleaner_instance.config.settings = {"dry_run": True}
+
+    # Act
+    result = media_cleaner_instance.process_movie(
+        library,
+        radarr_instance,
+        radarr_movie,
+        actions_performed,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_delete_movie_if_allowed.assert_not_called()
+    assert result == radarr_movie["sizeOnDisk"]
+
+
+def test_delete_series_server_error(standard_config):
+    # Arrange
+    mock_sonarr = MagicMock()
+    sonarr_show = {"id": 1, "title": "Test Show"}
+    episodes = [
+        {"id": 1, "episodeFileId": 1},
+        {"id": 2, "episodeFileId": 2},
+    ]
+
+    mock_sonarr.get_episode.return_value = episodes
+    mock_sonarr.del_episode_file.side_effect = [
+        None,
+        PyarrServerError("Server Error", {}),
+    ]
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
+
+    # Assert
+    mock_sonarr.get_episode.assert_called_once_with(sonarr_show["id"], series=True)
+    mock_sonarr.upd_episode_monitor.assert_called_once_with(
+        [episode["id"] for episode in episodes], False
+    )
+    assert mock_sonarr.del_episode_file.call_count == 2
+    mock_sonarr.del_series.assert_not_called()
+
+
+def test_delete_series_resource_not_found(standard_config):
+    # Arrange
+    mock_sonarr = MagicMock()
+    sonarr_show = {"id": 1, "title": "Test Show"}
+    episodes = [
+        {"id": 1, "episodeFileId": 1},
+        {"id": 2, "episodeFileId": 2},
+    ]
+
+    mock_sonarr.get_episode.return_value = episodes
+    mock_sonarr.del_episode_file.side_effect = [
+        None,
+        PyarrResourceNotFound("Server Error"),
+    ]
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
+
+    # Assert
+    mock_sonarr.get_episode.assert_called_once_with(sonarr_show["id"], series=True)
+    mock_sonarr.upd_episode_monitor.assert_called_once_with(
+        [episode["id"] for episode in episodes], False
+    )
+    assert mock_sonarr.del_episode_file.call_count == 2
+    mock_sonarr.del_series.assert_called_once_with(sonarr_show["id"], delete_files=True)
+
+
+def test_delete_series_no_errors(standard_config):
+    # Arrange
+    mock_sonarr = MagicMock()
+    sonarr_show = {"id": 1, "title": "Test Show"}
+    episodes = [
+        {"id": 1, "episodeFileId": 1},
+        {"id": 2, "episodeFileId": 2},
+    ]
+
+    mock_sonarr.get_episode.return_value = episodes
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
+
+    # Assert
+    mock_sonarr.get_episode.assert_called_once_with(sonarr_show["id"], series=True)
+    mock_sonarr.upd_episode_monitor.assert_called_once_with(
+        [episode["id"] for episode in episodes], False
+    )
+    assert mock_sonarr.del_episode_file.call_count == 2
+    mock_sonarr.del_series.assert_called_once_with(sonarr_show["id"], delete_files=True)
+
+
+@patch("builtins.input", return_value="y")
+def test_delete_movie_if_allowed_interactive_yes(mock_input, standard_config):
+    # Arrange
+    library = {"name": "Test Library"}
+    radarr_instance = MagicMock()
+    radarr_movie = {"id": 1, "title": "Test Movie"}
+    actions_performed = 0
+    max_actions_per_run = 1
+    disk_size = 100
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+    media_cleaner_instance.config.settings = {"interactive": True}
+
+    # Act
+    media_cleaner_instance.delete_movie_if_allowed(
+        library,
+        radarr_instance,
+        radarr_movie,
+        actions_performed,
+        max_actions_per_run,
+        disk_size,
+    )
+
+    # Assert
+    mock_input.assert_called_once()
+    radarr_instance.del_movie.assert_called_once_with(
+        radarr_movie["id"], delete_files=True
+    )
+
+
+@patch("builtins.input", return_value="n")
+def test_delete_movie_if_allowed_interactive_no(mock_input, standard_config):
+    # Arrange
+    library = {"name": "Test Library"}
+    radarr_instance = MagicMock()
+    radarr_movie = {"id": 1, "title": "Test Movie"}
+    actions_performed = 0
+    max_actions_per_run = 1
+    disk_size = 100
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+    media_cleaner_instance.config.settings = {"interactive": True}
+
+    # Act
+    media_cleaner_instance.delete_movie_if_allowed(
+        library,
+        radarr_instance,
+        radarr_movie,
+        actions_performed,
+        max_actions_per_run,
+        disk_size,
+    )
+
+    # Assert
+    mock_input.assert_called_once()
+    radarr_instance.del_movie.assert_not_called()
+
+
+def test_delete_movie_if_allowed_not_interactive(standard_config):
+    # Arrange
+    library = {"name": "Test Library"}
+    radarr_instance = MagicMock()
+    radarr_movie = {"id": 1, "title": "Test Movie"}
+    actions_performed = 0
+    max_actions_per_run = 1
+    disk_size = 100
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+    media_cleaner_instance.config.settings = {"interactive": False}
+
+    # Act
+    media_cleaner_instance.delete_movie_if_allowed(
+        library,
+        radarr_instance,
+        radarr_movie,
+        actions_performed,
+        max_actions_per_run,
+        disk_size,
+    )
+
+    # Assert
+    radarr_instance.del_movie.assert_called_once_with(
+        radarr_movie["id"], delete_files=True
+    )
+
+
+def test_get_library_config_found(standard_config):
+    # Arrange
+    config = MagicMock()
+    config.config = {"libraries": [{"name": "Test Show", "config": "Test Config"}]}
+    show = "Test Show"
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.get_library_config(config, show)
+
+    # Assert
+    assert result == {"name": "Test Show", "config": "Test Config"}
+
+
+def test_get_library_config_not_found(standard_config):
+    # Arrange
+    config = MagicMock()
+    config.config = {"libraries": [{"name": "Test Show", "config": "Test Config"}]}
+    show = "Nonexistent Show"
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.get_library_config(config, show)
+
+    # Assert
+    assert result is None
+
+
+@patch("app.media_cleaner.MediaCleaner.find_by_guid")
+def test_get_plex_item_guid(mock_find_by_guid, standard_config):
+    # Arrange
+    plex_library = MagicMock()
+    guid = "test-guid"
+
+    mock_find_by_guid.return_value = "plex_media_item"
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.get_plex_item(plex_library, guid=guid)
+
+    # Assert
+    mock_find_by_guid.assert_called_once_with(plex_library, guid)
+    assert result == "plex_media_item"
+
+
+@patch("app.media_cleaner.MediaCleaner.find_by_title_and_year")
+def test_get_plex_item_title_and_year(mock_find_by_title_and_year, standard_config):
+    # Arrange
+    plex_library = MagicMock()
+    title = "Test Title"
+    year = 2022
+
+    mock_find_by_title_and_year.return_value = "plex_media_item"
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.get_plex_item(plex_library, title=title, year=year)
+
+    # Assert
+    mock_find_by_title_and_year.assert_called_once_with(plex_library, title, year, [])
+    assert result == "plex_media_item"
+
+
+@patch("app.media_cleaner.MediaCleaner.find_by_tvdb_id")
+def test_get_plex_item_tvdb_id(mock_find_by_tvdb_id, standard_config):
+    # Arrange
+    plex_library = MagicMock()
+    tvdb_id = "test-tvdb-id"
+
+    mock_find_by_tvdb_id.return_value = "plex_media_item"
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.get_plex_item(plex_library, tvdb_id=tvdb_id)
+
+    # Assert
+    mock_find_by_tvdb_id.assert_called_once_with(plex_library, tvdb_id)
+    assert result == "plex_media_item"
+
+
+@patch("app.media_cleaner.MediaCleaner.find_by_imdb_id")
+def test_get_plex_item_imdb_id(mock_find_by_imdb_id, standard_config):
+    # Arrange
+    plex_library = MagicMock()
+    imdb_id = "test-imdb-id"
+
+    mock_find_by_imdb_id.return_value = "plex_media_item"
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.get_plex_item(plex_library, imdb_id=imdb_id)
+
+    # Assert
+    mock_find_by_imdb_id.assert_called_once_with(plex_library, imdb_id)
+    assert result == "plex_media_item"
+
+
+def test_get_plex_item_not_found(standard_config):
+    # Arrange
+    plex_library = MagicMock()
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.get_plex_item(plex_library)
+
+    # Assert
+    assert result is None
+
+
+def test_find_by_guid_found(standard_config):
+    # Arrange
+    plex_library = [
+        (["test-guid-1", "test-guid-2"], "plex_media_item_1"),
+        (["test-guid-3", "test-guid-4"], "plex_media_item_2"),
+    ]
+    guid = "test-guid-1"
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.find_by_guid(plex_library, guid)
+
+    # Assert
+    assert result == "plex_media_item_1"
+
+
+def test_find_by_guid_not_found(standard_config):
+    # Arrange
+    plex_library = [
+        (["test-guid-1", "test-guid-2"], "plex_media_item_1"),
+        (["test-guid-3", "test-guid-4"], "plex_media_item_2"),
+    ]
+    guid = "nonexistent-guid"
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.find_by_guid(plex_library, guid)
+
+    # Assert
+    assert result is None
+
+
+@pytest.mark.parametrize(
+    "plex_year, year, expected",
+    [
+        (None, 2022, True),  # No Plex year
+        (2022, None, True),  # No input year
+        (2022, 2022, True),  # Exact match
+        (2023, 2022, True),  # Plex year is one more than input year
+        (2021, 2022, True),  # Plex year is one less than input year
+        (2024, 2022, False),  # Plex year is more than one more than input year
+        (2020, 2022, False),  # Plex year is more than one less than input year
+    ],
+)
+def test_match_year(standard_config, plex_year, year, expected):
+    # Arrange
+    plex_media_item = MagicMock()
+    plex_media_item.year = plex_year
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.match_year(plex_media_item, year)
+
+    # Assert
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "plex_title, title, year, expected",
+    [
+        ("Test Title", "Test Title", 2022, True),  # Exact match
+        ("test title (2022)", "Test Title", 2022, True),  # Match with year
+        ("Different Title", "Test Title", 2022, False),  # No match
+    ],
+)
+def test_match_title_and_year(standard_config, plex_title, title, year, expected):
+    # Arrange
+    plex_media_item = MagicMock()
+    plex_media_item.title = plex_title
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.match_title_and_year(plex_media_item, title, year)
+
+    # Assert
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "plex_titles, title, year, alternate_titles, expected",
+    [
+        (
+            ["Different Title"],
+            "Test Title",
+            2022,
+            ["Alternate Title 1", "Alternate Title 2"],
+            None,
+        ),  # No match
+        (
+            ["Test Title"],
+            "Test Title",
+            2022,
+            ["Alternate Title 1", "Alternate Title 2"],
+            "plex_media_item",
+        ),  # Exact match
+        (
+            ["Alternate Title 1"],
+            "Test Title",
+            2022,
+            ["Alternate Title 1", "Alternate Title 2"],
+            "plex_media_item",
+        ),  # Match with alternate title
+    ],
+)
+@patch.object(
+    MediaCleaner,
+    "match_title_and_year",
+    side_effect=lambda x, y, z: x.title == y,
+)
+@patch.object(MediaCleaner, "match_year", return_value=True)
+def test_find_by_title_and_year(
+    mock_match_title_and_year,
+    mock_match_year,
+    standard_config,
+    plex_titles,
+    title,
+    year,
+    alternate_titles,
+    expected,
+):
+    # Arrange
+    plex_library = [(None, MagicMock(title=plex_title)) for plex_title in plex_titles]
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.find_by_title_and_year(
+        plex_library, title, year, alternate_titles
+    )
+
+    # Assert
+    if expected is None:
+        assert result is None
+    else:
+        assert result.title in [title] + alternate_titles
+
+
+@pytest.mark.parametrize(
+    "plex_guids, tvdb_id, expected",
+    [
+        ([], 1234, None),  # No guids
+        (["tvdb://1234"], 1234, "plex_media_item"),  # Exact match
+        (["tvdb://5678"], 1234, None),  # No match
+    ],
+)
+def test_find_by_tvdb_id(standard_config, plex_guids, tvdb_id, expected):
+    # Arrange
+    plex_library = [
+        (None, MagicMock(guids=[MagicMock(id=guid) for guid in plex_guids]))
+    ]
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.find_by_tvdb_id(plex_library, tvdb_id)
+
+    # Assert
+    if expected is None:
+        assert result is None
+    else:
+        assert result.guids[0].id == f"tvdb://{tvdb_id}"
+
+
+@pytest.mark.parametrize(
+    "plex_guids, imdb_id, expected",
+    [
+        ([], 1234, None),  # No guids
+        (["imdb://1234"], 1234, "plex_media_item"),  # Exact match
+        (["imdb://5678"], 1234, None),  # No match
+    ],
+)
+def test_find_by_imdb_id(standard_config, plex_guids, imdb_id, expected):
+    # Arrange
+    plex_library = [
+        (None, MagicMock(guids=[MagicMock(id=guid) for guid in plex_guids]))
+    ]
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    # Act
+    result = media_cleaner_instance.find_by_imdb_id(plex_library, imdb_id)
+
+    # Assert
+    if expected is None:
+        assert result is None
+    else:
+        assert result.guids[0].id == f"imdb://{imdb_id}"
+
+
+@pytest.mark.parametrize(
+    "watched_status, collections, trakt_movies, added_date, exclusions, expected",
+    [
+        # All checks pass
+        (True, True, True, True, True, True),
+        # Each individual check fails
+        (False, True, True, True, True, False),  # check_watched_status fails
+        (True, False, True, True, True, False),  # check_collections fails
+        (True, True, False, True, True, False),  # check_trakt_movies fails
+        (True, True, True, False, True, False),  # check_added_date fails
+        (True, True, True, True, False, False),  # check_exclusions fails
+        # Multiple checks fail
+        (
+            False,
+            False,
+            True,
+            True,
+            True,
+            False,
+        ),  # check_watched_status and check_collections fail
+        (
+            False,
+            True,
+            False,
+            True,
+            True,
+            False,
+        ),  # check_watched_status and check_trakt_movies fail
+        # All checks fail
+        (False, False, False, False, False, False),
+    ],
+)
+def test_is_movie_actionable(
+    standard_config,
+    watched_status,
+    collections,
+    trakt_movies,
+    added_date,
+    exclusions,
+    expected,
+):
+    # Arrange
+    media_cleaner_instance = MediaCleaner(standard_config)
+    media_cleaner_instance.check_watched_status = MagicMock(return_value=watched_status)
+    media_cleaner_instance.check_collections = MagicMock(return_value=collections)
+    media_cleaner_instance.check_trakt_movies = MagicMock(return_value=trakt_movies)
+    media_cleaner_instance.check_added_date = MagicMock(return_value=added_date)
+    media_cleaner_instance.check_exclusions = MagicMock(return_value=exclusions)
+
+    # Act
+    result = media_cleaner_instance.is_movie_actionable(
+        "library",
+        "activity_data",
+        "media_data",
+        "trakt_movies",
+        "plex_media_item",
+        "last_watched_threshold",
+        "added_at_threshold",
+        "apply_last_watch_threshold_to_collections",
+    )
+
+    # Assert
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "watched_data, last_watched_threshold, watch_status, expected",
+    [
+        # No watched_data and watch_status is "watched"
+        (None, 10, "watched", False),
+        # watched_data exists and last_watched is less than last_watched_threshold
+        ({"last_watched": datetime.now() - timedelta(days=5)}, 10, "unwatched", False),
+        # watched_data exists and last_watched is greater than last_watched_threshold
+        ({"last_watched": datetime.now() - timedelta(days=15)}, 10, "unwatched", False),
+        # No watched_data and watch_status is "unwatched"
+        (None, 10, "unwatched", True),
+        # watched_data exists, last_watched is less than last_watched_threshold, and watch_status is "watched"
+        ({"last_watched": datetime.now() - timedelta(days=5)}, 10, "watched", False),
+        # watched_data exists, last_watched is greater than last_watched_threshold, and watch_status is "watched"
+        ({"last_watched": datetime.now() - timedelta(days=15)}, 10, "watched", True),
+    ],
+)
+def test_check_watched_status(
+    mocker,
+    standard_config,
+    watched_data,
+    last_watched_threshold,
+    watch_status,
+    expected,
+):
+    # Arrange
+    media_cleaner_instance = MediaCleaner(standard_config)
+    mocker.patch("app.media_cleaner.find_watched_data", return_value=watched_data)
+    library = {"watch_status": watch_status}
+    activity_data = {}
+    media_data = {"title": "Test Movie"}
+    plex_media_item = MagicMock()
+
+    # Act
+    result = media_cleaner_instance.check_watched_status(
+        library,
+        activity_data,
+        media_data,
+        plex_media_item,
+        last_watched_threshold,
+    )
+
+    # Assert
+    assert result == expected
