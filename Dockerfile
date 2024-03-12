@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3-slim
+FROM python:alpine
 
 LABEL maintainer="rfsbraz"
 
@@ -17,8 +17,6 @@ WORKDIR /app
 ADD . /app
 
 RUN \
-  groupadd -g 1000 deleterr && \
-  useradd -u 1000 -g 1000 deleterr && \
   echo ${BRANCH} > /app/branch.txt && \
   echo ${COMMIT} > /app/version.txt && \
   echo ${COMMIT_TAG} > /app/commit_tag.txt

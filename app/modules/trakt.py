@@ -65,7 +65,7 @@ class Trakt:
                 f"Traktpy does not support {listname} {media_type}s. Skipping..."
             )
             return []
-        
+
         return trakt.Trakt["users/*/lists/*"].items(
             username,
             listname,

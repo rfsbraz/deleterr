@@ -1,17 +1,15 @@
-name: Create and publish a Docker image
+name: Create and publish a Docker image to GitHub Packages
 
 on:
   schedule:
     - cron:  '0 2 * * *'
   push:
     branches:
-      - 'master'
       - 'develop'
     tags:
       - 'v*'
   pull_request:
     branches:
-      - 'master'
       - 'develop'
 
 # Defines two custom environment variables for the workflow. These are used for the Container registry domain, and a name for the Docker image that this workflow builds.
@@ -30,7 +28,7 @@ jobs:
       # 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Prepare
         id: prepare
@@ -80,7 +78,7 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |

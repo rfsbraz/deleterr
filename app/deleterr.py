@@ -4,8 +4,7 @@ import logging
 import locale
 import time
 import os
-import yaml
-import sys
+import requests
 
 from datetime import datetime, timedelta
 from pyarr.sonarr import SonarrAPI
@@ -15,14 +14,16 @@ from app.modules.trakt import Trakt
 from app import logger
 from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound
-from app.utils import print_readable_freed_space
+from app.utils import print_readable_freed_space, parse_size_to_bytes
 from app.config import load_config
 from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
+
 
 logging.basicConfig()
 
 DEFAULT_MAX_ACTIONS_PER_RUN = 10
 DEFAULT_SONARR_SERIES_TYPE = "standard"
+
 
 class Deleterr:
     def __init__(self, config):
@@ -33,11 +34,18 @@ class Deleterr:
             config.settings.get("tautulli").get("url"),
             config.settings.get("tautulli").get("api_key"),
         )
+
+        # Disable SSL verification to support required secure connections
+        # Certificates are not always valid for local connections
+        session = requests.Session()
+        session.verify = False
         self.plex = PlexServer(
             config.settings.get("plex").get("url"),
             config.settings.get("plex").get("token"),
             timeout=120,
+            session=session,
         )
+
         self.sonarr = {
             connection["name"]: SonarrAPI(connection["url"], connection["api_key"])
             for connection in config.settings.get("sonarr", [])
@@ -98,6 +106,9 @@ class Deleterr:
             saved_space = 0
             for library in self.config.settings.get("libraries", []):
                 if library.get("sonarr") == name:
+                    if not library_meets_disk_space_threshold(library, sonarr):
+                        continue
+
                     all_show_data = [
                         show
                         for show in unfiltered_all_show_data
@@ -198,6 +209,9 @@ class Deleterr:
             saved_space = 0
             for library in self.config.settings.get("libraries", []):
                 if library.get("radarr") == name:
+                    if not library_meets_disk_space_threshold(library, radarr):
+                        continue
+
                     max_actions_per_run = _get_config_value(
                         library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN
                     )
@@ -510,9 +524,7 @@ class Deleterr:
                     return False
 
             for label in exclude.get("plex_labels", []):
-                if label.lower() in (
-                    g.tag.lower() for g in plex_media_item.labels
-                ):
+                if label.lower() in (g.tag.lower() for g in plex_media_item.labels):
                     logger.debug(
                         f"{media_data['title']} has excluded label {label}, skipping"
                     )
@@ -655,9 +667,11 @@ def sort_media(media_list, sort_config):
             return media_item.get("added", "")
         elif sort_field == "rating":
             ratings = media_item.get("ratings", {})
-            return ratings.get("imdb", {}).get("value", 0) or ratings.get(
-                "tmdb", {}
-            ).get("value", 0) or ratings.get("value", 0)
+            return (
+                ratings.get("imdb", {}).get("value", 0)
+                or ratings.get("tmdb", {}).get("value", 0)
+                or ratings.get("value", 0)
+            )
         elif sort_field == "seasons":
             return media_item.get("statistics", {}).get("seasonCount", 1)
         elif sort_field == "episodes":
@@ -668,14 +682,42 @@ def sort_media(media_list, sort_config):
     sorted_media = sorted(media_list, key=sort_key, reverse=(sort_order == "desc"))
     return sorted_media
 
+
 def get_file_contents(file_path):
     try:
-        with open(file_path, 'r') as file:
+        with open(file_path, "r") as file:
             return file.read().strip()
     except FileNotFoundError:
         print(f"File not found: {file_path}")
     except IOError as e:
         print(f"Error reading file {file_path}: {e}")
+
+
+def library_meets_disk_space_threshold(library, pyarr):
+    for item in library.get("disk_size_threshold", []):
+        path = item.get("path")
+        threshold = item.get("threshold")
+        disk_space = pyarr.get_disk_space()
+        folder_found = False
+        for folder in disk_space:
+            if folder["path"] == path:
+                folder_found = True
+                free_space = folder["freeSpace"]
+                logger.debug(
+                    f"Free space for '{path}': {print_readable_freed_space(free_space)} (threshold: {threshold})"
+                )
+                if free_space > parse_size_to_bytes(threshold):
+                    logger.info(
+                        f"Skipping library '{library.get('name')}' as free space is above threshold ({print_readable_freed_space(free_space)} > {threshold})"
+                    )
+                    return False
+        if not folder_found:
+            logger.error(
+                f"Could not find folder '{path}' in server instance. Skipping library '{library.get('name')}'"
+            )
+            return False
+    return True
+
 
 def main():
     """

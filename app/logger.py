@@ -11,6 +11,7 @@ MAX_FILES = 5
 # Deleterr logger
 logger = logging.getLogger("deleterr")
 
+
 class LogLevelFilter(logging.Filter):
     def __init__(self, max_level):
         super(LogLevelFilter, self).__init__()
@@ -19,7 +20,8 @@ class LogLevelFilter(logging.Filter):
 
     def filter(self, record):
         return record.levelno <= self.max_level
-    
+
+
 def initLogger(console=False, log_dir=False, verbose=False):
     """
     Setup logging for Deleterr. It uses the logger instance with the name
@@ -50,11 +52,16 @@ def initLogger(console=False, log_dir=False, verbose=False):
 
     # Setup file logger
     if log_dir:
-        file_formatter = logging.Formatter('%(asctime)s - %(levelname)-7s :: %(filename)s :: %(name)s : %(message)s', '%Y-%m-%d %H:%M:%S')
+        file_formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)-7s :: %(filename)s :: %(name)s : %(message)s",
+            "%Y-%m-%d %H:%M:%S",
+        )
 
         # Main logger
         filename = os.path.join(log_dir, FILENAME)
-        file_handler = handlers.RotatingFileHandler(filename, maxBytes=MAX_SIZE, backupCount=MAX_FILES, encoding='utf-8')
+        file_handler = handlers.RotatingFileHandler(
+            filename, maxBytes=MAX_SIZE, backupCount=MAX_FILES, encoding="utf-8"
+        )
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(file_formatter)
 
@@ -62,7 +69,10 @@ def initLogger(console=False, log_dir=False, verbose=False):
 
     # Setup console logger
     if console:
-        console_formatter = logging.Formatter('%(asctime)s - %(levelname)s :: %(filename)s :: %(name)s : %(message)s', '%Y-%m-%d %H:%M:%S')
+        console_formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s :: %(filename)s :: %(name)s : %(message)s",
+            "%Y-%m-%d %H:%M:%S",
+        )
 
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setFormatter(console_formatter)
@@ -75,6 +85,7 @@ def initLogger(console=False, log_dir=False, verbose=False):
 
         logger.addHandler(stdout_handler)
         logger.addHandler(stderr_handler)
+
 
 # Expose logger methods
 # Main logger

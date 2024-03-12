@@ -1,0 +1,30 @@
+name: Update PR with docker image
+
+permissions: 
+  pull-requests: write
+
+on:
+  workflow_run:
+    workflows: ["Create and publish a Docker image to GitHub Packages"]
+    types:
+      - completed
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+    comment-pr:
+        runs-on: ubuntu-latest
+        name: Upsert comment on the PR
+        if: github.event_name == 'pull_request'
+        steps:
+            - uses: thollander/actions-comment-pull-request@v2
+              with:
+                message: |
+                    :robot: A Docker image for this PR is available to test with:
+                    
+                    ```bash
+                    docker run -e LOG_LEVEL=DEBUG --rm -v ./config:/config -v ./logs:/config/logs ghcr.io/rfsbraz/deleterr:pr-${{ github.event.pull_request.number }}
+                    ```
+
+                    This assumes you have a `config` and `logs` directory where you're running the command. You can adjust the volume mounts as needed.
+                comment_tag: docker_image_instructions
