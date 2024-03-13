@@ -30,6 +30,11 @@ def standard_config():
     )
 
 
+@pytest.fixture
+def media_cleaner(standard_config):
+    return MediaCleaner(standard_config)
+
+
 @pytest.fixture(autouse=True)
 def mock_plex_server():
     with patch("app.media_cleaner.PlexServer", return_value=MagicMock()) as mock_plex:
@@ -1537,3 +1542,102 @@ def test_check_watched_status(
 
     # Assert
     assert result == expected
+
+
+@pytest.mark.parametrize(
+    "apply_last_watch_threshold, collection_tags, expected",
+    [
+        (True, ["collection1", "collection3"], False),
+        (True, ["collection3", "collection4"], True),
+        (False, ["collection1", "collection3"], True),
+    ],
+)
+def test_check_collections(
+    apply_last_watch_threshold, collection_tags, expected, standard_config
+):
+    media_data = {"title": "test_title"}
+    plex_media_item = Mock()
+    plex_media_item.collections = [Mock(tag=tag) for tag in collection_tags]
+
+    media_cleaner = MediaCleaner(standard_config)
+    media_cleaner.watched_collections = {"collection1", "collection2"}
+
+    result = media_cleaner.check_collections(
+        apply_last_watch_threshold, media_data, plex_media_item
+    )
+
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "media_data, trakt_movies, expected",
+    [
+        ({"title": "movie1", "tvdb_id": "1"}, {"1": {"list": "watched"}}, False),
+        ({"title": "movie2", "tmdbId": "2"}, {"2": {"list": "watched"}}, False),
+        ({"title": "movie3", "tvdb_id": "3"}, {"4": {"list": "watched"}}, True),
+    ],
+)
+def test_check_trakt_movies(media_data, trakt_movies, expected, media_cleaner):
+    result = media_cleaner.check_trakt_movies(media_data, trakt_movies)
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "added_at_threshold, days_ago, expected",
+    [
+        # Test case where the media item was added less than the added_at_threshold days ago
+        (10, 5, False),
+        # Test case where the media item was added more than the added_at_threshold days ago
+        (10, 15, True),
+        # Test case where added_at_threshold is None, so the result should always be True
+        (None, 5, True),
+    ],
+)
+def test_check_added_date(added_at_threshold, days_ago, expected, media_cleaner):
+    media_data = {"title": "test_title"}
+    plex_media_item = Mock()
+    plex_media_item.addedAt = datetime.now() - timedelta(days=days_ago)
+
+    result = media_cleaner.check_added_date(
+        media_data, plex_media_item, added_at_threshold
+    )
+
+    assert result == expected
+
+
+def test_process_library_rules(standard_config):
+    # Arrange
+    media_cleaner_instance = MediaCleaner(standard_config)
+    library_config = {
+        "last_watched_threshold": 10,
+        "added_at_threshold": 10,
+        "apply_last_watch_threshold_to_collections": True,
+        "sort": {},
+    }
+    plex_library = MagicMock()
+    all_data = [
+        {
+            "title": "Test Movie",
+            "year": 2020,
+            "alternateTitles": [],
+            "statistics": {"episodeFileCount": 0},
+        }
+    ]
+    activity_data = {}
+    trakt_movies = {}
+    media_cleaner_instance.get_plex_item = MagicMock(return_value=MagicMock())
+    media_cleaner_instance.is_movie_actionable = MagicMock(return_value=True)
+
+    # Act
+    result = list(
+        media_cleaner_instance.process_library_rules(
+            library_config,
+            plex_library,
+            all_data,
+            activity_data,
+            trakt_movies,
+        )
+    )
+
+    # Assert
+    assert result == all_data

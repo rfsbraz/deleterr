@@ -28,11 +28,8 @@ class Deleterr:
             for connection in config.settings.get("radarr", [])
         }
 
-        self.watched_collections = set()
-
         self.process_sonarr()
         self.process_radarr()
-
 
     def process_radarr(self):
         for name, radarr in self.radarr.items():

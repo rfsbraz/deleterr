@@ -18,6 +18,8 @@ class MediaCleaner:
     def __init__(self, config):
         self.config = config
 
+        self.watched_collections = set()
+
         # Setup connections
         self.tautulli = Tautulli(
             config.settings.get("tautulli").get("url"),
