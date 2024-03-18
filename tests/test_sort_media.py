@@ -1,5 +1,6 @@
 import pytest
-from app.deleterr import sort_media
+
+from app.media_cleaner import sort_media
 
 
 @pytest.fixture

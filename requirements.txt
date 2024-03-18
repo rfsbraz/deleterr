@@ -4,3 +4,4 @@ PyYAML==6.0.1
 requests==2.31.0
 tautulli==3.6.0.2120
 trakt.py==4.4.0
+pytest-mock

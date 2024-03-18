@@ -1,7 +1,9 @@
 # encoding: utf-8
 
-from tautulli import RawAPI
 from datetime import datetime, timedelta
+
+from tautulli import RawAPI
+
 from app import logger
 
 HISTORY_PAGE_SIZE = 300

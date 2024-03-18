@@ -14,4 +14,6 @@ clean:
 	docker-compose down
 
 test:
-	pytest
+	coverage run -m pytest
+	coverage report
+	coverage xml

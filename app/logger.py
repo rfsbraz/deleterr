@@ -1,12 +1,14 @@
-from logging import handlers
 import logging
 import os
 import sys
+from logging import handlers
 
 # These settings are for file logging only
 FILENAME = "deleterr.log"
 MAX_SIZE = 5000000  # 5 MB
 MAX_FILES = 5
+
+logging.basicConfig()
 
 # Deleterr logger
 logger = logging.getLogger("deleterr")
@@ -22,7 +24,7 @@ class LogLevelFilter(logging.Filter):
         return record.levelno <= self.max_level
 
 
-def initLogger(console=False, log_dir=False, verbose=False):
+def init_logger(console=False, log_dir=False, verbose=False):
     """
     Setup logging for Deleterr. It uses the logger instance with the name
     'deleterr'. Two log handlers are added:

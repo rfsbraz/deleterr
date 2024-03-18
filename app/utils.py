@@ -12,7 +12,7 @@ def print_readable_freed_space(saved_space):
 
 
 def parse_size_to_bytes(size_str):
-    unit = "".join([i for i in size_str if not i.isdigit() and not i == "."]).strip()
+    unit = "".join([i for i in size_str if not i.isdigit() and i != "."]).strip()
     size = "".join([i for i in size_str if i.isdigit() or i == "."])
     size = float(size)
     index = valid_units.index(unit)
@@ -25,7 +25,7 @@ def parse_size_to_bytes(size_str):
 
 
 def validate_units(threshold):
-    unit = "".join([i for i in threshold if not i.isdigit() and not i == "."]).strip()
+    unit = "".join([i for i in threshold if not i.isdigit() and i != "."]).strip()
 
     if unit not in valid_units:
         raise ValueError(f"Invalid unit '{unit}'. Valid units are {valid_units}")
