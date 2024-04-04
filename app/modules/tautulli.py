@@ -59,12 +59,14 @@ class Tautulli:
         return last_activity
 
     def _calculate_min_date(self, library_config):
+        last_watched_threshold = library_config.get("last_watched_threshold", 0)
+        added_at_threshold = library_config.get("added_at_threshold", 0)
+
         last_watched_threshold_date = datetime.now() - timedelta(
-            days=library_config.get("last_watched_threshold")
+            days=last_watched_threshold
         )
-        unwatched_threshold_date = datetime.now() - timedelta(
-            days=library_config.get("added_at_threshold")
-        )
+        unwatched_threshold_date = datetime.now() - timedelta(days=added_at_threshold)
+
         return min(last_watched_threshold_date, unwatched_threshold_date)
 
     def _fetch_history_data(self, section, min_date):

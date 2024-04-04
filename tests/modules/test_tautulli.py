@@ -35,6 +35,10 @@ def test_filter_by_most_recent(data, key, sort_key, expected):
         ({"last_watched_threshold": 5, "added_at_threshold": 30}, 30),
         ({"last_watched_threshold": 20, "added_at_threshold": 10}, 20),
         ({"last_watched_threshold": 11, "added_at_threshold": 11}, 11),
+        ({"last_watched_threshold": 11, "added_at_threshold": 11}, 11),
+        ({"added_at_threshold": 11}, 11),
+        ({"last_watched_threshold": 11}, 11),
+        ({}, 0),
     ],
 )
 def test_calculate_min_date(library_config, expected_days):
