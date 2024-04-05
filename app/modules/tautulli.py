@@ -34,9 +34,6 @@ class Tautulli:
     def test_connection(self):
         self.api.status()
 
-    def get_last_episode_activity(self, library_config, section):
-        return self.get_activity(library_config, section)
-
     def refresh_library(self, section_id):
         self.api.get_library_media_info(section_id=section_id, refresh=True)
 
