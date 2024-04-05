@@ -72,7 +72,7 @@ radarr:
 ```
 </details>
 
-## Sonarr [NOT IMPLEMENTED YET]
+## Sonarr
 
 Here, you can specify the connection settings for **one or more** Sonarr instances.
 
@@ -88,7 +88,7 @@ You can configure multiple Sonarr instances by adding additional entries to the 
   <summary>See example</summary>
 
 ```yaml
-radarr:
+sonarr:
   - name: "Sonarr"
     url: "http://localhost:8989"
     api_key: "YOUR_SONARR_API_KEY1"
