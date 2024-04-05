@@ -17,3 +17,13 @@ test:
 	coverage run -m pytest
 	coverage report
 	coverage xml
+
+unit:
+	coverage run -m pytest -m "not integration"
+	coverage report
+	coverage xml
+
+integration:
+	coverage run -m pytest -m integration
+	coverage report
+	coverage xml
