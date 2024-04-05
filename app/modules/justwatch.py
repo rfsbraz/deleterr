@@ -7,6 +7,11 @@ class JustWatch:
     def __init__(self, country, language):
         self.country = country
         self.language = language
+        logger.debug(
+            "JustWatch instance created with country: %s and language: %s",
+            country,
+            language,
+        )
 
     """
     Search for a title on JustWatch API
@@ -18,7 +23,7 @@ class JustWatch:
         return search(title, self.country, self.language, max_results, detailed)
 
     def search_by_title_and_year(self, title, year, media_type):
-        results = self.search(title)
+        results = self._search(title)
         return [
             entry
             for entry in results
@@ -31,9 +36,13 @@ class JustWatch:
             logger.debug("No results found for title: {title}")
             return False
 
+        if "any" in providers and result.offers:
+            logger.debug("Title {title} available on any provider")
+            return True
+
         for provider in providers:
-            if provider in result.offers or "any" in result.offers:
-                logger.debug("Title {title} available on provider:{provider}")
+            if provider in result.offers:
+                logger.debug("Title {title} available on {provider}")
                 return True
 
         return False
