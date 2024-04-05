@@ -36,7 +36,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest coverage
+        pip install pytest pytest-mock coverage
         pip install -r requirements.txt
     - name: Test with pytest
       run: |
@@ -64,8 +64,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest
+        pip install pytest pytest-mock
         pip install -r requirements.txt
     - name: Test with pytest
       run: |
-        pytest -m integration
+        python -m pytest -m integration
