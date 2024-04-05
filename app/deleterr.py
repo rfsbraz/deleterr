@@ -99,8 +99,8 @@ def main():
         default="/config/settings.yaml",
         help="Path to the config file",
     )
-    args = parser.parse_args()
 
+    args, unknown = parser.parse_known_args()
     config = load_config(args.config)
     config.validate()
 
