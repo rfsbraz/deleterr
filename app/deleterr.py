@@ -99,8 +99,19 @@ def main():
         default="/config/settings.yaml",
         help="Path to the config file",
     )
+    parser.add_argument(
+        "--jw-providers", action="store_true", help="Gather JustWatch providers"
+    )
 
     args, unknown = parser.parse_known_args()
+
+    # If providers flag is set, gather JustWatch providers and exit
+    if args.jw_providers:
+        from app.scripts.justwatch_providers import gather_providers
+
+        gather_providers()
+        return
+
     config = load_config(args.config)
     config.validate()
 
