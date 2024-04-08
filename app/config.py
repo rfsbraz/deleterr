@@ -7,7 +7,13 @@ import requests
 import yaml
 
 from app import logger
-from app.constants import VALID_ACTION_MODES, VALID_SORT_FIELDS, VALID_SORT_ORDERS
+from app.constants import (
+    SETTINGS_PER_ACTION,
+    SETTINGS_PER_INSTANCE,
+    VALID_ACTION_MODES,
+    VALID_SORT_FIELDS,
+    VALID_SORT_ORDERS,
+)
 from app.modules.tautulli import Tautulli
 from app.modules.trakt import Trakt
 from app.utils import validate_units
@@ -71,6 +77,17 @@ class Config:
             logger.error("Failed to connect to Trakt, check your configuration.")
             logger.debug(f"Error: {err}")
             return False
+
+    def validate_settings_for_instance(self, library):
+        instance_type = "radarr" if "radarr" in library else "sonarr"
+        for setting in library:
+            if (
+                setting in SETTINGS_PER_INSTANCE
+                and instance_type in SETTINGS_PER_INSTANCE[setting]
+            ):
+                self.log_and_exit(
+                    f"'{setting}' can only be set for {instance_type} instances"
+                )
 
     def validate_sonarr_and_radarr(self):
         sonarr_settings = self.settings.get("sonarr", [])
@@ -182,6 +199,15 @@ class Config:
             self.log_and_exit(
                 f"Invalid action_mode '{library['action_mode']}' in library '{library['name']}', it should be either 'delete'."
             )
+
+        # Validate settings per action
+        for setting in library:
+            if setting in SETTINGS_PER_ACTION and library[
+                "action_mode"
+            ] not in SETTINGS_PER_ACTION.get(setting, []):
+                self.log_and_exit(
+                    f"'{setting}' can only be set when action_mode is '{library['action_mode']}' for library '{library['name']}'."
+                )
 
     def validate_watch_status(self, library):
         if "watch_status" in library and library["watch_status"] not in [
