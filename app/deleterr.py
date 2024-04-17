@@ -105,15 +105,22 @@ def main():
 
     args, unknown = parser.parse_known_args()
 
+    config = load_config(args.config)
+    config.validate()
+
     # If providers flag is set, gather JustWatch providers and exit
     if args.jw_providers:
         from app.scripts.justwatch_providers import gather_providers
 
-        gather_providers()
-        return
+        providers = gather_providers(
+            config.settings.get("trakt", {}).get("client_id"),
+            config.settings.get("trakt", {}).get("client_secret"),
+        )
 
-    config = load_config(args.config)
-    config.validate()
+        print(providers)
+        logger.info("# of Trakt Providers: " + str(len(providers)))
+
+        return
 
     Deleterr(config)
 
