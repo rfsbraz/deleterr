@@ -1064,7 +1064,7 @@ def test_delete_movie_if_allowed_interactive_yes(mock_input, standard_config):
     # Assert
     mock_input.assert_called_once()
     radarr_instance.del_movie.assert_called_once_with(
-        radarr_movie["id"], delete_files=True
+        radarr_movie["id"], delete_files=True, add_exclusion=False
     )
 
 
@@ -1120,7 +1120,7 @@ def test_delete_movie_if_allowed_not_interactive(standard_config):
 
     # Assert
     radarr_instance.del_movie.assert_called_once_with(
-        radarr_movie["id"], delete_files=True
+        radarr_movie["id"], delete_files=True, add_exclusion=False
     )
 
 

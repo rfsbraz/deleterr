@@ -51,6 +51,7 @@ libraries:
   - name: "Movies"  # The name of your Plex library
     radarr: "Radarr"  # The Radarr instance to use for this library
     action_mode: "delete"  # Actions can be "delete" 
+    add_list_exclusion_on_delete: True # Prevents radarr from importing the deleted movie automatically again from a list
     last_watched_threshold: 30  # Time threshold in days. Media not watched in this period will be subject to actions
     watch_status: watched # Watched status of the media
     apply_last_watch_threshold_to_collections: true  # If true, the last watched threshold will be applied to all other items in the collection
