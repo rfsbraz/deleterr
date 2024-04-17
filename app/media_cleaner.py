@@ -350,13 +350,13 @@ class MediaCleaner:
                 radarr_instance.del_movie(
                     radarr_movie["id"],
                     delete_files=True,
-                    add_exclusion=library.get("exclude_on_delete", False),
+                    add_exclusion=library.get("add_list_exclusion_on_delete", False),
                 )
         else:
             radarr_instance.del_movie(
                 radarr_movie["id"],
                 delete_files=True,
-                add_exclusion=library.get("exclude_on_delete", False),
+                add_exclusion=library.get("add_list_exclusion_on_delete", False),
             )
 
     def get_library_config(self, config, show):

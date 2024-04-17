@@ -10,6 +10,8 @@ VALID_SORT_FIELDS = [
     "episodes",
 ]
 
+VALID_INSTANCE_TYPES = ["radarr", "sonarr"]
+
 # Valid sort orders
 VALID_SORT_ORDERS = ["asc", "desc"]
 
@@ -17,9 +19,9 @@ VALID_SORT_ORDERS = ["asc", "desc"]
 VALID_ACTION_MODES = ["delete"]
 
 SETTINGS_PER_ACTION = {
-    "exclude_on_delete": ["delete"],
+    "add_list_exclusion_on_delete": ["delete"],
 }
 
 SETTINGS_PER_INSTANCE = {
-    "exclude_on_delete": ["radarr"],
+    "add_list_exclusion_on_delete": ["radarr"],
 }

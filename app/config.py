@@ -83,10 +83,10 @@ class Config:
         for setting in library:
             if (
                 setting in SETTINGS_PER_INSTANCE
-                and instance_type in SETTINGS_PER_INSTANCE[setting]
+                and instance_type not in SETTINGS_PER_INSTANCE[setting]
             ):
                 self.log_and_exit(
-                    f"'{setting}' can only be set for {instance_type} instances"
+                    f"'{setting}' can only be set for instances of type: {SETTINGS_PER_INSTANCE[setting]}"
                 )
 
     def validate_sonarr_and_radarr(self):
@@ -157,6 +157,7 @@ class Config:
             self.validate_action_mode(library)
             self.validate_watch_status(library)
             self.validate_sort_configuration(library)
+            self.validate_settings_for_instance(library)
 
         return True
 
