@@ -55,24 +55,30 @@ class Trakt:
         self, media_type, username, listname, max_items_per_list
     ):
         if listname == "watchlist":
-            return trakt.Trakt["users/*/watchlist"].get(
-                username,
-                media=media_type,
-                exceptions=True,
-                per_page=max_items_per_list,
-            )
+            return (
+                trakt.Trakt["users/*/watchlist"].get(
+                    username,
+                    media=media_type,
+                    exceptions=True,
+                    per_page=max_items_per_list,
+                )
+                or []
+            )  # Return empty list if no items are found
         elif listname == "favorites":
             logger.warning(
                 f"Traktpy does not support {listname} {media_type}s. Skipping..."
             )
             return []
 
-        return trakt.Trakt["users/*/lists/*"].items(
-            username,
-            listname,
-            media=media_type,
-            exceptions=True,
-            per_page=max_items_per_list,
+        return (
+            trakt.Trakt["users/*/lists/*"].items(
+                username,
+                listname,
+                media=media_type,
+                exceptions=True,
+                per_page=max_items_per_list,
+            )
+            or []  # Return empty list if no items are found
         )
 
     def _fetch_recurrent_list_items(self, media_type, listname):
@@ -83,13 +89,19 @@ class Trakt:
 
     def _fetch_general_list_items(self, media_type, listname, max_items_per_list):
         if listname == "popular":
-            return trakt.Trakt[f"{media_type}s"].popular(
-                exceptions=True, per_page=max_items_per_list
-            )
+            return (
+                trakt.Trakt[f"{media_type}s"].popular(
+                    exceptions=True, per_page=max_items_per_list
+                )
+                or []
+            )  # Return empty list if no items are found
         elif listname == "trending":
-            return trakt.Trakt[f"{media_type}s"].trending(
-                exceptions=True, per_page=max_items_per_list
-            )
+            return (
+                trakt.Trakt[f"{media_type}s"].trending(
+                    exceptions=True, per_page=max_items_per_list
+                )
+                or []
+            )  # Return empty list if no items are found
         return []
 
 
