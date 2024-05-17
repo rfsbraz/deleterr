@@ -109,11 +109,9 @@ def test_fetch_history_data(mock_api):
     "_fetch_history_data",
     return_value=[{"rating_key": "123", "stopped": "2022-01-02"}],
 )
-@patch.object(Tautulli, "_determine_key", return_value="rating_key")
 @patch.object(Tautulli, "_prepare_activity_entry", return_value="prepared_entry")
 def test_get_activity(
     mock_prepare_activity_entry,
-    mock_determine_key,
     mock_fetch_history_data,
     mock_calculate_min_date,
 ):
@@ -132,9 +130,35 @@ def test_get_activity(
     assert result == {"guid": "prepared_entry"}
     mock_calculate_min_date.assert_called_once_with(library_config)
     mock_fetch_history_data.assert_called_once_with(section, "2022-01-01")
-    mock_determine_key.assert_called_once_with(
-        [{"rating_key": "123", "stopped": "2022-01-02"}]
-    )
     mock_prepare_activity_entry.assert_called_once_with(
         {"rating_key": "123", "stopped": "2022-01-02"}, {"guid": "guid"}
     )
+
+@patch.object(Tautulli, "_calculate_min_date", return_value="2022-01-01")
+@patch.object(
+    Tautulli,
+    "_fetch_history_data",
+    return_value=[{"rating_key": "123", "stopped": "2022-01-02"}],
+)
+@patch.object(Tautulli, "_prepare_activity_entry", return_value="prepared_entry")
+def test_get_activity_without_tautulli_items(
+        mock_prepare_activity_entry,
+        mock_fetch_history_data,
+        mock_calculate_min_date,
+):
+    # Arrange
+    tautulli_instance = Tautulli("id", "secret")
+    tautulli_instance.api = MagicMock(
+        get_metadata=MagicMock(return_value={"guid": "guid"})
+    )
+    mock_fetch_history_data.return_value = []
+    library_config = {}
+    section = "section"
+
+    # Act
+    result = tautulli_instance.get_activity(library_config, section)
+
+    # Assert
+    assert result == {}
+    mock_calculate_min_date.assert_called_once_with(library_config)
+    mock_fetch_history_data.assert_called_once_with(section, "2022-01-01")
