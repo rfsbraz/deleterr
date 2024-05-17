@@ -45,6 +45,11 @@ class Tautulli:
         min_date = self._calculate_min_date(library_config)
         logger.debug("Fetching last activity since %s", min_date)
         raw_data = self._fetch_history_data(section, min_date)
+
+        # Return empty dictionary if no data is found
+        if not raw_data:
+            return last_activity
+
         key = self._determine_key(raw_data)
         filtered_data = filter_by_most_recent(raw_data, key, "stopped")
 
