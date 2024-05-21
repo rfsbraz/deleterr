@@ -1,4 +1,4 @@
-PlexAPI==4.15.12
+PlexAPI==4.15.13
 pyarr==5.2.0
 PyYAML==6.0.1
 requests==2.32.0
