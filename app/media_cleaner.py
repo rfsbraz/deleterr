@@ -70,7 +70,10 @@ class MediaCleaner:
             return 0
 
         all_show_data = self.filter_shows(library, unfiltered_all_show_data)
-        logger.info("Instance has %s items to process", len(all_show_data))
+        logger.info("Instance has %s items to process of type '%s'", len(all_show_data), library.get("series_type", DEFAULT_SONARR_SERIES_TYPE))
+
+        if not all_show_data:
+            return 0
 
         max_actions_per_run = _get_config_value(
             library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN
