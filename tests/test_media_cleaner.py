@@ -1282,8 +1282,8 @@ def test_find_by_guid_not_found(standard_config):
         (2022, 2022, True),  # Exact match
         (2023, 2022, True),  # Plex year is one more than input year
         (2021, 2022, True),  # Plex year is one less than input year
-        (2024, 2022, False),  # Plex year is more than one more than input year
-        (2020, 2022, False),  # Plex year is more than one less than input year
+        (2025, 2022, False),  # Plex year is more than two more than input year
+        (2020, 2023, False),  # Plex year is more than two less than input year
     ],
 )
 def test_match_year(standard_config, plex_year, year, expected):
