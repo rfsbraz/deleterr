@@ -39,16 +39,20 @@ class Trakt:
     def _fetch_list_items(
         self, media_type, username, listname, recurrence, max_items_per_list
     ):
-        if username and listname:
-            return self._fetch_user_list_items(
-                media_type, username, listname, max_items_per_list
-            )
-        elif listname and recurrence:
-            return self._fetch_recurrent_list_items(media_type, listname)
-        elif listname:
-            return self._fetch_general_list_items(
-                media_type, listname, max_items_per_list
-            )
+        try:
+            if username and listname:
+                return self._fetch_user_list_items(
+                    media_type, username, listname, max_items_per_list
+                )
+            elif listname and recurrence:
+                return self._fetch_recurrent_list_items(media_type, listname)
+            elif listname:
+                return self._fetch_general_list_items(
+                    media_type, listname, max_items_per_list
+                )
+        except Exception as e:
+            logger.error(f"Failed to fetch list items for {media_type} {listname}")
+            logger.debug(f"Error: {e}")
         return []
 
     def _fetch_user_list_items(
