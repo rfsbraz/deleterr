@@ -426,7 +426,7 @@ class MediaCleaner:
             not year
             or not plex_media_item.year
             or plex_media_item.year == year
-            or (abs(plex_media_item.year - year)) <= 1
+            or (abs(plex_media_item.year - year)) <= 2 # Allow 2 years of difference in the release date
         ):
             return True
         return False
