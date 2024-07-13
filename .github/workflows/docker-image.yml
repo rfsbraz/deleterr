@@ -73,7 +73,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            TAG=${{ steps.meta.outputs.tags }}
+            COMMIT_TAG=${{ steps.meta.outputs.tags }}
             BRANCH=${{ github.ref_name }}
             COMMIT=${{ github.sha }}
             BUILD_DATE=${{ steps.date.outputs.date }}
