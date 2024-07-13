@@ -4,7 +4,7 @@ import argparse
 import locale
 import os
 
-from pyarr.radarr import RadarrAPI
+from app.modules.radarr import DRadarr
 from pyarr.sonarr import SonarrAPI
 
 from app import logger
@@ -24,23 +24,22 @@ class Deleterr:
             for connection in config.settings.get("sonarr", [])
         }
         self.radarr = {
-            connection["name"]: RadarrAPI(connection["url"], connection["api_key"])
+            connection["name"]: DRadarr(connection["name"], connection["url"], connection["api_key"])
             for connection in config.settings.get("radarr", [])
         }
 
-        self.process_sonarr()
         self.process_radarr()
+        self.process_sonarr()
 
     def process_radarr(self):
         for name, radarr in self.radarr.items():
             logger.info("Processing radarr instance: '%s'", name)
-            all_movie_data = radarr.get_movie()
 
             saved_space = 0
             for library in self.config.settings.get("libraries", []):
                 if library.get("radarr") == name:
                     saved_space += self.media_cleaner.process_library_movies(
-                        library, radarr, all_movie_data
+                        library, radarr
                     )
 
             logger.info(

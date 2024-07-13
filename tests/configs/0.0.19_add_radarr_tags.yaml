@@ -1,0 +1,148 @@
+# Plex connection details
+plex:
+  url: "http://localhost:32400"  # Replace with your Plex server URL
+  token: "YOUR_PLEX_TOKEN"  # Replace with your Plex server token
+
+# Radarr connection details. You can add multiple instances.
+radarr:
+  - name: "Radarr"  # This is an identifier for your Radarr instance
+    url: "http://localhost:7878"  # Replace with your Radarr server URL
+    api_key: "YOUR_RADARR_API_KEY1"  # Replace with your Radarr API key
+
+  - name: "Radarr 4K"  # Another Radarr instance
+    url: "http://localhost:7879"
+    api_key: "YOUR_RADARR_API_KEY2"
+
+# Sonarr connection details. You can add multiple instances.
+sonarr:
+  - name: "Sonarr"  # This is an identifier for your Sonarr instance
+    url: "http://localhost:8989"  # Replace with your Sonarr server URL
+    api_key: "YOUR_SONARR_API_KEY1"  # Replace with your Sonarr API key
+
+  - name: "Sonarr 4K"  # Another Sonarr instance
+    url: "http://localhost:8990"
+    api_key: "YOUR_SONARR_API_KEY2"
+
+# Tautulli connection details
+tautulli:
+  url: "http://localhost:8181"  # Replace with your Tautulli server URL
+  api_key: "YOUR_TAUTULLI_API_KEY"  # Replace with your Tautulli API key
+
+# If true, Deleterr will only log what it would do but not perform the actions
+dry_run: true
+
+# Trigger a Plex library scan after actions are performed
+plex_library_scan_after_actions: false
+
+# Trigger a Tautulli library scan after actions are performed
+tautulli_library_scan_after_actions: false
+
+# Delay between actions in seconds
+# This is to prevent plex from getting overloaded
+action_delay: 25
+
+# Library configuration
+libraries:
+  - name: "Movies"  # The name of your Plex library
+    radarr: "Radarr"  # The Radarr instance to use for this library
+    action_mode: "delete"  # Actions can be "delete" 
+    last_watched_threshold: 30  # Time threshold in days. Media not watched in this period will be subject to actions
+    apply_last_watch_threshold_to_collections: true  # If true, the last watched threshold will be applied to all other items in the collection
+    added_at_threshold: 90  # Media not added in this period will be subject to actions
+    max_actions_per_run: 10  # Maximum number of actions to perform per run
+    disk_size_threshold: # Will only trigger if the available disk size is below this
+      - path: "/data/media/local"
+        threshold: 1TB
+    sort: 
+      field: release_year # Deleter older movies first
+      order: asc
+    exclude:
+      titles: ["Forrest Gump"]
+      tags: ["children", "favorite"]
+      genres: ["horror", "thriller"]
+      collections: ["Marvel Cinematic Universe"]
+      actors: ["Tom Cruise", "Brad Pitt"]
+      producers: ["Steven Spielberg"]
+      directors: ["Steven Spielberg"]
+      writers: ["Steven Spielberg"]
+      studios: ["Studio Ghibli"]
+      release_years: 5  # Exclude media released in the last 5 years
+      radarr: # Exclude media based on Radarr filters
+        tags: ["4K"]  # Exclude media with these tags
+        profiles: ["4K"]  # Exclude media with these profiles
+        qualities: ["Bluray-1080p", "Bluray-2160p"]  # Exclude media with these qualities
+        paths: ["/data/media/4k"]  # Exclude media in these paths
+        monitored: true  # Exclude media that is not monitored
+      trakt:  # Exclude media based on Trakt lists
+        max_items_per_list: 100 # Maximum number of items to fetch from each list
+        lists: # Trakt lists to exclude
+          [
+            "https://trakt.tv/movies/trending",
+            "https://trakt.tv/movies/popular",
+            "https://trakt.tv/movies/watched/yearly",
+            "https://trakt.tv/movies/collected/yearly",
+            "https://trakt.tv/users/justin/lists/imdb-top-rated-movies"
+          ]
+  - name: "TV Shows"
+    action_mode: delete
+    last_watched_threshold: 365
+    added_at_threshold: 180
+    apply_last_watch_threshold_to_collections: false
+    max_actions_per_run: 10
+    sonarr: Sonarr
+    series_type: standard
+    sort: 
+      field: seasons # Deleter shows with more seasons first
+      order: desc
+    exclude:
+      titles: []
+      tags: []
+      genres: []
+      collections: []
+      actors: []
+      producers: []
+      directors: []
+      writers: []
+      studios: []
+      release_years: 2
+      trakt:
+        max_items_per_list: 50
+        lists:
+          [
+            "https://trakt.tv/shows/trending",
+            "https://trakt.tv/shows/popular",
+            "https://trakt.tv/shows/watched/yearly",
+            "https://trakt.tv/shows/collected/yearly"
+          ]
+  - name: "Anime"
+    action_mode: delete
+    last_watched_threshold: 670
+    added_at_threshold: 360
+    apply_last_watch_threshold_to_collections: false
+    max_actions_per_run: 5
+    sonarr: Sonarr
+    series_type: anime
+    sort: 
+      field: episodes # Delete animes with more episodes first
+      order: desc
+    exclude:
+      titles: ["Dragon Ball", "Dragon Ball Z", "Dragon Ball GT"]
+      tags: []
+      genres: []
+      collections: []
+      actors: []
+      producers: []
+      directors: []
+      writers: []
+      studios: []
+      release_years: 0
+      trakt:
+        max_items_per_list: 50
+        lists:
+          [
+            "https://trakt.tv/shows/trending",
+            "https://trakt.tv/shows/popular",
+            "https://trakt.tv/shows/watched/yearly",
+            "https://trakt.tv/shows/collected/yearly",
+            "https://trakt.tv/users/lwerndly/lists/anime-best-series-of-all-time"
+          ]
