@@ -497,8 +497,8 @@ class MediaCleaner:
                 title=media_data["title"],
                 year=media_data["year"],
                 alternate_titles=[t["title"] for t in media_data["alternateTitles"]],
-                imdb_id=media_data.get("imdb_id"),
-                tvdb_id=media_data.get("tvdb_id"),
+                imdb_id=media_data.get("imdbId"),
+                tvdb_id=media_data.get("tvdbId"),
             )
             if plex_media_item is None:
                 if media_data.get("statistics", {}).get("episodeFileCount", 0) == 0:
