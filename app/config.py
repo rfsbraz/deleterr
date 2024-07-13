@@ -58,7 +58,7 @@ class Config:
     def validate_config(self):
         return (
             self.validate_trakt()
-            and self.validate_sonarr_and_radarr()
+            and self.validate_sonarr_and_radarr_instances()
             and self.validate_tautulli()
             and self.validate_libraries()
         )
@@ -89,7 +89,7 @@ class Config:
                     f"'{setting}' can only be set for instances of type: {SETTINGS_PER_INSTANCE[setting]}"
                 )
 
-    def validate_sonarr_and_radarr(self):
+    def validate_sonarr_and_radarr_instances(self):
         sonarr_settings = self.settings.get("sonarr", [])
         radarr_settings = self.settings.get("radarr", [])
 
