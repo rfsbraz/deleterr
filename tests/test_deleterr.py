@@ -13,7 +13,7 @@ def deleterr():
 
 
 @patch("app.deleterr.SonarrAPI")
-@patch("app.deleterr.RadarrAPI")
+@patch("app.modules.radarr.RadarrAPI")
 def test_process_radarr(radarr_mock, sonarr_mock, deleterr):
     # Arrange
     deleterr.radarr = {
