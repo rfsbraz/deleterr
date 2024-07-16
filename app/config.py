@@ -324,11 +324,14 @@ class Config:
                         logger.warning(
                             f"Radarr tag '{tag}' does not exist in instance '{connection['name']}'"
                         )
-                profiles = radarr_instance.get_quality_profiles()
-                for profile in radar_exclusions["quality_profiles"]:
-                    if profile not in [p["name"] for p in profiles]:
-                        logger.warning(
-                            f"Radarr profile '{profile}' does not exist in instance '{connection['name']}'"
-                        )
+
+        # Warn if quality profiles do not exist in radarr
+        if "quality_profiles" in radar_exclusions:
+            profiles = radarr_instance.get_quality_profiles()
+            for profile in radar_exclusions["quality_profiles"]:
+                if profile not in [p["name"] for p in profiles]:
+                    logger.warning(
+                        f"Radarr profile '{profile}' does not exist in instance '{connection['name']}'"
+                    )
 
         return True

@@ -4,19 +4,21 @@ from unittest.mock import patch
 
 from app.config import Config
 from app.deleterr import load_config
-from app.modules import tautulli, trakt
+from app.modules import tautulli, trakt, radarr
 
 
 class TestConfigFiles(unittest.TestCase):
     @patch.object(trakt.Trakt, "test_connection")
     @patch.object(Config, "test_api_connection")
     @patch.object(tautulli.Tautulli, "test_connection")
+    @patch.object(radarr.DRadarr, "validate_connection")
     def validate(
         self,
         filename,
         mock_trakt_test_connection,
         mock_arr_test_connection,
         mock_tautulli_test_connection,
+        mock_radarr_validate_connection
     ):
         config = load_config(filename)
         config.validate()

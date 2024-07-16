@@ -69,8 +69,7 @@ libraries:
       release_years: 5  # Exclude media released in the last 5 years
       radarr: # Exclude media based on Radarr filters
         tags: ["4K"]  # Exclude media with these tags
-        profiles: ["4K"]  # Exclude media with these profiles
-        qualities: ["Bluray-1080p", "Bluray-2160p"]  # Exclude media with these qualities
+        quality_profiles: ["Bluray-1080p", "Bluray-2160p"]  # Exclude media with these qualities
         paths: ["/data/media/4k"]  # Exclude media in these paths
         monitored: true  # Exclude media that is not monitored
       trakt:  # Exclude media based on Trakt lists

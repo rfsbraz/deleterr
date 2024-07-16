@@ -711,18 +711,22 @@ def check_excluded_radarr_fields(media_data, plex_media_item, exclude, radarr_in
     radarr_media_item = radarr_instance.get_movie(media_data["tmdbId"])
 
     if not radarr_media_item:
-        logger.debug(f"{media_data['title']} not found in Radarr, skipping")
+        logger.warning(f"{media_data['title']} not found in Radarr, skipping")
         return True
     else:
+        # Radarr returns a list of movies, but TMDB ID is unique
         radarr_media_item = radarr_media_item[0]
 
     if radarr_exclusions.get("monitored") == radarr_media_item.get("monitored"):
         logger.debug(f"{media_data['title']} has excluded radarr monitored status, skipping")
         return False
 
-    if radarr_exclusions.get('quality_profiles') and radarr_instance.check_movie_has_quality_profiles(radarr_media_item,
-                                                                                                      radarr_exclusions.get(
-                                                                                                              'quality_profiles')):
+    if (radarr_exclusions.get('quality_profiles')
+            and radarr_instance.check_movie_has_quality_profiles(
+                radarr_media_item,
+                radarr_exclusions.get('quality_profiles')
+            )
+    ):
         logger.debug(f"{media_data['title']} has excluded radarr quality profiles, skipping")
         return False
 
