@@ -381,17 +381,12 @@ class MediaCleaner:
         alternate_titles=[],
         imdb_id=None,
         tvdb_id=None,
+        tmdb_id=None,
     ):
         if guid:
             plex_media_item = self.find_by_guid(plex_library, guid)
             if plex_media_item:
                 return plex_media_item
-
-        plex_media_item = self.find_by_title_and_year(
-            plex_library, title, year, alternate_titles
-        )
-        if plex_media_item:
-            return plex_media_item
 
         if tvdb_id:
             plex_media_item = self.find_by_tvdb_id(plex_library, tvdb_id)
@@ -403,7 +398,16 @@ class MediaCleaner:
             if plex_media_item:
                 return plex_media_item
 
-        return None
+        if tmdb_id:
+            plex_media_item = self.find_by_tmdb_id(plex_library, tmdb_id)
+            if plex_media_item:
+                return plex_media_item
+
+        plex_media_item = self.find_by_title_and_year(
+            plex_library, title, year, alternate_titles
+        )
+        
+        return plex_media_item
 
     def find_by_guid(self, plex_library, guid):
         for guids, plex_media_item in plex_library:
@@ -454,6 +458,13 @@ class MediaCleaner:
                     return plex_media_item
         return None
 
+    def find_by_tmdb_id(self, plex_library, tmdb_id):
+        for _, plex_media_item in plex_library:
+            for guid in plex_media_item.guids:
+                if f"tmdb://{tmdb_id}" in guid.id:
+                    return plex_media_item
+        return None
+    
     def process_library_rules(
         self, library_config, plex_library, all_data, activity_data, trakt_movies
     ):
@@ -499,9 +510,10 @@ class MediaCleaner:
                 alternate_titles=[t["title"] for t in media_data["alternateTitles"]],
                 imdb_id=media_data.get("imdbId"),
                 tvdb_id=media_data.get("tvdbId"),
+                tmdb_id=media_data.get("tmdbId"),
             )
             if plex_media_item is None:
-                if media_data.get("statistics", {}).get("episodeFileCount", 0) == 0:
+                if not media_data.get("movieFileId", {}) and media_data.get("statistics", {}).get("episodeFileCount", 0) == 0:
                     logger.debug(
                         f"{media_data['title']} ({media_data['year']}) not found in Plex, but has no episodes, skipping"
                     )
