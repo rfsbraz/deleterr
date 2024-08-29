@@ -2,6 +2,6 @@ PlexAPI==4.15.16
 pyarr==5.2.0
 PyYAML==6.0.2
 requests==2.32.3
-tautulli==4.0.2120
+tautulli==4.3.1.2140
 trakt.py==4.4.0
 pytest-mock
