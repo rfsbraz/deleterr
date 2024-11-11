@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:alpine
+FROM python:3.9-alpine
 
 LABEL maintainer="rfsbraz"
 
@@ -29,9 +29,9 @@ RUN \
   
 COPY ./config/ /config
 VOLUME /config
-
+    
 # Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt 
 
 # Run deleterr.py when the container launches
 CMD ["python", "-m", "app.deleterr"]
