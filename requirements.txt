@@ -1,7 +1,7 @@
-PlexAPI==4.15.16
+PlexAPI==4.16.0
 pyarr==5.2.0
 PyYAML==6.0.2
 requests==2.32.3
-tautulli==4.3.4.2140
+tautulli==4.5.1.2142
 trakt.py==4.4.0
 pytest-mock
