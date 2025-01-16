@@ -794,7 +794,7 @@ def test_process_library_movies(
 
     # Act
     result = media_cleaner_instance.process_library_movies(
-        library, radarr_instance, all_movie_data
+        library, radarr_instance
     )
 
     # Assert
@@ -837,7 +837,7 @@ def test_process_library_movies_no_space(
 
     # Act
     result = media_cleaner_instance.process_library_movies(
-        library, radarr_instance, all_movie_data
+        library, radarr_instance
     )
 
     # Assert
@@ -865,7 +865,6 @@ def test_process_movies(
     library = {"name": "Test Library"}
     radarr_instance = MagicMock()
     movies_library = MagicMock()
-    all_movie_data = MagicMock()
     movie_activity = MagicMock()
     trakt_movies = MagicMock()
     max_actions_per_run = 2
@@ -881,7 +880,6 @@ def test_process_movies(
         library,
         radarr_instance,
         movies_library,
-        all_movie_data,
         movie_activity,
         trakt_movies,
         max_actions_per_run,
@@ -889,7 +887,7 @@ def test_process_movies(
 
     # Assert
     mock_process_library_rules.assert_called_once_with(
-        library, movies_library, all_movie_data, movie_activity, trakt_movies
+        library, movies_library, radarr_instance.get_movies(), movie_activity, trakt_movies, radarr_instance=radarr_instance
     )
     assert mock_process_movie.call_count == max_actions_per_run
     assert mock_sleep.call_count == max_actions_per_run

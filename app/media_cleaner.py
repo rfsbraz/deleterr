@@ -8,7 +8,6 @@ from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 from app import logger
 from app.modules.justwatch import JustWatch
 from app.modules.tautulli import Tautulli
-from app.modules.radarr import DRadarr
 from app.modules.trakt import Trakt
 from app.utils import parse_size_to_bytes, print_readable_freed_space
 
