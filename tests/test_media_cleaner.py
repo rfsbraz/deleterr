@@ -788,7 +788,6 @@ def test_process_library_movies(
     # Arrange
     library = {"name": "Test Library"}
     radarr_instance = MagicMock()
-    all_movie_data = MagicMock()
 
     media_cleaner_instance = MediaCleaner(standard_config)
 
