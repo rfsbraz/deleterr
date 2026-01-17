@@ -36,7 +36,7 @@ jobs:
     - name: Start Docker Compose services
       run: |
         cd tests/integration
-        docker-compose -f docker-compose.integration.yml up -d --build
+        docker compose -f docker-compose.integration.yml up -d --build
 
     - name: Wait for services to be ready
       run: |
@@ -75,19 +75,19 @@ jobs:
       run: |
         cd tests/integration
         echo "=== Radarr logs ==="
-        docker-compose -f docker-compose.integration.yml logs radarr || true
+        docker compose -f docker-compose.integration.yml logs radarr || true
         echo ""
         echo "=== Sonarr logs ==="
-        docker-compose -f docker-compose.integration.yml logs sonarr || true
+        docker compose -f docker-compose.integration.yml logs sonarr || true
         echo ""
         echo "=== Tautulli logs ==="
-        docker-compose -f docker-compose.integration.yml logs tautulli || true
+        docker compose -f docker-compose.integration.yml logs tautulli || true
         echo ""
         echo "=== Plex mock logs ==="
-        docker-compose -f docker-compose.integration.yml logs plex-mock || true
+        docker compose -f docker-compose.integration.yml logs plex-mock || true
 
     - name: Stop Docker Compose services
       if: always()
       run: |
         cd tests/integration
-        docker-compose -f docker-compose.integration.yml down -v --remove-orphans
+        docker compose -f docker-compose.integration.yml down -v --remove-orphans
