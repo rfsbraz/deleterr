@@ -66,25 +66,44 @@ class RadarrSeeder(ServiceSeeder):
     def setup_root_folder(self, path: str = "/movies") -> Dict:
         """Create root folder for movies."""
         # Check if root folder exists
-        resp = requests.get(
-            f"{self.base_url}/api/v3/rootfolder",
-            headers=self.headers,
-            timeout=10
-        )
-        if resp.status_code == 200:
-            folders = resp.json()
-            for folder in folders:
-                if folder.get("path") == path:
-                    return folder
+        try:
+            resp = requests.get(
+                f"{self.base_url}/api/v3/rootfolder",
+                headers=self.headers,
+                timeout=10
+            )
+            if resp.status_code == 200:
+                folders = resp.json()
+                for folder in folders:
+                    if folder.get("path") == path:
+                        print(f"Root folder already exists: {path}")
+                        return folder
+        except requests.RequestException as e:
+            print(f"Error checking root folders: {e}")
 
-        # Create root folder
-        resp = requests.post(
-            f"{self.base_url}/api/v3/rootfolder",
-            headers=self.headers,
-            json={"path": path},
-            timeout=10
-        )
-        return resp.json()
+        # Create root folder with retry logic
+        for attempt in range(MAX_RETRIES):
+            try:
+                resp = requests.post(
+                    f"{self.base_url}/api/v3/rootfolder",
+                    headers=self.headers,
+                    json={"path": path},
+                    timeout=10
+                )
+                result = resp.json()
+                if resp.status_code in (200, 201):
+                    print(f"Successfully created root folder: {path}")
+                    return result
+                else:
+                    print(f"Attempt {attempt + 1}/{MAX_RETRIES} failed to create root folder {path}: {resp.status_code} - {result}")
+            except requests.RequestException as e:
+                print(f"Attempt {attempt + 1}/{MAX_RETRIES} request error creating root folder {path}: {e}")
+
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(RETRY_DELAY)
+
+        print(f"Failed to create root folder {path} after {MAX_RETRIES} attempts")
+        return {"error": f"Failed to create root folder {path}"}
 
     def get_quality_profiles(self) -> List[Dict]:
         """Get available quality profiles."""
@@ -223,25 +242,44 @@ class SonarrSeeder(ServiceSeeder):
     def setup_root_folder(self, path: str = "/tv") -> Dict:
         """Create root folder for TV shows."""
         # Check if root folder exists
-        resp = requests.get(
-            f"{self.base_url}/api/v3/rootfolder",
-            headers=self.headers,
-            timeout=10
-        )
-        if resp.status_code == 200:
-            folders = resp.json()
-            for folder in folders:
-                if folder.get("path") == path:
-                    return folder
+        try:
+            resp = requests.get(
+                f"{self.base_url}/api/v3/rootfolder",
+                headers=self.headers,
+                timeout=10
+            )
+            if resp.status_code == 200:
+                folders = resp.json()
+                for folder in folders:
+                    if folder.get("path") == path:
+                        print(f"Root folder already exists: {path}")
+                        return folder
+        except requests.RequestException as e:
+            print(f"Error checking root folders: {e}")
 
-        # Create root folder
-        resp = requests.post(
-            f"{self.base_url}/api/v3/rootfolder",
-            headers=self.headers,
-            json={"path": path},
-            timeout=10
-        )
-        return resp.json()
+        # Create root folder with retry logic
+        for attempt in range(MAX_RETRIES):
+            try:
+                resp = requests.post(
+                    f"{self.base_url}/api/v3/rootfolder",
+                    headers=self.headers,
+                    json={"path": path},
+                    timeout=10
+                )
+                result = resp.json()
+                if resp.status_code in (200, 201):
+                    print(f"Successfully created root folder: {path}")
+                    return result
+                else:
+                    print(f"Attempt {attempt + 1}/{MAX_RETRIES} failed to create root folder {path}: {resp.status_code} - {result}")
+            except requests.RequestException as e:
+                print(f"Attempt {attempt + 1}/{MAX_RETRIES} request error creating root folder {path}: {e}")
+
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(RETRY_DELAY)
+
+        print(f"Failed to create root folder {path} after {MAX_RETRIES} attempts")
+        return {"error": f"Failed to create root folder {path}"}
 
     def get_quality_profiles(self) -> List[Dict]:
         """Get available quality profiles."""
