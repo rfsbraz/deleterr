@@ -27,6 +27,10 @@ class TestDryRunMode:
         movies_before = seeded_radarr.get_movie()
         count_before = len(movies_before)
 
+        # Skip if no movies were seeded (CI environment may not have TMDb access)
+        if count_before == 0:
+            pytest.skip("No movies seeded - TMDb API may be unavailable in CI")
+
         # Simulate what Deleterr would do in dry run
         # (In actual implementation, dry run skips the delete call)
         if movies_before:
@@ -48,6 +52,10 @@ class TestDryRunMode:
         series_before = seeded_sonarr.get_series()
         count_before = len(series_before)
 
+        # Skip if no series were seeded (CI environment may not have TVDB access)
+        if count_before == 0:
+            pytest.skip("No series seeded - TVDB API may be unavailable in CI")
+
         # In dry run, no deletions would be made
         # Verify nothing was deleted
         series_after = seeded_sonarr.get_series()
@@ -62,11 +70,11 @@ class TestMovieDeletionWorkflow:
         self, docker_services, radarr_seeder, radarr_client
     ):
         """Test deleting a movie that hasn't been watched."""
-        # Add a test movie
+        # Add a test movie (using real TMDb ID for Interstellar)
         test_movie = {
-            "title": "Test Old Unwatched",
-            "year": 2020,
-            "tmdbId": 888881,
+            "title": "Interstellar",
+            "year": 2014,
+            "tmdbId": 157336,
         }
 
         result = radarr_seeder.add_movie(test_movie)
@@ -104,10 +112,11 @@ class TestMovieDeletionWorkflow:
         self, docker_services, radarr_seeder, radarr_client
     ):
         """Test that recently watched movies are NOT deleted."""
+        # Using real TMDb ID for The Dark Knight
         test_movie = {
-            "title": "Test Recently Watched",
-            "year": 2021,
-            "tmdbId": 888882,
+            "title": "The Dark Knight",
+            "year": 2008,
+            "tmdbId": 155,
         }
 
         result = radarr_seeder.add_movie(test_movie)
@@ -145,9 +154,10 @@ class TestSeriesDeletionWorkflow:
         self, docker_services, sonarr_seeder, sonarr_client
     ):
         """Test deleting a series that hasn't been watched."""
+        # Using real TVDB ID for The Office (US)
         test_series = {
-            "title": "Test Old Unwatched Series",
-            "tvdbId": 888881,
+            "title": "The Office",
+            "tvdbId": 73244,
             "seriesType": "standard",
         }
 
@@ -183,9 +193,10 @@ class TestSeriesDeletionWorkflow:
         self, docker_services, sonarr_seeder, sonarr_client
     ):
         """Test that anime series are preserved when filtered."""
+        # Using real TVDB ID for Death Note
         test_series = {
-            "title": "Test Anime Series",
-            "tvdbId": 888883,
+            "title": "Death Note",
+            "tvdbId": 79481,
             "seriesType": "anime",
         }
 
@@ -227,14 +238,17 @@ class TestMaxActionsPerRun:
         """Test that deletion stops at max_actions_per_run."""
         max_actions = 2
 
-        # Add 5 test movies
+        # Add 5 test movies using real TMDb IDs
+        test_movie_ids = [
+            {"title": "Pulp Fiction", "year": 1994, "tmdbId": 680},
+            {"title": "Goodfellas", "year": 1990, "tmdbId": 769},
+            {"title": "The Shawshank Redemption", "year": 1994, "tmdbId": 278},
+            {"title": "Forrest Gump", "year": 1994, "tmdbId": 13},
+            {"title": "The Godfather", "year": 1972, "tmdbId": 238},
+        ]
         test_movies = []
-        for i in range(5):
-            result = radarr_seeder.add_movie({
-                "title": f"Max Actions Test {i}",
-                "year": 2020,
-                "tmdbId": 777770 + i,
-            })
+        for movie_data in test_movie_ids:
+            result = radarr_seeder.add_movie(movie_data)
             if "id" in result:
                 test_movies.append(result)
 
@@ -283,10 +297,11 @@ class TestAddedAtThreshold:
         self, docker_services, radarr_seeder, radarr_client
     ):
         """Test that recently added items are protected from deletion."""
+        # Using real TMDb ID for Gladiator
         test_movie = {
-            "title": "Test Recently Added",
-            "year": 2023,
-            "tmdbId": 666661,
+            "title": "Gladiator",
+            "year": 2000,
+            "tmdbId": 98,
         }
 
         result = radarr_seeder.add_movie(test_movie)
@@ -332,10 +347,11 @@ class TestExclusionRules:
         """Test that items in excluded collections are protected."""
         # This test validates the concept - actual collection checking
         # requires Plex mock integration which provides collection data
+        # Using real TMDb ID for Schindler's List
         test_movie = {
-            "title": "Test In Excluded Collection",
-            "year": 2019,
-            "tmdbId": 555551,
+            "title": "Schindler's List",
+            "year": 1993,
+            "tmdbId": 424,
         }
 
         result = radarr_seeder.add_movie(test_movie)

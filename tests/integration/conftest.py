@@ -289,10 +289,14 @@ def seeded_radarr(radarr_seeder, radarr_client) -> Generator[RadarrAPI, None, No
         test_data = json.load(f)
 
     # Setup root folder
-    radarr_seeder.setup_root_folder("/movies")
+    print("\nSetting up Radarr root folder...")
+    root_result = radarr_seeder.setup_root_folder("/movies")
+    print(f"Root folder result: {root_result}")
 
     # Seed movies
+    print(f"Seeding {len(test_data['test_movies'])} movies...")
     seeded_movies = radarr_seeder.seed_test_movies(test_data["test_movies"])
+    print(f"Successfully seeded {len(seeded_movies)} movies")
 
     yield radarr_client
 
@@ -315,10 +319,14 @@ def seeded_sonarr(sonarr_seeder, sonarr_client) -> Generator[SonarrAPI, None, No
         test_data = json.load(f)
 
     # Setup root folder
-    sonarr_seeder.setup_root_folder("/tv")
+    print("\nSetting up Sonarr root folder...")
+    root_result = sonarr_seeder.setup_root_folder("/tv")
+    print(f"Root folder result: {root_result}")
 
     # Seed series
+    print(f"Seeding {len(test_data['test_series'])} series...")
     seeded_series = sonarr_seeder.seed_test_series(test_data["test_series"])
+    print(f"Successfully seeded {len(seeded_series)} series")
 
     yield sonarr_client
 

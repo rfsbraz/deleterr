@@ -9,6 +9,10 @@ import requests
 import time
 from typing import Dict, List, Optional, Any
 
+# Retry configuration for external API operations
+MAX_RETRIES = 3
+RETRY_DELAY = 5  # seconds between retries
+
 
 class ServiceSeeder:
     """Base class for service seeders."""
@@ -92,7 +96,7 @@ class RadarrSeeder(ServiceSeeder):
         return resp.json()
 
     def add_movie(self, movie_data: Dict) -> Dict:
-        """Add a movie to Radarr (unmonitored, no download)."""
+        """Add a movie to Radarr (unmonitored, no download) with retry logic."""
         # Get quality profile if not specified
         quality_profile_id = movie_data.get("qualityProfileId")
         if not quality_profile_id:
@@ -112,13 +116,45 @@ class RadarrSeeder(ServiceSeeder):
             "addOptions": {"searchForMovie": False}
         }
 
-        resp = requests.post(
-            f"{self.base_url}/api/v3/movie",
-            headers=self.headers,
-            json=payload,
-            timeout=30
-        )
-        return resp.json()
+        last_error = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                resp = requests.post(
+                    f"{self.base_url}/api/v3/movie",
+                    headers=self.headers,
+                    json=payload,
+                    timeout=60  # Longer timeout for TMDb lookup
+                )
+                result = resp.json()
+
+                if resp.status_code in (200, 201):
+                    print(f"Successfully added movie: {movie_data['title']}")
+                    return result
+
+                # Check if movie already exists
+                if resp.status_code == 400:
+                    error_msg = str(result)
+                    if "already been added" in error_msg.lower() or "already exists" in error_msg.lower():
+                        print(f"Movie already exists: {movie_data['title']}")
+                        # Try to find and return existing movie
+                        movies = self.get_movies()
+                        for m in movies:
+                            if m.get("tmdbId") == movie_data["tmdbId"]:
+                                return m
+
+                last_error = f"{resp.status_code} - {result}"
+                print(f"Attempt {attempt + 1}/{MAX_RETRIES} failed to add movie {movie_data['title']}: {last_error}")
+
+            except requests.RequestException as e:
+                last_error = str(e)
+                print(f"Attempt {attempt + 1}/{MAX_RETRIES} request error for {movie_data['title']}: {e}")
+
+            if attempt < MAX_RETRIES - 1:
+                print(f"Retrying in {RETRY_DELAY} seconds...")
+                time.sleep(RETRY_DELAY)
+
+        print(f"Failed to add movie {movie_data['title']} after {MAX_RETRIES} attempts: {last_error}")
+        return {"error": last_error}
 
     def get_movies(self) -> List[Dict]:
         """Get all movies from Radarr."""
@@ -213,7 +249,7 @@ class SonarrSeeder(ServiceSeeder):
         return resp.json()
 
     def add_series(self, series_data: Dict) -> Dict:
-        """Add a TV series to Sonarr."""
+        """Add a TV series to Sonarr with retry logic."""
         # Get quality profile if not specified
         quality_profile_id = series_data.get("qualityProfileId")
         if not quality_profile_id:
@@ -234,13 +270,45 @@ class SonarrSeeder(ServiceSeeder):
             "addOptions": {"searchForMissingEpisodes": False}
         }
 
-        resp = requests.post(
-            f"{self.base_url}/api/v3/series",
-            headers=self.headers,
-            json=payload,
-            timeout=30
-        )
-        return resp.json()
+        last_error = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                resp = requests.post(
+                    f"{self.base_url}/api/v3/series",
+                    headers=self.headers,
+                    json=payload,
+                    timeout=60  # Longer timeout for TVDB lookup
+                )
+                result = resp.json()
+
+                if resp.status_code in (200, 201):
+                    print(f"Successfully added series: {series_data['title']}")
+                    return result
+
+                # Check if series already exists
+                if resp.status_code == 400:
+                    error_msg = str(result)
+                    if "already been added" in error_msg.lower() or "already exists" in error_msg.lower():
+                        print(f"Series already exists: {series_data['title']}")
+                        # Try to find and return existing series
+                        series_list = self.get_series()
+                        for s in series_list:
+                            if s.get("tvdbId") == series_data["tvdbId"]:
+                                return s
+
+                last_error = f"{resp.status_code} - {result}"
+                print(f"Attempt {attempt + 1}/{MAX_RETRIES} failed to add series {series_data['title']}: {last_error}")
+
+            except requests.RequestException as e:
+                last_error = str(e)
+                print(f"Attempt {attempt + 1}/{MAX_RETRIES} request error for {series_data['title']}: {e}")
+
+            if attempt < MAX_RETRIES - 1:
+                print(f"Retrying in {RETRY_DELAY} seconds...")
+                time.sleep(RETRY_DELAY)
+
+        print(f"Failed to add series {series_data['title']} after {MAX_RETRIES} attempts: {last_error}")
+        return {"error": last_error}
 
     def get_series(self) -> List[Dict]:
         """Get all series from Sonarr."""
