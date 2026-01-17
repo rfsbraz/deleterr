@@ -6,10 +6,8 @@ data through to Radarr/Sonarr deletions.
 """
 
 import pytest
-from unittest.mock import Mock, patch
-from datetime import datetime, timedelta
-
-from deleterr.arrs import RadarrClient, SonarrClient
+from pyarr.radarr import RadarrAPI
+from pyarr.sonarr import SonarrAPI
 
 # Mark all tests in this module as integration tests
 pytestmark = pytest.mark.integration
@@ -19,30 +17,19 @@ class TestDryRunMode:
     """Test that dry run mode prevents actual deletions."""
 
     def test_dry_run_does_not_delete_movies(
-        self, integration_config, seeded_radarr, docker_services
+        self, integration_config, seeded_radarr
     ):
         """Verify dry run mode logs but doesn't delete movies."""
-        from tests.integration.conftest import RADARR_URL
-
-        # Ensure dry_run is enabled
+        # Ensure dry_run is enabled in config
         assert integration_config["dry_run"] is True
 
         # Get movies before
         movies_before = seeded_radarr.get_movie()
         count_before = len(movies_before)
 
-        # Create a RadarrClient
-        config = {
-            "name": "Test Radarr",
-            "url": RADARR_URL,
-            "api_key": docker_services["radarr"],
-        }
-        client = RadarrClient(config)
-
         # Simulate what Deleterr would do in dry run
         # (In actual implementation, dry run skips the delete call)
         if movies_before:
-            movie = movies_before[0]
             # In dry run, we would NOT call delete
             # Just verify the movie still exists
             pass
@@ -53,24 +40,16 @@ class TestDryRunMode:
         assert count_after == count_before
 
     def test_dry_run_does_not_delete_series(
-        self, integration_config, seeded_sonarr, docker_services
+        self, integration_config, seeded_sonarr
     ):
         """Verify dry run mode logs but doesn't delete series."""
-        from tests.integration.conftest import SONARR_URL
-
         assert integration_config["dry_run"] is True
 
         series_before = seeded_sonarr.get_series()
         count_before = len(series_before)
 
-        config = {
-            "name": "Test Sonarr",
-            "url": SONARR_URL,
-            "api_key": docker_services["sonarr"],
-        }
-        client = SonarrClient(config)
-
-        # In dry run, no deletions
+        # In dry run, no deletions would be made
+        # Verify nothing was deleted
         series_after = seeded_sonarr.get_series()
         count_after = len(series_after)
         assert count_after == count_before

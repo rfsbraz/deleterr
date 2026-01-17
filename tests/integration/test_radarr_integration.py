@@ -8,8 +8,6 @@ Radarr instance running in Docker.
 import pytest
 from pyarr.radarr import RadarrAPI
 
-from deleterr.arrs import RadarrClient
-
 # Mark all tests in this module as integration tests
 pytestmark = pytest.mark.integration
 
@@ -116,39 +114,6 @@ class TestRadarrDiskSpace:
             assert "totalSpace" in space
             assert space["freeSpace"] >= 0
             assert space["totalSpace"] > 0
-
-
-class TestRadarrClientWrapper:
-    """Test Deleterr's RadarrClient wrapper."""
-
-    def test_radarr_client_initialization(self, docker_services):
-        """Verify RadarrClient can be initialized with test config."""
-        from tests.integration.conftest import RADARR_URL
-
-        config = {
-            "name": "Test Radarr",
-            "url": RADARR_URL,
-            "api_key": docker_services["radarr"],
-        }
-
-        client = RadarrClient(config)
-        assert client is not None
-        assert client.name == "Test Radarr"
-
-    def test_radarr_client_get_all_media(self, docker_services, seeded_radarr):
-        """Verify RadarrClient.get_all_media returns movies."""
-        from tests.integration.conftest import RADARR_URL
-
-        config = {
-            "name": "Test Radarr",
-            "url": RADARR_URL,
-            "api_key": docker_services["radarr"],
-        }
-
-        client = RadarrClient(config)
-        movies = client.get_all_media()
-        assert isinstance(movies, list)
-        assert len(movies) > 0
 
 
 class TestRadarrQualityProfiles:

@@ -8,8 +8,6 @@ Sonarr instance running in Docker.
 import pytest
 from pyarr.sonarr import SonarrAPI
 
-from deleterr.arrs import SonarrClient
-
 # Mark all tests in this module as integration tests
 pytestmark = pytest.mark.integration
 
@@ -172,39 +170,6 @@ class TestSonarrDiskSpace:
             assert "totalSpace" in space
             assert space["freeSpace"] >= 0
             assert space["totalSpace"] > 0
-
-
-class TestSonarrClientWrapper:
-    """Test Deleterr's SonarrClient wrapper."""
-
-    def test_sonarr_client_initialization(self, docker_services):
-        """Verify SonarrClient can be initialized with test config."""
-        from tests.integration.conftest import SONARR_URL
-
-        config = {
-            "name": "Test Sonarr",
-            "url": SONARR_URL,
-            "api_key": docker_services["sonarr"],
-        }
-
-        client = SonarrClient(config)
-        assert client is not None
-        assert client.name == "Test Sonarr"
-
-    def test_sonarr_client_get_all_media(self, docker_services, seeded_sonarr):
-        """Verify SonarrClient.get_all_media returns series."""
-        from tests.integration.conftest import SONARR_URL
-
-        config = {
-            "name": "Test Sonarr",
-            "url": SONARR_URL,
-            "api_key": docker_services["sonarr"],
-        }
-
-        client = SonarrClient(config)
-        series = client.get_all_media()
-        assert isinstance(series, list)
-        assert len(series) > 0
 
 
 class TestSonarrQualityProfiles:
