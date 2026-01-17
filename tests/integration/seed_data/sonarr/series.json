@@ -1,0 +1,28 @@
+{
+  "test_series": [
+    {
+      "title": "Old Unwatched Show",
+      "tvdbId": 81189,
+      "seriesType": "standard",
+      "description": "Show that should be deleted - old and unwatched"
+    },
+    {
+      "title": "Recently Watched Show",
+      "tvdbId": 81190,
+      "seriesType": "standard",
+      "description": "Show that should NOT be deleted - recently watched"
+    },
+    {
+      "title": "Anime Series",
+      "tvdbId": 81191,
+      "seriesType": "anime",
+      "description": "Anime series for series_type filtering test"
+    },
+    {
+      "title": "Deletion Test Show",
+      "tvdbId": 81192,
+      "seriesType": "standard",
+      "description": "Show specifically for testing deletion functionality"
+    }
+  ]
+}

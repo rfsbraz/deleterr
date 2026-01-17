@@ -1,0 +1,39 @@
+{
+  "test_movies": [
+    {
+      "title": "Old Unwatched Movie",
+      "year": 2020,
+      "tmdbId": 550,
+      "imdbId": "tt0137523",
+      "description": "Movie that should be deleted - old and unwatched"
+    },
+    {
+      "title": "Recently Watched Movie",
+      "year": 2021,
+      "tmdbId": 551,
+      "imdbId": "tt0000001",
+      "description": "Movie that should NOT be deleted - recently watched"
+    },
+    {
+      "title": "Movie In Excluded Collection",
+      "year": 2019,
+      "tmdbId": 552,
+      "imdbId": "tt0000002",
+      "description": "Movie in excluded collection - should NOT be deleted"
+    },
+    {
+      "title": "Recently Added Movie",
+      "year": 2023,
+      "tmdbId": 553,
+      "imdbId": "tt0000003",
+      "description": "Recently added movie - should NOT be deleted due to added_at_threshold"
+    },
+    {
+      "title": "Deletion Test Movie",
+      "year": 2015,
+      "tmdbId": 554,
+      "imdbId": "tt0000004",
+      "description": "Movie specifically for testing deletion functionality"
+    }
+  ]
+}

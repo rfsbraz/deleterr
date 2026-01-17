@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: deleterr-test-radarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+    volumes:
+      - radarr-config:/config
+      - media-data:/movies
+    ports:
+      - "7878:7878"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7878/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: deleterr-test-sonarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+    volumes:
+      - sonarr-config:/config
+      - media-data:/tv
+    ports:
+      - "8989:8989"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  tautulli:
+    image: lscr.io/linuxserver/tautulli:latest
+    container_name: deleterr-test-tautulli
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+    volumes:
+      - ./seed_data/tautulli:/config
+    ports:
+      - "8181:8181"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  plex-mock:
+    build:
+      context: ./fixtures
+      dockerfile: Dockerfile.plex-mock
+    container_name: deleterr-test-plex-mock
+    ports:
+      - "32400:32400"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:32400/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  radarr-config:
+  sonarr-config:
+  media-data:
+
+networks:
+  default:
+    name: deleterr-test-network
