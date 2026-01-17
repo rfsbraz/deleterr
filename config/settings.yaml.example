@@ -42,6 +42,10 @@ trakt:
 # If true, Deleterr will only log what it would do but not perform the actions
 dry_run: true
 
+# SSL certificate verification (default: true)
+# Set to false only if using self-signed certificates for local connections
+ssl_verify: true
+
 # Trigger a Plex library scan after actions are performed
 plex_library_scan_after_actions: false
 

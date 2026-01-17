@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(plugin-dev:skill-development)",
+      "Skill(plugin-dev:skill-development:*)",
+      "Skill(oss-specialist)",
+      "Skill(oss-specialist:*)",
+      "Bash(find:*)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh auth status:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(gh pr create --base develop --title \"docs: Add SECURITY.md with vulnerability reporting policy\" --body \"$\\(cat <<''EOF''\n## Summary\n- Adds SECURITY.md file with vulnerability reporting guidelines\n- Documents supported versions and security contact information\n- Provides security best practices for users running Deleterr\n\n## Test plan\n- [x] Verify SECURITY.md renders correctly on GitHub\n- [x] Confirm email contact is valid\n- [x] Check markdown formatting\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\nEOF\n\\)\")",
+      "Bash(gh pr create:*)",
+      "Bash(python -m pytest:*)"
+    ]
+  }
+}
