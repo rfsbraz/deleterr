@@ -97,6 +97,10 @@ class RadarrSeeder(ServiceSeeder):
 
     def add_movie(self, movie_data: Dict) -> Dict:
         """Add a movie to Radarr (unmonitored, no download) with retry logic."""
+        # Ensure root folder exists before adding movie
+        root_folder_path = movie_data.get("rootFolderPath", "/movies")
+        self.setup_root_folder(root_folder_path)
+
         # Get quality profile if not specified
         quality_profile_id = movie_data.get("qualityProfileId")
         if not quality_profile_id:
@@ -111,7 +115,7 @@ class RadarrSeeder(ServiceSeeder):
             "year": movie_data["year"],
             "tmdbId": movie_data["tmdbId"],
             "qualityProfileId": quality_profile_id,
-            "rootFolderPath": movie_data.get("rootFolderPath", "/movies"),
+            "rootFolderPath": root_folder_path,
             "monitored": False,
             "addOptions": {"searchForMovie": False}
         }
@@ -250,6 +254,10 @@ class SonarrSeeder(ServiceSeeder):
 
     def add_series(self, series_data: Dict) -> Dict:
         """Add a TV series to Sonarr with retry logic."""
+        # Ensure root folder exists before adding series
+        root_folder_path = series_data.get("rootFolderPath", "/tv")
+        self.setup_root_folder(root_folder_path)
+
         # Get quality profile if not specified
         quality_profile_id = series_data.get("qualityProfileId")
         if not quality_profile_id:
