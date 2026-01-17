@@ -161,6 +161,9 @@ class TestDeleteMovieDirectly:
         self, docker_services, radarr_seeder, radarr_client: RadarrAPI
     ):
         """Test that del_movie can add to exclusion list."""
+        import requests
+        from tests.integration.conftest import RADARR_URL
+
         # Add a test movie
         test_movie = {
             "title": "2001: A Space Odyssey",
@@ -174,6 +177,10 @@ class TestDeleteMovieDirectly:
         movie_id = result["id"]
         tmdb_id = result.get("tmdbId", test_movie["tmdbId"])
 
+        # Get API key from seeder headers
+        api_key = radarr_seeder.api_key
+        headers = {"X-Api-Key": api_key}
+
         try:
             # Delete with add_exclusion=True
             radarr_client.del_movie(movie_id, delete_files=True, add_exclusion=True)
@@ -183,18 +190,34 @@ class TestDeleteMovieDirectly:
             ids_after = [m["id"] for m in movies_after]
             assert movie_id not in ids_after
 
-            # Verify it was added to exclusion list
-            exclusions = radarr_client.get_exclusion()
+            # Verify it was added to exclusion list using raw API
+            # (pyarr doesn't have get_exclusion method)
+            resp = requests.get(
+                f"{RADARR_URL}/api/v3/exclusions",
+                headers=headers,
+                timeout=10
+            )
+            assert resp.status_code == 200
+            exclusions = resp.json()
             exclusion_tmdb_ids = [e.get("tmdbId") for e in exclusions]
             assert tmdb_id in exclusion_tmdb_ids
 
         finally:
-            # Clean up exclusion list
+            # Clean up exclusion list using raw API
             try:
-                exclusions = radarr_client.get_exclusion()
-                for exc in exclusions:
-                    if exc.get("tmdbId") == tmdb_id:
-                        radarr_client.del_exclusion(exc["id"])
+                resp = requests.get(
+                    f"{RADARR_URL}/api/v3/exclusions",
+                    headers=headers,
+                    timeout=10
+                )
+                if resp.status_code == 200:
+                    for exc in resp.json():
+                        if exc.get("tmdbId") == tmdb_id:
+                            requests.delete(
+                                f"{RADARR_URL}/api/v3/exclusions/{exc['id']}",
+                                headers=headers,
+                                timeout=10
+                            )
             except Exception:
                 pass
 
