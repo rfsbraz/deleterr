@@ -38,6 +38,17 @@ jobs:
         cd tests/integration
         docker compose -f docker-compose.integration.yml up -d --build
 
+    - name: Fix volume permissions for linuxserver containers
+      run: |
+        # linuxserver.io containers run as user abc (UID 1000)
+        # Fix permissions on media volumes so containers can write to them
+        docker exec deleterr-test-radarr chown -R abc:abc /movies || true
+        docker exec deleterr-test-sonarr chown -R abc:abc /tv || true
+
+        # Also ensure the directories exist with proper permissions
+        docker exec deleterr-test-radarr mkdir -p /movies && docker exec deleterr-test-radarr chown abc:abc /movies || true
+        docker exec deleterr-test-sonarr mkdir -p /tv && docker exec deleterr-test-sonarr chown abc:abc /tv || true
+
     - name: Wait for services to be ready
       run: |
         echo "Waiting for services to start..."
