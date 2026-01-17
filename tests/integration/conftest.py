@@ -49,7 +49,7 @@ STARTUP_TIMEOUT = 180  # seconds to wait for services
 def docker_compose_up():
     """Start all test containers."""
     subprocess.run(
-        ["docker-compose", "-f", str(COMPOSE_FILE), "up", "-d", "--build"],
+        ["docker", "compose", "-f", str(COMPOSE_FILE), "up", "-d", "--build"],
         check=True,
         cwd=str(INTEGRATION_DIR),
     )
@@ -58,7 +58,7 @@ def docker_compose_up():
 def docker_compose_down():
     """Stop and remove all test containers."""
     subprocess.run(
-        ["docker-compose", "-f", str(COMPOSE_FILE), "down", "-v", "--remove-orphans"],
+        ["docker", "compose", "-f", str(COMPOSE_FILE), "down", "-v", "--remove-orphans"],
         check=False,  # Don't fail if already down
         cwd=str(INTEGRATION_DIR),
     )
