@@ -34,21 +34,19 @@ class TestSonarrSeriesOperations:
         """Verify seeded series are accessible via API."""
         series_list = seeded_sonarr.get_series()
         assert isinstance(series_list, list)
-
-        # Skip if seeding failed (CI environment may not have TVDB access)
-        if len(series_list) == 0:
-            pytest.skip("No series seeded - TVDB API may be unavailable in CI")
+        assert len(series_list) > 0, "No series were seeded - seeding failed"
 
         # Check that our test series are present
         titles = [s.get("title") for s in series_list]
         # We seed Breaking Bad, Game of Thrones, Attack on Titan
-        assert any(t for t in titles if t) or len(series_list) > 0
+        assert any(t for t in titles if t), (
+            f"Expected seeded series not found. Got titles: {titles}"
+        )
 
     def test_get_series_by_id(self, seeded_sonarr: SonarrAPI):
         """Verify we can retrieve a specific series by ID."""
         series_list = seeded_sonarr.get_series()
-        if not series_list:
-            pytest.skip("No series seeded - TVDB API may be unavailable in CI")
+        assert len(series_list) > 0, "No series were seeded - seeding failed"
 
         series_id = series_list[0]["id"]
         series = seeded_sonarr.get_series(series_id)
@@ -58,10 +56,7 @@ class TestSonarrSeriesOperations:
     def test_series_has_required_fields(self, seeded_sonarr: SonarrAPI):
         """Verify series have all fields Deleterr needs."""
         series_list = seeded_sonarr.get_series()
-
-        # Skip if seeding failed (CI environment may not have TVDB access)
-        if len(series_list) == 0:
-            pytest.skip("No series seeded - TVDB API may be unavailable in CI")
+        assert len(series_list) > 0, "No series were seeded - seeding failed"
 
         series = series_list[0]
         # Fields required by Deleterr
@@ -72,10 +67,7 @@ class TestSonarrSeriesOperations:
     def test_series_type_is_valid(self, seeded_sonarr: SonarrAPI):
         """Verify series types are valid values."""
         series_list = seeded_sonarr.get_series()
-
-        # Skip if seeding failed (CI environment may not have TVDB access)
-        if len(series_list) == 0:
-            pytest.skip("No series seeded - TVDB API may be unavailable in CI")
+        assert len(series_list) > 0, "No series were seeded - seeding failed"
 
         valid_types = ["standard", "daily", "anime"]
 
@@ -101,10 +93,7 @@ class TestSonarrDeletion:
 
         # Seed the series
         result = sonarr_seeder.add_series(test_series)
-
-        # Skip if series couldn't be added (e.g., invalid TVDB ID)
-        if "id" not in result:
-            pytest.skip("Could not add test series for deletion test")
+        assert "id" in result, f"Failed to add test series: {result}"
 
         series_id = result["id"]
 
@@ -128,8 +117,7 @@ class TestSonarrEpisodeOperations:
     def test_get_episodes_for_series(self, seeded_sonarr: SonarrAPI):
         """Verify we can get episodes for a series."""
         series_list = seeded_sonarr.get_series()
-        if not series_list:
-            pytest.skip("No series available for episode test")
+        assert len(series_list) > 0, "No series available for episode test - seeding failed"
 
         series_id = series_list[0]["id"]
         episodes = seeded_sonarr.get_episode(series_id, series=True)
@@ -140,14 +128,12 @@ class TestSonarrEpisodeOperations:
     def test_episode_monitoring_update(self, seeded_sonarr: SonarrAPI):
         """Verify we can update episode monitoring status."""
         series_list = seeded_sonarr.get_series()
-        if not series_list:
-            pytest.skip("No series available for monitoring test")
+        assert len(series_list) > 0, "No series available for monitoring test - seeding failed"
 
         series_id = series_list[0]["id"]
         episodes = seeded_sonarr.get_episode(series_id, series=True)
 
-        if not episodes:
-            pytest.skip("No episodes available for monitoring test")
+        assert len(episodes) > 0, "No episodes available for monitoring test"
 
         episode = episodes[0]
         episode_id = episode["id"]

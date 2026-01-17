@@ -40,8 +40,7 @@ class TestDeleteSeriesDirectly:
         }
 
         result = sonarr_seeder.add_series(test_series)
-        if "id" not in result:
-            pytest.skip("Could not add test series - TVDB API may be unavailable")
+        assert "id" in result, f"Failed to add test series Arrested Development: {result}"
 
         series_id = result["id"]
 
@@ -90,8 +89,7 @@ class TestDeleteSeriesDirectly:
         }
 
         result = sonarr_seeder.add_series(test_series)
-        if "id" not in result:
-            pytest.skip("Could not add test series - TVDB API may be unavailable")
+        assert "id" in result, f"Failed to add test series Firefly: {result}"
 
         series_id = result["id"]
 
@@ -142,8 +140,7 @@ class TestDeleteMovieDirectly:
         }
 
         result = radarr_seeder.add_movie(test_movie)
-        if "id" not in result:
-            pytest.skip("Could not add test movie - TMDb API may be unavailable")
+        assert "id" in result, f"Failed to add test movie Blade Runner: {result}"
 
         movie_id = result["id"]
 
@@ -172,8 +169,7 @@ class TestDeleteMovieDirectly:
         }
 
         result = radarr_seeder.add_movie(test_movie)
-        if "id" not in result:
-            pytest.skip("Could not add test movie - TMDb API may be unavailable")
+        assert "id" in result, f"Failed to add test movie 2001: A Space Odyssey: {result}"
 
         movie_id = result["id"]
         tmdb_id = result.get("tmdbId", test_movie["tmdbId"])
@@ -224,13 +220,13 @@ class TestBatchDeletion:
                 added_movies.append(result)
 
         if len(added_movies) < 2:
-            # Cleanup and skip
+            # Cleanup before failing
             for m in added_movies:
                 try:
                     radarr_client.del_movie(m["id"], delete_files=True)
                 except Exception:
                     pass
-            pytest.skip("Could not add enough test movies - TMDb API may be unavailable")
+            assert False, f"Could not add enough test movies - only added {len(added_movies)}"
 
         try:
             # Delete movies one by one (simulating Deleterr's behavior)
@@ -271,13 +267,13 @@ class TestBatchDeletion:
                 added_series.append(result)
 
         if len(added_series) < 2:
-            # Cleanup and skip
+            # Cleanup before failing
             for s in added_series:
                 try:
                     sonarr_client.del_series(s["id"], delete_files=True)
                 except Exception:
                     pass
-            pytest.skip("Could not add enough test series - TVDB API may be unavailable")
+            assert False, f"Could not add enough test series - only added {len(added_series)}"
 
         try:
             # Delete series one by one
@@ -343,8 +339,7 @@ class TestDeletionEdgeCases:
         }
 
         result = radarr_seeder.add_movie(test_movie)
-        if "id" not in result:
-            pytest.skip("Could not add test movie - TMDb API may be unavailable")
+        assert "id" in result, f"Failed to add test movie The Terminator: {result}"
 
         movie_id = result["id"]
 
@@ -370,8 +365,7 @@ class TestDeletionWithStatistics:
         }
 
         result = radarr_seeder.add_movie(test_movie)
-        if "id" not in result:
-            pytest.skip("Could not add test movie - TMDb API may be unavailable")
+        assert "id" in result, f"Failed to add test movie Jurassic Park: {result}"
 
         movie_id = result["id"]
 
@@ -405,8 +399,7 @@ class TestDeletionWithStatistics:
         }
 
         result = sonarr_seeder.add_series(test_series)
-        if "id" not in result:
-            pytest.skip("Could not add test series - TVDB API may be unavailable")
+        assert "id" in result, f"Failed to add test series Lost: {result}"
 
         series_id = result["id"]
 

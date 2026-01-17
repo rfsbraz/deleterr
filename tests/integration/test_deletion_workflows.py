@@ -27,9 +27,8 @@ class TestDryRunMode:
         movies_before = seeded_radarr.get_movie()
         count_before = len(movies_before)
 
-        # Skip if no movies were seeded (CI environment may not have TMDb access)
-        if count_before == 0:
-            pytest.skip("No movies seeded - TMDb API may be unavailable in CI")
+        # Fail if no movies were seeded
+        assert count_before > 0, "No movies seeded - seeding failed"
 
         # Simulate what Deleterr would do in dry run
         # (In actual implementation, dry run skips the delete call)
@@ -52,9 +51,8 @@ class TestDryRunMode:
         series_before = seeded_sonarr.get_series()
         count_before = len(series_before)
 
-        # Skip if no series were seeded (CI environment may not have TVDB access)
-        if count_before == 0:
-            pytest.skip("No series seeded - TVDB API may be unavailable in CI")
+        # Fail if no series were seeded
+        assert count_before > 0, "No series seeded - seeding failed"
 
         # In dry run, no deletions would be made
         # Verify nothing was deleted
@@ -78,8 +76,7 @@ class TestMovieDeletionWorkflow:
         }
 
         result = radarr_seeder.add_movie(test_movie)
-        if "id" not in result:
-            pytest.skip("Could not add test movie")
+        assert "id" in result, f"Failed to add test movie Interstellar: {result}"
 
         movie_id = result["id"]
 
@@ -120,8 +117,7 @@ class TestMovieDeletionWorkflow:
         }
 
         result = radarr_seeder.add_movie(test_movie)
-        if "id" not in result:
-            pytest.skip("Could not add test movie")
+        assert "id" in result, f"Failed to add test movie The Dark Knight: {result}"
 
         movie_id = result["id"]
 
@@ -162,8 +158,7 @@ class TestSeriesDeletionWorkflow:
         }
 
         result = sonarr_seeder.add_series(test_series)
-        if "id" not in result:
-            pytest.skip("Could not add test series")
+        assert "id" in result, f"Failed to add test series The Office: {result}"
 
         series_id = result["id"]
 
@@ -201,8 +196,7 @@ class TestSeriesDeletionWorkflow:
         }
 
         result = sonarr_seeder.add_series(test_series)
-        if "id" not in result:
-            pytest.skip("Could not add test series")
+        assert "id" in result, f"Failed to add test series Death Note: {result}"
 
         series_id = result["id"]
 
@@ -253,13 +247,13 @@ class TestMaxActionsPerRun:
                 test_movies.append(result)
 
         if len(test_movies) < 3:
-            # Cleanup and skip
+            # Cleanup before failing
             for m in test_movies:
                 try:
                     radarr_client.del_movie(m["id"], delete_files=True)
                 except Exception:
                     pass
-            pytest.skip("Could not add enough test movies")
+            assert False, f"Could not add enough test movies - only added {len(test_movies)}"
 
         try:
             # Simulate deletion workflow with max_actions limit
@@ -305,8 +299,7 @@ class TestAddedAtThreshold:
         }
 
         result = radarr_seeder.add_movie(test_movie)
-        if "id" not in result:
-            pytest.skip("Could not add test movie")
+        assert "id" in result, f"Failed to add test movie Gladiator: {result}"
 
         movie_id = result["id"]
 
@@ -355,8 +348,7 @@ class TestExclusionRules:
         }
 
         result = radarr_seeder.add_movie(test_movie)
-        if "id" not in result:
-            pytest.skip("Could not add test movie")
+        assert "id" in result, f"Failed to add test movie Schindler's List: {result}"
 
         movie_id = result["id"]
 
