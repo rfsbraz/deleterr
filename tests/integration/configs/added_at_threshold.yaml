@@ -1,0 +1,27 @@
+# Added at threshold configuration
+# Tests: Recently added items (within 7 days) should be protected from deletion
+
+dry_run: false
+interactive: false
+action_delay: 0
+
+plex:
+  url: "http://localhost:32400"
+  token: "test-plex-token"
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "test-tautulli-key"
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "test-radarr-key"
+
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 30
+    added_at_threshold: 7  # Protect items added in last 7 days
+    max_actions_per_run: 10

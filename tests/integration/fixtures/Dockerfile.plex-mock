@@ -1,0 +1,11 @@
+FROM python:3.12-alpine
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir flask
+
+COPY plex_mock.py .
+
+EXPOSE 32400
+
+CMD ["python", "plex_mock.py"]

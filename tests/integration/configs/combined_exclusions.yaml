@@ -1,0 +1,50 @@
+# Combined exclusions configuration
+# Tests: Multiple exclusion rules can be combined
+
+dry_run: false
+interactive: false
+action_delay: 0
+
+plex:
+  url: "http://localhost:32400"
+  token: "test-plex-token"
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "test-tautulli-key"
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "test-radarr-key"
+
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 30
+    added_at_threshold: 7
+    max_actions_per_run: 10
+    exclude:
+      titles:
+        - "The Godfather"
+        - "Citizen Kane"
+      genres:
+        - "Documentary"
+        - "Animation"
+      collections:
+        - "Favorites"
+        - "Never Delete"
+      plex_labels:
+        - "keep"
+        - "children"
+      release_years: 1
+      studios:
+        - "Studio Ghibli"
+        - "Pixar"
+      directors:
+        - "Christopher Nolan"
+        - "Steven Spielberg"
+      actors:
+        - "Tom Hanks"
+        - "Meryl Streep"

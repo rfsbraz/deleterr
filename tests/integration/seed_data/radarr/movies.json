@@ -1,0 +1,22 @@
+{
+  "test_movies": [
+    {
+      "title": "Fight Club",
+      "year": 1999,
+      "tmdbId": 550,
+      "description": "Movie that should be deleted - old and unwatched"
+    },
+    {
+      "title": "The Matrix",
+      "year": 1999,
+      "tmdbId": 603,
+      "description": "Movie that should NOT be deleted - recently watched"
+    },
+    {
+      "title": "Inception",
+      "year": 2010,
+      "tmdbId": 27205,
+      "description": "Movie in excluded collection - should NOT be deleted"
+    }
+  ]
+}
