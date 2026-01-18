@@ -42,6 +42,97 @@ services:
 
 You can find more information about ofelia's scheduling options [here](https://github.com/mcuadros/ofelia#jobs).
 
+### Portainer
+
+When deploying with Portainer, you may encounter a bind mount error like:
+```
+Error response from daemon: Bind mount failed: '/path/to/config' does not exist
+```
+
+This happens because Portainer (unlike `docker-compose` CLI) does not automatically create host directories for bind mounts. Here are several solutions:
+
+**Option 1: Enable "Create path on host" in Portainer (Recommended)**
+
+When adding the stack in Portainer:
+1. Go to **Stacks** → **Add stack**
+2. After pasting your compose file, scroll down to **Advanced options**
+3. Enable **"Create path on host if it doesn't exist"** (available in Portainer CE 2.19+ / BE 2.16+)
+
+This allows you to use the standard docker-compose example without modifications.
+
+**Option 2: Create directories manually**
+
+Before deploying the stack, SSH into your server and create the required directories:
+
+```bash
+mkdir -p /path/to/your/deleterr/config
+mkdir -p /path/to/your/deleterr/logs
+```
+
+Then use absolute paths in your stack:
+
+```yaml
+version: "3.9"
+services:
+    deleterr:
+        image: ghcr.io/rfsbraz/deleterr:latest
+        container_name: deleterr
+        environment:
+            LOG_LEVEL: INFO
+        volumes:
+            - /path/to/your/deleterr/config:/config
+            - /path/to/your/deleterr/logs:/config/logs
+        restart: no
+    scheduler:
+        image: mcuadros/ofelia:latest
+        container_name: scheduler
+        depends_on:
+            - deleterr
+        command: daemon --docker
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        restart: unless-stopped
+        labels:
+            ofelia.job-run.deleterr.schedule: "@weekly"
+            ofelia.job-run.deleterr.container: "deleterr"
+```
+
+**Option 3: Use named volumes**
+
+Named volumes are automatically created by Docker and don't require host directories:
+
+```yaml
+version: "3.9"
+services:
+    deleterr:
+        image: ghcr.io/rfsbraz/deleterr:latest
+        container_name: deleterr
+        environment:
+            LOG_LEVEL: INFO
+        volumes:
+            - deleterr_config:/config
+            - deleterr_logs:/config/logs
+        restart: no
+    scheduler:
+        image: mcuadros/ofelia:latest
+        container_name: scheduler
+        depends_on:
+            - deleterr
+        command: daemon --docker
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        restart: unless-stopped
+        labels:
+            ofelia.job-run.deleterr.schedule: "@weekly"
+            ofelia.job-run.deleterr.container: "deleterr"
+
+volumes:
+    deleterr_config:
+    deleterr_logs:
+```
+
+> **Note**: With named volumes, you'll need to place your `settings.yaml` file inside the volume. You can do this by first starting the container, then copying the file using `docker cp settings.yaml deleterr:/config/settings.yaml`.
+
 ### Docker
 
 Set your settings file in `config/settings.yaml` and run the following command:
