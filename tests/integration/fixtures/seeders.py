@@ -221,6 +221,70 @@ class RadarrSeeder(ServiceSeeder):
                 # Best-effort cleanup; continue with remaining items
                 pass
 
+    def get_tags(self) -> List[Dict]:
+        """Get all tags from Radarr."""
+        resp = requests.get(
+            f"{self.base_url}/api/v3/tag",
+            headers=self.headers,
+            timeout=10
+        )
+        return resp.json()
+
+    def create_tag(self, label: str) -> Dict:
+        """Create a new tag in Radarr."""
+        # Check if tag already exists
+        existing_tags = self.get_tags()
+        for tag in existing_tags:
+            if tag.get("label", "").lower() == label.lower():
+                return tag
+
+        resp = requests.post(
+            f"{self.base_url}/api/v3/tag",
+            headers=self.headers,
+            json={"label": label},
+            timeout=10
+        )
+        return resp.json()
+
+    def add_tag_to_movie(self, movie_id: int, tag_id: int) -> Dict:
+        """Add a tag to a movie."""
+        # Get current movie data
+        resp = requests.get(
+            f"{self.base_url}/api/v3/movie/{movie_id}",
+            headers=self.headers,
+            timeout=10
+        )
+        movie = resp.json()
+
+        # Add tag if not already present
+        if tag_id not in movie.get("tags", []):
+            movie["tags"] = movie.get("tags", []) + [tag_id]
+            resp = requests.put(
+                f"{self.base_url}/api/v3/movie/{movie_id}",
+                headers=self.headers,
+                json=movie,
+                timeout=10
+            )
+            return resp.json()
+        return movie
+
+    def update_movie_monitored(self, movie_id: int, monitored: bool) -> Dict:
+        """Update the monitored status of a movie."""
+        resp = requests.get(
+            f"{self.base_url}/api/v3/movie/{movie_id}",
+            headers=self.headers,
+            timeout=10
+        )
+        movie = resp.json()
+        movie["monitored"] = monitored
+        resp = requests.put(
+            f"{self.base_url}/api/v3/movie/{movie_id}",
+            headers=self.headers,
+            json=movie,
+            timeout=10
+        )
+        return resp.json()
+
 
 class SonarrSeeder(ServiceSeeder):
     """Seeds Sonarr with test TV show data via API."""

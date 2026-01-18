@@ -10,6 +10,7 @@ from app.config import Config
 from app.media_cleaner import (
     DEFAULT_MAX_ACTIONS_PER_RUN,
     MediaCleaner,
+    check_excluded_radarr_fields,
     find_watched_data,
     library_meets_disk_space_threshold,
 )
@@ -2013,3 +2014,261 @@ class TestCheckExclusionsWithJustWatch:
 
         # Should be False because genre is excluded (even though JustWatch passes)
         assert result is False
+
+
+# Tests for check_excluded_radarr_fields function
+class TestCheckExcludedRadarrFields:
+    """Test cases for the check_excluded_radarr_fields function."""
+
+    def test_no_radarr_exclusions(self):
+        """Test when radarr exclusions config is empty."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {}  # No radarr exclusions
+        radarr_instance = MagicMock()
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is True
+
+    def test_no_radarr_instance(self):
+        """Test when radarr_instance is None."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"tags": ["keep"]}}
+        radarr_instance = None
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is True
+
+    def test_movie_not_found_in_radarr(self):
+        """Test when movie is not found in Radarr."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"tags": ["keep"]}}
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = None
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is True
+        radarr_instance.get_movie.assert_called_once_with(12345)
+
+    def test_excluded_by_monitored_status_true(self, mocker):
+        """Test exclusion when monitored status matches."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"monitored": True}}
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = [{"monitored": True}]
+
+        mocker.patch("app.media_cleaner.logger")
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is False
+
+    def test_excluded_by_monitored_status_false(self, mocker):
+        """Test exclusion when monitored=false matches unmonitored movie."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"monitored": False}}
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = [{"monitored": False}]
+
+        mocker.patch("app.media_cleaner.logger")
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is False
+
+    def test_not_excluded_by_monitored_status_mismatch(self, mocker):
+        """Test no exclusion when monitored status doesn't match."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"monitored": True}}
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = [{"monitored": False}]
+
+        mocker.patch("app.media_cleaner.logger")
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is True
+
+    def test_excluded_by_quality_profile(self, mocker):
+        """Test exclusion when quality profile matches."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"quality_profiles": ["Bluray-2160p"]}}
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = [{"qualityProfileId": 1}]
+        radarr_instance.check_movie_has_quality_profiles.return_value = True
+
+        mocker.patch("app.media_cleaner.logger")
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is False
+        radarr_instance.check_movie_has_quality_profiles.assert_called_once()
+
+    def test_not_excluded_by_quality_profile_no_match(self, mocker):
+        """Test no exclusion when quality profile doesn't match."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"quality_profiles": ["Bluray-2160p"]}}
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = [{"qualityProfileId": 2}]
+        radarr_instance.check_movie_has_quality_profiles.return_value = False
+
+        mocker.patch("app.media_cleaner.logger")
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is True
+
+    def test_excluded_by_tags(self, mocker):
+        """Test exclusion when tags match."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"tags": ["4K", "keep"]}}
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = [{"tags": [1, 2]}]
+        radarr_instance.check_movie_has_tags.return_value = True
+
+        mocker.patch("app.media_cleaner.logger")
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is False
+        radarr_instance.check_movie_has_tags.assert_called_once()
+
+    def test_not_excluded_by_tags_no_match(self, mocker):
+        """Test no exclusion when tags don't match."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"tags": ["4K", "keep"]}}
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = [{"tags": [3]}]
+        radarr_instance.check_movie_has_tags.return_value = False
+
+        mocker.patch("app.media_cleaner.logger")
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is True
+
+    def test_excluded_by_path(self, mocker):
+        """Test exclusion when path matches."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"paths": ["/media/4k"]}}
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = [{"path": "/media/4k/movies/TestMovie"}]
+
+        mocker.patch("app.media_cleaner.logger")
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is False
+
+    def test_not_excluded_by_path_no_match(self, mocker):
+        """Test no exclusion when path doesn't match."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"paths": ["/media/4k"]}}
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = [{"path": "/media/movies/TestMovie"}]
+
+        mocker.patch("app.media_cleaner.logger")
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is True
+
+    def test_excluded_by_path_partial_match(self, mocker):
+        """Test exclusion when path is a partial match (substring)."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {"radarr": {"paths": ["/4k/"]}}
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = [{"path": "/media/4k/movies/TestMovie"}]
+
+        mocker.patch("app.media_cleaner.logger")
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        assert result is False
+
+    def test_multiple_exclusion_criteria_first_matches(self, mocker):
+        """Test that first matching criteria excludes immediately."""
+        media_data = {"title": "Test Movie", "tmdbId": 12345}
+        plex_media_item = MagicMock()
+        exclude = {
+            "radarr": {
+                "monitored": True,
+                "tags": ["keep"],
+                "paths": ["/media/4k"],
+            }
+        }
+        radarr_instance = MagicMock()
+        radarr_instance.get_movie.return_value = [{"monitored": True, "tags": [], "path": "/media/movies"}]
+
+        mocker.patch("app.media_cleaner.logger")
+
+        result = check_excluded_radarr_fields(
+            media_data, plex_media_item, exclude, radarr_instance
+        )
+        # Should be excluded by monitored status (first check)
+        assert result is False
+
+
+# Test check_exclusions includes radarr check
+def test_check_exclusions_includes_radarr(mocker, standard_config):
+    """Test that check_exclusions calls check_excluded_radarr_fields."""
+    # Arrange
+    library = {"name": "Test Library", "exclude": {"radarr": {"tags": ["keep"]}}}
+    media_data = MagicMock()
+    plex_media_item = MagicMock()
+    radarr_instance = MagicMock()
+
+    # Mock plex server constructor
+    mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
+
+    mock_check_excluded_radarr_fields = mocker.patch(
+        "app.media_cleaner.check_excluded_radarr_fields", return_value=True
+    )
+    mocker.patch("app.media_cleaner.check_excluded_titles", return_value=True)
+    mocker.patch("app.media_cleaner.check_excluded_genres", return_value=True)
+    mocker.patch("app.media_cleaner.check_excluded_collections", return_value=True)
+    mocker.patch("app.media_cleaner.check_excluded_labels", return_value=True)
+    mocker.patch("app.media_cleaner.check_excluded_release_years", return_value=True)
+    mocker.patch("app.media_cleaner.check_excluded_studios", return_value=True)
+    mocker.patch("app.media_cleaner.check_excluded_producers", return_value=True)
+    mocker.patch("app.media_cleaner.check_excluded_directors", return_value=True)
+    mocker.patch("app.media_cleaner.check_excluded_writers", return_value=True)
+    mocker.patch("app.media_cleaner.check_excluded_actors", return_value=True)
+
+    # Act
+    media_cleaner = MediaCleaner(standard_config)
+    result = media_cleaner.check_exclusions(library, media_data, plex_media_item, radarr_instance)
+
+    # Assert
+    mock_check_excluded_radarr_fields.assert_called_once_with(
+        media_data, plex_media_item, library.get("exclude"), radarr_instance
+    )
+    assert result is True

@@ -716,7 +716,7 @@ def check_excluded_radarr_fields(media_data, plex_media_item, exclude, radarr_in
         # Radarr returns a list of movies, but TMDB ID is unique
         radarr_media_item = radarr_media_item[0]
 
-    if radarr_exclusions.get("monitored") == radarr_media_item.get("monitored"):
+    if 'monitored' in radarr_exclusions and radarr_exclusions.get("monitored") == radarr_media_item.get("monitored"):
         logger.debug(f"{media_data['title']} has excluded radarr monitored status, skipping")
         return False
 
@@ -739,6 +739,8 @@ def check_excluded_radarr_fields(media_data, plex_media_item, exclude, radarr_in
             if path in radarr_media_item.get('path'):
                 logger.debug(f"{media_data['title']} has excluded radarr path, skipping")
                 return False
+
+    return True
 
 
 def check_excluded_titles(media_data, plex_media_item, exclude):

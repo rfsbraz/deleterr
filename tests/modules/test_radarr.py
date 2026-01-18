@@ -62,3 +62,130 @@ def test_validate_connection_failure(dradarr, monkeypatch):
     monkeypatch.setattr(dradarr.instance, "get_health", mock_get_health)
     result = dradarr.validate_connection()
     assert not result
+
+
+# Edge case tests for check_movie_has_tags
+def test_check_movie_has_tags_no_match(dradarr):
+    """Test when movie has tags but none match the filter."""
+    dradarr.instance.get_tag.return_value = [
+        {"id": 1, "label": "Tag1"},
+        {"id": 2, "label": "Tag2"},
+    ]
+    movie = {"tags": [1]}  # Movie has Tag1
+    result = dradarr.check_movie_has_tags(movie, ["Tag3"])  # Filter for Tag3
+    assert not result
+
+
+def test_check_movie_has_tags_empty_movie_tags(dradarr):
+    """Test when movie has no tags."""
+    dradarr.instance.get_tag.return_value = [{"id": 1, "label": "Test Tag"}]
+    movie = {"tags": []}
+    result = dradarr.check_movie_has_tags(movie, ["Test Tag"])
+    assert not result
+
+
+def test_check_movie_has_tags_missing_tags_key(dradarr):
+    """Test when movie doesn't have a tags key."""
+    dradarr.instance.get_tag.return_value = [{"id": 1, "label": "Test Tag"}]
+    movie = {}  # No tags key at all
+    result = dradarr.check_movie_has_tags(movie, ["Test Tag"])
+    assert not result
+
+
+def test_check_movie_has_tags_empty_filter(dradarr):
+    """Test when filter list is empty."""
+    dradarr.instance.get_tag.return_value = [{"id": 1, "label": "Test Tag"}]
+    movie = {"tags": [1]}
+    result = dradarr.check_movie_has_tags(movie, [])
+    assert not result
+
+
+def test_check_movie_has_tags_multiple_matches(dradarr):
+    """Test when movie has multiple matching tags."""
+    dradarr.instance.get_tag.return_value = [
+        {"id": 1, "label": "Tag1"},
+        {"id": 2, "label": "Tag2"},
+        {"id": 3, "label": "Tag3"},
+    ]
+    movie = {"tags": [1, 2]}  # Movie has Tag1 and Tag2
+    result = dradarr.check_movie_has_tags(movie, ["Tag1", "Tag2"])
+    assert result
+
+
+def test_check_movie_has_tags_partial_match(dradarr):
+    """Test when movie has only some of the filtered tags."""
+    dradarr.instance.get_tag.return_value = [
+        {"id": 1, "label": "Tag1"},
+        {"id": 2, "label": "Tag2"},
+    ]
+    movie = {"tags": [1]}  # Movie only has Tag1
+    result = dradarr.check_movie_has_tags(movie, ["Tag1", "Tag2"])  # Filter wants both
+    assert result  # Should match if ANY tag matches
+
+
+# Edge case tests for check_movie_has_quality_profiles
+def test_check_movie_has_quality_profiles_no_match(dradarr):
+    """Test when movie quality profile doesn't match filter."""
+    dradarr.instance.get_quality_profile.return_value = [
+        {"id": 1, "name": "Profile1"},
+        {"id": 2, "name": "Profile2"},
+    ]
+    movie = {"qualityProfileId": 1}
+    result = dradarr.check_movie_has_quality_profiles(movie, ["Profile3"])
+    assert not result
+
+
+def test_check_movie_has_quality_profiles_empty_filter(dradarr):
+    """Test when filter list is empty."""
+    dradarr.instance.get_quality_profile.return_value = [{"id": 1, "name": "Profile1"}]
+    movie = {"qualityProfileId": 1}
+    result = dradarr.check_movie_has_quality_profiles(movie, [])
+    assert not result
+
+
+def test_check_movie_has_quality_profiles_missing_key(dradarr):
+    """Test when movie doesn't have qualityProfileId."""
+    dradarr.instance.get_quality_profile.return_value = [{"id": 1, "name": "Profile1"}]
+    movie = {}  # No qualityProfileId
+    result = dradarr.check_movie_has_quality_profiles(movie, ["Profile1"])
+    assert not result
+
+
+def test_check_movie_has_quality_profiles_multiple_filters(dradarr):
+    """Test when filtering for multiple quality profiles."""
+    dradarr.instance.get_quality_profile.return_value = [
+        {"id": 1, "name": "Profile1"},
+        {"id": 2, "name": "Profile2"},
+    ]
+    movie = {"qualityProfileId": 2}
+    result = dradarr.check_movie_has_quality_profiles(movie, ["Profile1", "Profile2"])
+    assert result
+
+
+# Caching tests
+def test_get_tags_caching(dradarr):
+    """Test that tags are cached after first call."""
+    dradarr.instance.get_tag.return_value = [{"id": 1, "label": "Test Tag"}]
+
+    # First call should fetch from API
+    tags1 = dradarr.get_tags()
+    # Second call should use cache
+    tags2 = dradarr.get_tags()
+
+    assert tags1 == tags2
+    # API should only be called once
+    assert dradarr.instance.get_tag.call_count == 1
+
+
+def test_get_quality_profiles_caching(dradarr):
+    """Test that quality profiles are cached after first call."""
+    dradarr.instance.get_quality_profile.return_value = [{"id": 1, "name": "Test Profile"}]
+
+    # First call should fetch from API
+    profiles1 = dradarr.get_quality_profiles()
+    # Second call should use cache
+    profiles2 = dradarr.get_quality_profiles()
+
+    assert profiles1 == profiles2
+    # API should only be called once
+    assert dradarr.instance.get_quality_profile.call_count == 1
