@@ -39,6 +39,12 @@ def add_movie(
     last_viewed_at: Optional[datetime] = None,
     collections: Optional[List[str]] = None,
     genres: Optional[List[str]] = None,
+    labels: Optional[List[str]] = None,
+    studio: Optional[str] = None,
+    directors: Optional[List[str]] = None,
+    writers: Optional[List[str]] = None,
+    actors: Optional[List[str]] = None,
+    producers: Optional[List[str]] = None,
     rating_key: Optional[str] = None,
 ) -> Dict:
     """Add a mock movie to the library."""
@@ -52,12 +58,12 @@ def add_movie(
         "lastViewedAt": int(last_viewed_at.timestamp()) if last_viewed_at else None,
         "collections": [{"tag": c} for c in (collections or [])],
         "genres": [{"tag": g} for g in (genres or [])],
-        "labels": [],
-        "studio": None,
-        "directors": [],
-        "writers": [],
-        "roles": [],
-        "producers": []
+        "labels": [{"tag": l} for l in (labels or [])],
+        "studio": studio,
+        "directors": [{"tag": d} for d in (directors or [])],
+        "writers": [{"tag": w} for w in (writers or [])],
+        "roles": [{"tag": a} for a in (actors or [])],
+        "producers": [{"tag": p} for p in (producers or [])]
     }
 
     if tmdb_id:
@@ -78,6 +84,8 @@ def add_series(
     last_viewed_at: Optional[datetime] = None,
     collections: Optional[List[str]] = None,
     genres: Optional[List[str]] = None,
+    labels: Optional[List[str]] = None,
+    studio: Optional[str] = None,
     rating_key: Optional[str] = None,
 ) -> Dict:
     """Add a mock TV series to the library."""
@@ -91,7 +99,12 @@ def add_series(
         "lastViewedAt": int(last_viewed_at.timestamp()) if last_viewed_at else None,
         "collections": [{"tag": c} for c in (collections or [])],
         "genres": [{"tag": g} for g in (genres or [])],
-        "labels": []
+        "labels": [{"tag": l} for l in (labels or [])],
+        "studio": studio,
+        "directors": [],
+        "writers": [],
+        "roles": [],
+        "producers": []
     }
 
     if tvdb_id:
@@ -184,6 +197,12 @@ def api_add_movie():
         last_viewed_at=datetime.fromisoformat(data["last_viewed_at"]) if data.get("last_viewed_at") else None,
         collections=data.get("collections"),
         genres=data.get("genres"),
+        labels=data.get("labels"),
+        studio=data.get("studio"),
+        directors=data.get("directors"),
+        writers=data.get("writers"),
+        actors=data.get("actors"),
+        producers=data.get("producers"),
         rating_key=data.get("rating_key"),
     )
     return jsonify(movie)
@@ -202,6 +221,8 @@ def api_add_series():
         last_viewed_at=datetime.fromisoformat(data["last_viewed_at"]) if data.get("last_viewed_at") else None,
         collections=data.get("collections"),
         genres=data.get("genres"),
+        labels=data.get("labels"),
+        studio=data.get("studio"),
         rating_key=data.get("rating_key"),
     )
     return jsonify(series)

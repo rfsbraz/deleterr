@@ -1,0 +1,57 @@
+# Multi-instance configuration
+# Tests: Multiple Radarr/Sonarr instances can be managed
+
+dry_run: false
+interactive: false
+action_delay: 0
+
+plex:
+  url: "http://localhost:32400"
+  token: "test-plex-token"
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "test-tautulli-key"
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "test-radarr-key"
+  - name: "Radarr 4K"
+    url: "http://localhost:7879"
+    api_key: "test-radarr-4k-key"
+
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "test-sonarr-key"
+  - name: "Sonarr 4K"
+    url: "http://localhost:8990"
+    api_key: "test-sonarr-4k-key"
+
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 30
+    max_actions_per_run: 10
+
+  - name: "Movies 4K"
+    radarr: "Radarr 4K"
+    action_mode: "delete"
+    last_watched_threshold: 60  # Keep 4K content longer
+    max_actions_per_run: 5
+
+  - name: "TV Shows"
+    sonarr: "Sonarr"
+    action_mode: "delete"
+    series_type: "standard"
+    last_watched_threshold: 30
+    max_actions_per_run: 10
+
+  - name: "TV Shows 4K"
+    sonarr: "Sonarr 4K"
+    action_mode: "delete"
+    series_type: "standard"
+    last_watched_threshold: 60
+    max_actions_per_run: 5

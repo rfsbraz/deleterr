@@ -1,0 +1,27 @@
+# Add list exclusion on delete configuration
+# Tests: Deleted movies should be added to Radarr's exclusion list
+
+dry_run: false
+interactive: false
+action_delay: 0
+
+plex:
+  url: "http://localhost:32400"
+  token: "test-plex-token"
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "test-tautulli-key"
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "test-radarr-key"
+
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 30
+    max_actions_per_run: 10
+    add_list_exclusion_on_delete: true  # Add to exclusion list when deleted

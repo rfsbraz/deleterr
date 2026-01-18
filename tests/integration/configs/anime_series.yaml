@@ -1,0 +1,27 @@
+# Anime series deletion configuration
+# Tests: Only anime series should be affected (not standard series)
+
+dry_run: false
+interactive: false
+action_delay: 0
+
+plex:
+  url: "http://localhost:32400"
+  token: "test-plex-token"
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "test-tautulli-key"
+
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "test-sonarr-key"
+
+libraries:
+  - name: "TV Shows"
+    sonarr: "Sonarr"
+    action_mode: "delete"
+    series_type: "anime"  # Only process anime series
+    last_watched_threshold: 30
+    max_actions_per_run: 10
