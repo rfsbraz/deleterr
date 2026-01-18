@@ -15,8 +15,7 @@ Unlike test_media_cleaner.py which tests helper functions in isolation, these te
 import pytest
 import time
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
-from pathlib import Path
+from unittest.mock import MagicMock
 
 from pyarr.radarr import RadarrAPI
 from pyarr.sonarr import SonarrAPI

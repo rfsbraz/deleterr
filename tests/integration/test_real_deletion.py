@@ -7,7 +7,6 @@ Radarr and Sonarr containers, testing the full deletion pipeline.
 
 import pytest
 import time
-from datetime import datetime, timedelta
 import requests
 
 from pyarr.radarr import RadarrAPI
@@ -142,7 +141,7 @@ class TestRealMovieDeletion:
                 headers=headers,
                 timeout=10
             )
-            exclusions_before = resp.json() if resp.status_code == 200 else []
+            _exclusions_before = resp.json() if resp.status_code == 200 else []
 
             # Delete WITHOUT add_exclusion
             radarr_client.del_movie(movie_id, delete_files=True, add_exclusion=False)

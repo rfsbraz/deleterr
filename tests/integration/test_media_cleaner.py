@@ -819,16 +819,11 @@ class TestMaxActionsPerRun:
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
 
-            # Simulate process_movies loop with generator
-            def movie_generator():
-                for movie in movies_to_process:
-                    yield movie
-
             mock_radarr = MagicMock()
             mock_movies_library = MagicMock()
             mock_movies_library.all.return_value = []
 
-            saved_space = cleaner.process_movies(
+            _saved_space = cleaner.process_movies(
                 library,
                 mock_radarr,
                 mock_movies_library,

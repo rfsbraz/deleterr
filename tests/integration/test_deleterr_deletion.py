@@ -6,7 +6,6 @@ movies and series through the actual deletion methods.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
 from pyarr.radarr import RadarrAPI
 from pyarr.sonarr import SonarrAPI
 
@@ -96,11 +95,6 @@ class TestDeleteSeriesDirectly:
         try:
             # Get episodes (should exist but have no files)
             episodes = sonarr_client.get_episode(series_id, series=True)
-
-            # Episodes with no files have episodeFileId = 0
-            episode_file_ids = [
-                e.get("episodeFileId", 0) for e in episodes if e.get("episodeFileId", 0) != 0
-            ]
 
             # Mark unmonitored (even if no files)
             if episodes:

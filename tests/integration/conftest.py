@@ -80,6 +80,7 @@ def get_container_api_key(container_name: str, config_path: str) -> str:
         if match:
             return match.group(1)
     except (subprocess.CalledProcessError, Exception):
+        # API key extraction is best-effort; return empty string on failure
         pass
     return ""
 
@@ -102,6 +103,7 @@ def _verify_service_api_ready(url: str, api_key: str, timeout: int = 30) -> bool
             if resp.status_code == 200:
                 return True
         except requests.RequestException:
+            # Transient connection errors during startup; retry loop continues
             pass
         time.sleep(2)
     return False
@@ -129,6 +131,7 @@ def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
             if resp.status_code == 200:
                 plex_ready = True
         except requests.RequestException:
+            # Service may not be ready yet; retry loop continues
             pass
         if not plex_ready:
             time.sleep(2)
@@ -154,6 +157,7 @@ def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
                 ):
                     radarr_ready = True
         except requests.RequestException:
+            # Service may not be ready yet; retry loop continues
             pass
         if not radarr_ready:
             time.sleep(2)
@@ -177,6 +181,7 @@ def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
                 ):
                     sonarr_ready = True
         except requests.RequestException:
+            # Service may not be ready yet; retry loop continues
             pass
         if not sonarr_ready:
             time.sleep(2)
@@ -204,6 +209,7 @@ def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
                         if match:
                             api_keys["tautulli"] = match.group(1)
         except requests.RequestException:
+            # Service may not be ready yet; retry loop continues
             pass
         if not tautulli_ready:
             time.sleep(2)
@@ -341,6 +347,7 @@ def seeded_radarr(radarr_seeder, radarr_client) -> Generator[RadarrAPI, None, No
         try:
             radarr_client.del_movie(movie["id"], delete_files=True)
         except Exception:
+            # Best-effort cleanup; don't fail tests on cleanup errors
             pass
 
 
@@ -378,6 +385,7 @@ def seeded_sonarr(sonarr_seeder, sonarr_client) -> Generator[SonarrAPI, None, No
         try:
             sonarr_client.del_series(series["id"], delete_files=True)
         except Exception:
+            # Best-effort cleanup; don't fail tests on cleanup errors
             pass
 
 

@@ -7,7 +7,7 @@ allowing integration tests to run without a real Plex server.
 
 from flask import Flask, jsonify, request
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Optional
 import uuid
 import os
 

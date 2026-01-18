@@ -7,7 +7,7 @@ with test data for integration tests.
 
 import requests
 import time
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 
 # Retry configuration for external API operations
 MAX_RETRIES = 3
@@ -46,6 +46,7 @@ class RadarrSeeder(ServiceSeeder):
                 if resp.status_code == 200:
                     return True
             except requests.RequestException:
+                # Service may not be ready yet; retry loop continues
                 pass
             time.sleep(2)
         return False
@@ -60,6 +61,7 @@ class RadarrSeeder(ServiceSeeder):
                 # Parse API key from response if available
                 pass
         except requests.RequestException:
+            # Service may not be accessible; return None
             pass
         return None
 
@@ -216,6 +218,7 @@ class RadarrSeeder(ServiceSeeder):
             try:
                 self.delete_movie(movie["id"])
             except Exception:
+                # Best-effort cleanup; continue with remaining items
                 pass
 
 
@@ -235,6 +238,7 @@ class SonarrSeeder(ServiceSeeder):
                 if resp.status_code == 200:
                     return True
             except requests.RequestException:
+                # Service may not be ready yet; retry loop continues
                 pass
             time.sleep(2)
         return False
@@ -393,6 +397,7 @@ class SonarrSeeder(ServiceSeeder):
             try:
                 self.delete_series(series["id"])
             except Exception:
+                # Best-effort cleanup; continue with remaining items
                 pass
 
 
@@ -411,6 +416,7 @@ class PlexMockSeeder:
                 if resp.status_code == 200:
                     return True
             except requests.RequestException:
+                # Service may not be ready yet; retry loop continues
                 pass
             time.sleep(1)
         return False
@@ -460,6 +466,7 @@ class TautulliSeeder:
                     if data.get("response", {}).get("result") == "success":
                         return True
             except requests.RequestException:
+                # Service may not be ready yet; retry loop continues
                 pass
             time.sleep(2)
         return False

@@ -6,8 +6,6 @@ data through to Radarr/Sonarr deletions.
 """
 
 import pytest
-from pyarr.radarr import RadarrAPI
-from pyarr.sonarr import SonarrAPI
 
 # Mark all tests in this module as integration tests
 pytestmark = pytest.mark.integration
@@ -309,9 +307,7 @@ class TestAddedAtThreshold:
             # Check added date
             added_at = movie.get("added")
             if added_at:
-                # Parse and check if within threshold
                 # In real workflow, items added within threshold days are protected
-                added_threshold_days = 7
                 # Newly added movie should be protected
                 should_protect = True  # Assume recent for test
 
