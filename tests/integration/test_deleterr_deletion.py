@@ -193,7 +193,7 @@ class TestDeleteMovieDirectly:
             # Verify it was added to exclusion list using raw API
             # (pyarr doesn't have get_exclusion method)
             resp = requests.get(
-                f"{RADARR_URL}/api/v3/exclusions",
+                f"{RADARR_URL}/api/v3/importlistexclusion",
                 headers=headers,
                 timeout=10
             )
@@ -206,7 +206,7 @@ class TestDeleteMovieDirectly:
             # Clean up exclusion list using raw API
             try:
                 resp = requests.get(
-                    f"{RADARR_URL}/api/v3/exclusions",
+                    f"{RADARR_URL}/api/v3/importlistexclusion",
                     headers=headers,
                     timeout=10
                 )

@@ -83,7 +83,7 @@ class TestRealMovieDeletion:
 
             # Verify movie was added to exclusion list
             resp = requests.get(
-                f"{RADARR_URL}/api/v3/exclusions",
+                f"{RADARR_URL}/api/v3/importlistexclusion",
                 headers=headers,
                 timeout=10
             )
@@ -96,7 +96,7 @@ class TestRealMovieDeletion:
             # Cleanup exclusion list
             try:
                 resp = requests.get(
-                    f"{RADARR_URL}/api/v3/exclusions",
+                    f"{RADARR_URL}/api/v3/importlistexclusion",
                     headers=headers,
                     timeout=10
                 )
@@ -132,7 +132,7 @@ class TestRealMovieDeletion:
         try:
             # Get exclusions before deletion
             resp = requests.get(
-                f"{RADARR_URL}/api/v3/exclusions",
+                f"{RADARR_URL}/api/v3/importlistexclusion",
                 headers=headers,
                 timeout=10
             )
@@ -143,7 +143,7 @@ class TestRealMovieDeletion:
 
             # Verify movie was NOT added to exclusion list
             resp = requests.get(
-                f"{RADARR_URL}/api/v3/exclusions",
+                f"{RADARR_URL}/api/v3/importlistexclusion",
                 headers=headers,
                 timeout=10
             )

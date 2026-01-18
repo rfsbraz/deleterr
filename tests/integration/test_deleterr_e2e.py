@@ -559,7 +559,7 @@ class TestE2EAddListExclusion:
 
             # Verify movie is in exclusion list
             resp = requests.get(
-                f"{RADARR_URL}/api/v3/exclusions",
+                f"{RADARR_URL}/api/v3/importlistexclusion",
                 headers=headers,
                 timeout=10
             )
@@ -573,7 +573,7 @@ class TestE2EAddListExclusion:
             # Clean up exclusion
             try:
                 resp = requests.get(
-                    f"{RADARR_URL}/api/v3/exclusions",
+                    f"{RADARR_URL}/api/v3/importlistexclusion",
                     headers=headers,
                     timeout=10
                 )

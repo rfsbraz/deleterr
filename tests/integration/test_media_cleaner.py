@@ -799,9 +799,16 @@ class TestMaxActionsPerRun:
             "tautulli": {"url": "http://localhost:8181", "api_key": "test"},
         }
 
-        # Create 5 movies to process
+        # Create 5 movies to process with all required fields
         movies_to_process = [
-            {"id": i, "title": f"Movie {i}", "sizeOnDisk": 1_000_000_000}
+            {
+                "id": i,
+                "title": f"Movie {i}",
+                "year": 2020 + i,
+                "sizeOnDisk": 1_000_000_000,
+                "alternateTitles": [],
+                "tmdbId": 100000 + i,
+            }
             for i in range(5)
         ]
 
