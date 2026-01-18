@@ -378,11 +378,13 @@ class MediaCleaner:
         guid=None,
         title=None,
         year=None,
-        alternate_titles=[],
+        alternate_titles=None,
         imdb_id=None,
         tvdb_id=None,
         tmdb_id=None,
     ):
+        if alternate_titles is None:
+            alternate_titles = []
         if guid:
             plex_media_item = self.find_by_guid(plex_library, guid)
             if plex_media_item:
