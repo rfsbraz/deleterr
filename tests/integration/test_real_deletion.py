@@ -81,16 +81,22 @@ class TestRealMovieDeletion:
             # Delete with add_exclusion=True
             radarr_client.del_movie(movie_id, delete_files=True, add_exclusion=True)
 
-            # Verify movie was added to exclusion list
-            resp = requests.get(
-                f"{RADARR_URL}/api/v3/importlistexclusion",
-                headers=headers,
-                timeout=10
-            )
-            assert resp.status_code == 200
-            exclusions = resp.json()
-            exclusion_tmdb_ids = [e.get("tmdbId") for e in exclusions]
-            assert tmdb_id in exclusion_tmdb_ids, "Movie should be in exclusion list"
+            # Verify movie was added to exclusion list (with retry for timing)
+            import time
+            exclusion_tmdb_ids = []
+            for attempt in range(5):
+                time.sleep(1)  # Give Radarr time to process
+                resp = requests.get(
+                    f"{RADARR_URL}/api/v3/importlistexclusion",
+                    headers=headers,
+                    timeout=10
+                )
+                assert resp.status_code == 200
+                exclusions = resp.json()
+                exclusion_tmdb_ids = [e.get("tmdbId") for e in exclusions]
+                if tmdb_id in exclusion_tmdb_ids:
+                    break
+            assert tmdb_id in exclusion_tmdb_ids, f"Movie {tmdb_id} should be in exclusion list, got {exclusion_tmdb_ids}"
 
         finally:
             # Cleanup exclusion list
