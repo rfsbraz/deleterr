@@ -563,7 +563,7 @@ class TestE2EAddListExclusion:
             for attempt in range(5):
                 time.sleep(1)  # Give Radarr time to process
                 resp = requests.get(
-                    f"{RADARR_URL}/api/v3/importlistexclusion",
+                    f"{RADARR_URL}/api/v3/exclusions",
                     headers=headers,
                     timeout=10
                 )
@@ -578,7 +578,7 @@ class TestE2EAddListExclusion:
             # Clean up exclusion
             try:
                 resp = requests.get(
-                    f"{RADARR_URL}/api/v3/importlistexclusion",
+                    f"{RADARR_URL}/api/v3/exclusions",
                     headers=headers,
                     timeout=10
                 )
@@ -586,7 +586,7 @@ class TestE2EAddListExclusion:
                     for exc in resp.json():
                         if exc.get("tmdbId") == tmdb_id:
                             requests.delete(
-                                f"{RADARR_URL}/api/v3/importlistexclusion/{exc['id']}",
+                                f"{RADARR_URL}/api/v3/exclusions/{exc['id']}",
                                 headers=headers,
                                 timeout=10
                             )

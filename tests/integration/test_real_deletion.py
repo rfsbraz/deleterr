@@ -87,7 +87,7 @@ class TestRealMovieDeletion:
             for attempt in range(5):
                 time.sleep(1)  # Give Radarr time to process
                 resp = requests.get(
-                    f"{RADARR_URL}/api/v3/importlistexclusion",
+                    f"{RADARR_URL}/api/v3/exclusions",
                     headers=headers,
                     timeout=10
                 )
@@ -102,7 +102,7 @@ class TestRealMovieDeletion:
             # Cleanup exclusion list
             try:
                 resp = requests.get(
-                    f"{RADARR_URL}/api/v3/importlistexclusion",
+                    f"{RADARR_URL}/api/v3/exclusions",
                     headers=headers,
                     timeout=10
                 )
@@ -110,7 +110,7 @@ class TestRealMovieDeletion:
                     for exc in resp.json():
                         if exc.get("tmdbId") == tmdb_id:
                             requests.delete(
-                                f"{RADARR_URL}/api/v3/importlistexclusion/{exc['id']}",
+                                f"{RADARR_URL}/api/v3/exclusions/{exc['id']}",
                                 headers=headers,
                                 timeout=10
                             )
@@ -138,7 +138,7 @@ class TestRealMovieDeletion:
         try:
             # Get exclusions before deletion
             resp = requests.get(
-                f"{RADARR_URL}/api/v3/importlistexclusion",
+                f"{RADARR_URL}/api/v3/exclusions",
                 headers=headers,
                 timeout=10
             )
@@ -149,7 +149,7 @@ class TestRealMovieDeletion:
 
             # Verify movie was NOT added to exclusion list
             resp = requests.get(
-                f"{RADARR_URL}/api/v3/importlistexclusion",
+                f"{RADARR_URL}/api/v3/exclusions",
                 headers=headers,
                 timeout=10
             )
