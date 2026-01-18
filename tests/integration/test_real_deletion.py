@@ -104,7 +104,7 @@ class TestRealMovieDeletion:
                     for exc in resp.json():
                         if exc.get("tmdbId") == tmdb_id:
                             requests.delete(
-                                f"{RADARR_URL}/api/v3/exclusions/{exc['id']}",
+                                f"{RADARR_URL}/api/v3/importlistexclusion/{exc['id']}",
                                 headers=headers,
                                 timeout=10
                             )
