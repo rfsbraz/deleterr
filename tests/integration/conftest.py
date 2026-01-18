@@ -8,10 +8,12 @@ This module provides fixtures for:
 """
 
 import os
+import re
 import subprocess
 import time
 import json
 import pytest
+import requests
 from pathlib import Path
 from typing import Generator
 
@@ -74,7 +76,6 @@ def get_container_api_key(container_name: str, config_path: str) -> str:
             check=True,
         )
         # Parse XML config to extract ApiKey
-        import re
         match = re.search(r"<ApiKey>([^<]+)</ApiKey>", result.stdout)
         if match:
             return match.group(1)
@@ -83,14 +84,35 @@ def get_container_api_key(container_name: str, config_path: str) -> str:
     return ""
 
 
+def _verify_service_api_ready(url: str, api_key: str, timeout: int = 30) -> bool:
+    """
+    Verify a service's API is fully ready by checking system status endpoint.
+
+    This is more reliable than just checking /ping, as the API may respond
+    to ping before the database and internal state are fully initialized.
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            resp = requests.get(
+                f"{url}/api/v3/system/status",
+                headers={"X-Api-Key": api_key},
+                timeout=5
+            )
+            if resp.status_code == 200:
+                return True
+        except requests.RequestException:
+            pass
+        time.sleep(2)
+    return False
+
+
 def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
     """
     Wait for all services to be healthy and extract API keys.
 
     Returns dict with API keys for each service.
     """
-    import requests
-
     api_keys = {
         "radarr": RADARR_API_KEY,
         "sonarr": SONARR_API_KEY,
@@ -121,19 +143,23 @@ def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
             # Try ping endpoint (no auth required)
             resp = requests.get(f"{RADARR_URL}/ping", timeout=5)
             if resp.status_code == 200:
-                radarr_ready = True
                 # Extract API key if not set
                 if not api_keys["radarr"]:
                     api_keys["radarr"] = get_container_api_key(
                         "deleterr-test-radarr", "/config/config.xml"
                     )
+                # Verify API is fully ready (not just responding to ping)
+                if api_keys["radarr"] and _verify_service_api_ready(
+                    RADARR_URL, api_keys["radarr"], timeout=30
+                ):
+                    radarr_ready = True
         except requests.RequestException:
             pass
         if not radarr_ready:
             time.sleep(2)
 
     if not radarr_ready:
-        raise RuntimeError("Radarr did not start in time")
+        raise RuntimeError("Radarr did not start in time or API is not ready")
 
     # Wait for Sonarr
     sonarr_ready = False
@@ -141,18 +167,22 @@ def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
         try:
             resp = requests.get(f"{SONARR_URL}/ping", timeout=5)
             if resp.status_code == 200:
-                sonarr_ready = True
                 if not api_keys["sonarr"]:
                     api_keys["sonarr"] = get_container_api_key(
                         "deleterr-test-sonarr", "/config/config.xml"
                     )
+                # Verify API is fully ready (not just responding to ping)
+                if api_keys["sonarr"] and _verify_service_api_ready(
+                    SONARR_URL, api_keys["sonarr"], timeout=30
+                ):
+                    sonarr_ready = True
         except requests.RequestException:
             pass
         if not sonarr_ready:
             time.sleep(2)
 
     if not sonarr_ready:
-        raise RuntimeError("Sonarr did not start in time")
+        raise RuntimeError("Sonarr did not start in time or API is not ready")
 
     # Wait for Tautulli
     tautulli_ready = False
@@ -170,7 +200,6 @@ def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
                         text=True,
                     )
                     if result.returncode == 0:
-                        import re
                         match = re.search(r"api_key\s*=\s*(\S+)", result.stdout)
                         if match:
                             api_keys["tautulli"] = match.group(1)
@@ -293,10 +322,17 @@ def seeded_radarr(radarr_seeder, radarr_client) -> Generator[RadarrAPI, None, No
     root_result = radarr_seeder.setup_root_folder("/movies")
     print(f"Root folder result: {root_result}")
 
+    # Fail fast if root folder setup failed
+    if "error" in root_result:
+        pytest.fail(f"Failed to setup Radarr root folder: {root_result['error']}")
+
     # Seed movies
     print(f"Seeding {len(test_data['test_movies'])} movies...")
     seeded_movies = radarr_seeder.seed_test_movies(test_data["test_movies"])
     print(f"Successfully seeded {len(seeded_movies)} movies")
+
+    if not seeded_movies:
+        pytest.fail("Failed to seed any movies - check Radarr API connectivity")
 
     yield radarr_client
 
@@ -323,10 +359,17 @@ def seeded_sonarr(sonarr_seeder, sonarr_client) -> Generator[SonarrAPI, None, No
     root_result = sonarr_seeder.setup_root_folder("/tv")
     print(f"Root folder result: {root_result}")
 
+    # Fail fast if root folder setup failed
+    if "error" in root_result:
+        pytest.fail(f"Failed to setup Sonarr root folder: {root_result['error']}")
+
     # Seed series
     print(f"Seeding {len(test_data['test_series'])} series...")
     seeded_series = sonarr_seeder.seed_test_series(test_data["test_series"])
     print(f"Successfully seeded {len(seeded_series)} series")
+
+    if not seeded_series:
+        pytest.fail("Failed to seed any series - check Sonarr API connectivity")
 
     yield sonarr_client
 
