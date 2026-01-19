@@ -33,6 +33,12 @@ trakt:
   client_id: "YOUR_TRAKT_CLIENT_ID"  # Replace with your Trakt client ID
   client_secret: "YOUR_TRAKT_CLIENT_SECRET"  # Replace with your Trakt client secret
 
+# JustWatch global settings (optional)
+# Used to check streaming availability of media
+# justwatch:
+#   country: "US"  # ISO 3166-1 alpha-2 country code
+#   language: "en"  # Language code (defaults to "en")
+
 # If true, Deleterr will only log what it would do but not perform the actions
 dry_run: true
 
@@ -84,6 +90,11 @@ libraries:
             "https://trakt.tv/movies/collected/yearly",
             "https://trakt.tv/users/justin/lists/imdb-top-rated-movies"
           ]
+      # justwatch:  # Exclude media based on streaming availability
+      #   country: "US"  # Override global country setting
+      #   available_on: ["netflix", "disneyplus", "amazon"]  # Keep if available on these
+      #   # OR use not_available_on (mutually exclusive with available_on):
+      #   # not_available_on: ["any"]  # Keep if available on ANY streaming service
   - name: "TV Shows"
     action_mode: delete
     last_watched_threshold: 365

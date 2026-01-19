@@ -6,6 +6,7 @@ from plexapi.server import PlexServer
 from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 
 from app import logger
+from app.modules.justwatch import JustWatch
 from app.modules.tautulli import Tautulli
 from app.modules.trakt import Trakt
 from app.utils import parse_size_to_bytes, print_readable_freed_space
@@ -19,6 +20,7 @@ class MediaCleaner:
         self.config = config
 
         self.watched_collections = set()
+        self._justwatch_instances = {}  # Cache for JustWatch instances per country
 
         # Setup connections
         self.tautulli = Tautulli(
@@ -42,6 +44,32 @@ class MediaCleaner:
             timeout=120,
             session=session,
         )
+
+    def get_justwatch_instance(self, library):
+        """
+        Get or create a JustWatch instance for the given library.
+
+        Returns None if JustWatch is not configured for this library.
+        """
+        jw_config = library.get("exclude", {}).get("justwatch", {})
+        if not jw_config:
+            return None
+
+        # Get country from library config or global config
+        global_jw = self.config.settings.get("justwatch", {})
+        country = jw_config.get("country") or global_jw.get("country")
+        language = jw_config.get("language") or global_jw.get("language", "en")
+
+        if not country:
+            return None
+
+        # Cache JustWatch instances by country+language
+        cache_key = f"{country}:{language}"
+        if cache_key not in self._justwatch_instances:
+            logger.debug(f"Creating JustWatch instance for {country}/{language}")
+            self._justwatch_instances[cache_key] = JustWatch(country, language)
+
+        return self._justwatch_instances[cache_key]
 
     def get_trakt_items(self, media_type, library):
         return self.trakt.get_all_items_for_url(
@@ -652,9 +680,19 @@ class MediaCleaner:
             check_excluded_actors,
         ]
 
-        return all(
+        if not all(
             check(media_data, plex_media_item, exclude) for check in exclusion_checks
-        )
+        ):
+            return False
+
+        # JustWatch exclusion check (requires justwatch_instance)
+        justwatch_instance = self.get_justwatch_instance(library)
+        if not check_excluded_justwatch(
+            media_data, plex_media_item, exclude, justwatch_instance
+        ):
+            return False
+
+        return True
 
 
 def check_excluded_titles(media_data, plex_media_item, exclude):
@@ -752,6 +790,49 @@ def check_excluded_actors(media_data, plex_media_item, exclude):
                 f"{media_data['title']} [{plex_media_item}] has excluded actor {actor}, skipping"
             )
             return False
+    return True
+
+
+def check_excluded_justwatch(media_data, plex_media_item, exclude, justwatch_instance):
+    """
+    Check if media should be excluded based on JustWatch streaming availability.
+
+    Args:
+        media_data: Media data from Sonarr/Radarr
+        plex_media_item: Plex media item
+        exclude: Exclusion configuration from library
+        justwatch_instance: JustWatch instance (may be None if not configured)
+
+    Returns:
+        True if media should NOT be excluded (i.e., is actionable)
+        False if media should be excluded (i.e., skip this media)
+    """
+    jw_config = exclude.get("justwatch", {})
+
+    if not jw_config or not justwatch_instance:
+        return True
+
+    title = media_data.get("title") or plex_media_item.title
+    year = media_data.get("year") or plex_media_item.year
+    # Determine media type based on data structure
+    media_type = "movie" if "tmdbId" in media_data else "show"
+
+    # Check available_on mode (exclude if available on specified providers)
+    if providers := jw_config.get("available_on"):
+        if justwatch_instance.available_on(title, year, media_type, providers):
+            logger.debug(
+                f"{title} is available on streaming service(s) {providers}, skipping"
+            )
+            return False
+
+    # Check not_available_on mode (exclude if NOT available on specified providers)
+    if providers := jw_config.get("not_available_on"):
+        if justwatch_instance.is_not_available_on(title, year, media_type, providers):
+            logger.debug(
+                f"{title} is not available on streaming service(s) {providers}, skipping"
+            )
+            return False
+
     return True
 
 

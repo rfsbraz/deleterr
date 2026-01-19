@@ -158,6 +158,42 @@ class Config:
             self.validate_watch_status(library)
             self.validate_sort_configuration(library)
             self.validate_settings_for_instance(library)
+            self.validate_justwatch_exclusions(library)
+
+        return True
+
+    def validate_justwatch_exclusions(self, library):
+        """Validate JustWatch exclusion configuration for a library."""
+        jw_exclusions = library.get("exclude", {}).get("justwatch", {})
+        if not jw_exclusions:
+            return True
+
+        # Check that available_on and not_available_on are mutually exclusive
+        if jw_exclusions.get("available_on") and jw_exclusions.get("not_available_on"):
+            self.log_and_exit(
+                f"JustWatch exclusions in library '{library.get('name')}': "
+                "'available_on' and 'not_available_on' are mutually exclusive. Use only one."
+            )
+
+        # Require country setting (from library config or global config)
+        global_jw = self.settings.get("justwatch", {})
+        library_country = jw_exclusions.get("country")
+        global_country = global_jw.get("country")
+
+        if not library_country and not global_country:
+            self.log_and_exit(
+                f"JustWatch exclusions in library '{library.get('name')}' require a 'country' setting. "
+                "Set it either in the library's exclude.justwatch.country or globally in justwatch.country."
+            )
+
+        # Validate that providers is a list if provided
+        for mode in ["available_on", "not_available_on"]:
+            providers = jw_exclusions.get(mode)
+            if providers is not None and not isinstance(providers, list):
+                self.log_and_exit(
+                    f"JustWatch exclusions in library '{library.get('name')}': "
+                    f"'{mode}' must be a list of provider names."
+                )
 
         return True
 

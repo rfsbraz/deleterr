@@ -128,3 +128,139 @@ def test_valid_sorting_options(sort_field, sort_order):
 
     validator = Config({"libraries": [library_config], "sonarr": sonarr_config})
     assert validator.validate_libraries() == True
+
+
+# Test cases for JustWatch validation
+class TestJustWatchValidation:
+    def test_valid_justwatch_available_on(self):
+        library_config = {
+            "name": "Movies",
+            "action_mode": "delete",
+            "radarr": "test",
+            "exclude": {
+                "justwatch": {
+                    "country": "US",
+                    "available_on": ["netflix", "amazon"],
+                }
+            },
+        }
+        radarr_config = [
+            {"name": "test", "url": "http://localhost:7878", "api_key": "API_KEY"}
+        ]
+        validator = Config({"libraries": [library_config], "radarr": radarr_config})
+        assert validator.validate_libraries() == True
+
+    def test_valid_justwatch_not_available_on(self):
+        library_config = {
+            "name": "Movies",
+            "action_mode": "delete",
+            "radarr": "test",
+            "exclude": {
+                "justwatch": {
+                    "country": "US",
+                    "not_available_on": ["netflix"],
+                }
+            },
+        }
+        radarr_config = [
+            {"name": "test", "url": "http://localhost:7878", "api_key": "API_KEY"}
+        ]
+        validator = Config({"libraries": [library_config], "radarr": radarr_config})
+        assert validator.validate_libraries() == True
+
+    def test_valid_justwatch_with_global_country(self):
+        library_config = {
+            "name": "Movies",
+            "action_mode": "delete",
+            "radarr": "test",
+            "exclude": {
+                "justwatch": {
+                    "available_on": ["netflix"],
+                }
+            },
+        }
+        radarr_config = [
+            {"name": "test", "url": "http://localhost:7878", "api_key": "API_KEY"}
+        ]
+        # Global JustWatch config provides the country
+        validator = Config({
+            "libraries": [library_config],
+            "radarr": radarr_config,
+            "justwatch": {"country": "US"},
+        })
+        assert validator.validate_libraries() == True
+
+    def test_invalid_justwatch_mutually_exclusive_modes(self):
+        library_config = {
+            "name": "Movies",
+            "action_mode": "delete",
+            "radarr": "test",
+            "exclude": {
+                "justwatch": {
+                    "country": "US",
+                    "available_on": ["netflix"],
+                    "not_available_on": ["amazon"],  # Both modes - invalid
+                }
+            },
+        }
+        radarr_config = [
+            {"name": "test", "url": "http://localhost:7878", "api_key": "API_KEY"}
+        ]
+        validator = Config({"libraries": [library_config], "radarr": radarr_config})
+
+        with pytest.raises(SystemExit):
+            validator.validate_libraries()
+
+    def test_invalid_justwatch_missing_country(self):
+        library_config = {
+            "name": "Movies",
+            "action_mode": "delete",
+            "radarr": "test",
+            "exclude": {
+                "justwatch": {
+                    "available_on": ["netflix"],
+                    # Missing country - invalid
+                }
+            },
+        }
+        radarr_config = [
+            {"name": "test", "url": "http://localhost:7878", "api_key": "API_KEY"}
+        ]
+        # No global JustWatch config either
+        validator = Config({"libraries": [library_config], "radarr": radarr_config})
+
+        with pytest.raises(SystemExit):
+            validator.validate_libraries()
+
+    def test_invalid_justwatch_providers_not_list(self):
+        library_config = {
+            "name": "Movies",
+            "action_mode": "delete",
+            "radarr": "test",
+            "exclude": {
+                "justwatch": {
+                    "country": "US",
+                    "available_on": "netflix",  # Should be a list, not a string
+                }
+            },
+        }
+        radarr_config = [
+            {"name": "test", "url": "http://localhost:7878", "api_key": "API_KEY"}
+        ]
+        validator = Config({"libraries": [library_config], "radarr": radarr_config})
+
+        with pytest.raises(SystemExit):
+            validator.validate_libraries()
+
+    def test_no_justwatch_config_is_valid(self):
+        """Libraries without JustWatch config should still be valid."""
+        library_config = {
+            "name": "Movies",
+            "action_mode": "delete",
+            "radarr": "test",
+        }
+        radarr_config = [
+            {"name": "test", "url": "http://localhost:7878", "api_key": "API_KEY"}
+        ]
+        validator = Config({"libraries": [library_config], "radarr": radarr_config})
+        assert validator.validate_libraries() == True

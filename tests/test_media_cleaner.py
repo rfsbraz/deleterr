@@ -1641,3 +1641,378 @@ def test_process_library_rules(standard_config):
 
     # Assert
     assert result == all_data
+
+
+# JustWatch exclusion tests
+class TestCheckExcludedJustWatch:
+    def test_no_justwatch_config_returns_true(self, mocker):
+        """When no JustWatch config is provided, should not exclude."""
+        from app.media_cleaner import check_excluded_justwatch
+
+        media_data = {"title": "Test Movie", "tmdbId": 123}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Movie"
+        plex_media_item.year = 2022
+        exclude = {}  # No JustWatch config
+
+        result = check_excluded_justwatch(media_data, plex_media_item, exclude, None)
+
+        assert result is True
+
+    def test_no_justwatch_instance_returns_true(self, mocker):
+        """When no JustWatch instance is provided, should not exclude."""
+        from app.media_cleaner import check_excluded_justwatch
+
+        media_data = {"title": "Test Movie", "tmdbId": 123}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Movie"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"country": "US", "available_on": ["netflix"]}}
+
+        result = check_excluded_justwatch(media_data, plex_media_item, exclude, None)
+
+        assert result is True
+
+    def test_available_on_excludes_when_available(self, mocker):
+        """When available_on is set and media IS available, should exclude."""
+        from app.media_cleaner import check_excluded_justwatch
+
+        media_data = {"title": "Test Movie", "tmdbId": 123, "year": 2022}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Movie"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"available_on": ["netflix"]}}
+
+        mock_justwatch = MagicMock()
+        mock_justwatch.available_on.return_value = True
+
+        result = check_excluded_justwatch(
+            media_data, plex_media_item, exclude, mock_justwatch
+        )
+
+        mock_justwatch.available_on.assert_called_once_with(
+            "Test Movie", 2022, "movie", ["netflix"]
+        )
+        assert result is False  # Excluded
+
+    def test_available_on_does_not_exclude_when_not_available(self, mocker):
+        """When available_on is set but media is NOT available, should not exclude."""
+        from app.media_cleaner import check_excluded_justwatch
+
+        media_data = {"title": "Test Movie", "tmdbId": 123, "year": 2022}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Movie"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"available_on": ["netflix"]}}
+
+        mock_justwatch = MagicMock()
+        mock_justwatch.available_on.return_value = False
+
+        result = check_excluded_justwatch(
+            media_data, plex_media_item, exclude, mock_justwatch
+        )
+
+        assert result is True  # Not excluded
+
+    def test_not_available_on_excludes_when_not_available(self, mocker):
+        """When not_available_on is set and media is NOT available, should exclude."""
+        from app.media_cleaner import check_excluded_justwatch
+
+        media_data = {"title": "Test Movie", "tmdbId": 123, "year": 2022}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Movie"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"not_available_on": ["netflix"]}}
+
+        mock_justwatch = MagicMock()
+        mock_justwatch.is_not_available_on.return_value = True
+
+        result = check_excluded_justwatch(
+            media_data, plex_media_item, exclude, mock_justwatch
+        )
+
+        mock_justwatch.is_not_available_on.assert_called_once_with(
+            "Test Movie", 2022, "movie", ["netflix"]
+        )
+        assert result is False  # Excluded
+
+    def test_not_available_on_does_not_exclude_when_available(self, mocker):
+        """When not_available_on is set but media IS available, should not exclude."""
+        from app.media_cleaner import check_excluded_justwatch
+
+        media_data = {"title": "Test Movie", "tmdbId": 123, "year": 2022}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Movie"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"not_available_on": ["netflix"]}}
+
+        mock_justwatch = MagicMock()
+        mock_justwatch.is_not_available_on.return_value = False
+
+        result = check_excluded_justwatch(
+            media_data, plex_media_item, exclude, mock_justwatch
+        )
+
+        assert result is True  # Not excluded
+
+    def test_detects_movie_type_from_tmdb_id(self, mocker):
+        """Should detect movie type from tmdbId in media_data."""
+        from app.media_cleaner import check_excluded_justwatch
+
+        media_data = {"title": "Test Movie", "tmdbId": 123, "year": 2022}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Movie"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"available_on": ["netflix"]}}
+
+        mock_justwatch = MagicMock()
+        mock_justwatch.available_on.return_value = False
+
+        check_excluded_justwatch(media_data, plex_media_item, exclude, mock_justwatch)
+
+        # Should pass "movie" as media_type
+        mock_justwatch.available_on.assert_called_once_with(
+            "Test Movie", 2022, "movie", ["netflix"]
+        )
+
+    def test_detects_show_type_from_tvdb_id(self, mocker):
+        """Should detect show type when tmdbId is not present."""
+        from app.media_cleaner import check_excluded_justwatch
+
+        media_data = {"title": "Test Show", "tvdbId": 456, "year": 2022}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Show"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"available_on": ["netflix"]}}
+
+        mock_justwatch = MagicMock()
+        mock_justwatch.available_on.return_value = False
+
+        check_excluded_justwatch(media_data, plex_media_item, exclude, mock_justwatch)
+
+        # Should pass "show" as media_type (no tmdbId present)
+        mock_justwatch.available_on.assert_called_once_with(
+            "Test Show", 2022, "show", ["netflix"]
+        )
+
+    def test_uses_plex_title_as_fallback(self, mocker):
+        """Should use Plex media item title if media_data title is missing."""
+        from app.media_cleaner import check_excluded_justwatch
+
+        media_data = {"tmdbId": 123, "year": 2022}  # No title
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Plex Title"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"available_on": ["netflix"]}}
+
+        mock_justwatch = MagicMock()
+        mock_justwatch.available_on.return_value = False
+
+        check_excluded_justwatch(media_data, plex_media_item, exclude, mock_justwatch)
+
+        # Should use Plex title
+        mock_justwatch.available_on.assert_called_once_with(
+            "Plex Title", 2022, "movie", ["netflix"]
+        )
+
+
+class TestMediaCleanerGetJustWatchInstance:
+    def test_returns_none_when_no_justwatch_config(self, mocker, standard_config):
+        """Should return None when no JustWatch exclusion config exists."""
+        mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
+
+        media_cleaner = MediaCleaner(standard_config)
+        library = {"name": "Test", "exclude": {}}
+
+        result = media_cleaner.get_justwatch_instance(library)
+
+        assert result is None
+
+    def test_returns_none_when_no_country(self, mocker, standard_config):
+        """Should return None when country is not configured."""
+        mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
+
+        media_cleaner = MediaCleaner(standard_config)
+        library = {"name": "Test", "exclude": {"justwatch": {"available_on": ["netflix"]}}}
+
+        result = media_cleaner.get_justwatch_instance(library)
+
+        assert result is None
+
+    def test_creates_instance_with_library_country(self, mocker, standard_config):
+        """Should create instance with library-level country setting."""
+        mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
+        mock_justwatch = mocker.patch("app.media_cleaner.JustWatch")
+
+        media_cleaner = MediaCleaner(standard_config)
+        library = {
+            "name": "Test",
+            "exclude": {"justwatch": {"country": "US", "available_on": ["netflix"]}},
+        }
+
+        result = media_cleaner.get_justwatch_instance(library)
+
+        mock_justwatch.assert_called_once_with("US", "en")
+        assert result == mock_justwatch.return_value
+
+    def test_creates_instance_with_global_country(self, mocker, standard_config):
+        """Should create instance with global country setting."""
+        mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
+        mock_justwatch = mocker.patch("app.media_cleaner.JustWatch")
+
+        standard_config.settings["justwatch"] = {"country": "GB", "language": "en"}
+        media_cleaner = MediaCleaner(standard_config)
+        library = {"name": "Test", "exclude": {"justwatch": {"available_on": ["netflix"]}}}
+
+        result = media_cleaner.get_justwatch_instance(library)
+
+        mock_justwatch.assert_called_once_with("GB", "en")
+        assert result == mock_justwatch.return_value
+
+    def test_caches_instances_by_country_language(self, mocker, standard_config):
+        """Should cache and reuse JustWatch instances by country+language."""
+        mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
+        mock_justwatch = mocker.patch("app.media_cleaner.JustWatch")
+
+        media_cleaner = MediaCleaner(standard_config)
+        library1 = {
+            "name": "Movies",
+            "exclude": {"justwatch": {"country": "US", "available_on": ["netflix"]}},
+        }
+        library2 = {
+            "name": "TV Shows",
+            "exclude": {"justwatch": {"country": "US", "available_on": ["hulu"]}},
+        }
+
+        result1 = media_cleaner.get_justwatch_instance(library1)
+        result2 = media_cleaner.get_justwatch_instance(library2)
+
+        # Should only create one instance (cached)
+        mock_justwatch.assert_called_once_with("US", "en")
+        assert result1 == result2
+
+
+@pytest.mark.unit
+class TestCheckExclusionsWithJustWatch:
+    """Test JustWatch integration with the full check_exclusions pipeline."""
+
+    def test_check_exclusions_includes_justwatch(self, mocker, standard_config):
+        """Test that check_exclusions includes JustWatch check."""
+        mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
+        mock_justwatch = mocker.patch("app.media_cleaner.JustWatch")
+
+        mock_justwatch_instance = MagicMock()
+        mock_justwatch_instance.available_on.return_value = True
+        mock_justwatch.return_value = mock_justwatch_instance
+
+        standard_config.settings["justwatch"] = {"country": "US"}
+        media_cleaner = MediaCleaner(standard_config)
+
+        plex_item = MagicMock()
+        plex_item.title = "Streaming Movie"
+        plex_item.year = 2020
+        plex_item.genres = [MagicMock(tag="Action")]
+        plex_item.collections = []
+        plex_item.labels = []
+        plex_item.studio = None
+        plex_item.directors = []
+        plex_item.writers = []
+        plex_item.roles = []
+        plex_item.producers = []
+
+        media_data = {"title": "Streaming Movie", "year": 2020, "tmdbId": 12345}
+        library = {
+            "name": "Movies",
+            "exclude": {
+                "titles": [],
+                "genres": [],
+                "justwatch": {"available_on": ["netflix"]},
+            },
+        }
+
+        result = media_cleaner.check_exclusions(library, media_data, plex_item)
+
+        # JustWatch check should have been called
+        mock_justwatch_instance.available_on.assert_called_once()
+        # Result should be False because movie is on streaming
+        assert result is False
+
+    def test_check_exclusions_justwatch_passes_when_not_on_streaming(
+        self, mocker, standard_config
+    ):
+        """Test that movies not on streaming pass the JustWatch check."""
+        mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
+        mock_justwatch = mocker.patch("app.media_cleaner.JustWatch")
+
+        mock_justwatch_instance = MagicMock()
+        mock_justwatch_instance.available_on.return_value = False
+        mock_justwatch.return_value = mock_justwatch_instance
+
+        standard_config.settings["justwatch"] = {"country": "US"}
+        media_cleaner = MediaCleaner(standard_config)
+
+        plex_item = MagicMock()
+        plex_item.title = "Rare Movie"
+        plex_item.year = 2020
+        plex_item.genres = [MagicMock(tag="Action")]
+        plex_item.collections = []
+        plex_item.labels = []
+        plex_item.studio = None
+        plex_item.directors = []
+        plex_item.writers = []
+        plex_item.roles = []
+        plex_item.producers = []
+
+        media_data = {"title": "Rare Movie", "year": 2020, "tmdbId": 99999}
+        library = {
+            "name": "Movies",
+            "exclude": {
+                "titles": [],
+                "genres": [],
+                "justwatch": {"available_on": ["netflix"]},
+            },
+        }
+
+        result = media_cleaner.check_exclusions(library, media_data, plex_item)
+
+        # Result should be True because movie is NOT on streaming
+        assert result is True
+
+    def test_justwatch_combined_with_other_exclusions(self, mocker, standard_config):
+        """Test that JustWatch works correctly with other exclusion rules."""
+        mocker.patch("app.media_cleaner.PlexServer", return_value=MagicMock())
+        mock_justwatch = mocker.patch("app.media_cleaner.JustWatch")
+
+        mock_justwatch_instance = MagicMock()
+        mock_justwatch_instance.available_on.return_value = False  # Not on Netflix
+        mock_justwatch.return_value = mock_justwatch_instance
+
+        standard_config.settings["justwatch"] = {"country": "US"}
+        media_cleaner = MediaCleaner(standard_config)
+
+        # Movie that passes JustWatch but fails genre exclusion
+        plex_item = MagicMock()
+        plex_item.title = "Horror on Netflix"
+        plex_item.year = 2020
+        plex_item.genres = [MagicMock(tag="Horror")]  # Excluded genre
+        plex_item.collections = []
+        plex_item.labels = []
+        plex_item.studio = None
+        plex_item.directors = []
+        plex_item.writers = []
+        plex_item.roles = []
+        plex_item.producers = []
+
+        media_data = {"title": "Horror on Netflix", "year": 2020, "tmdbId": 11111}
+        library = {
+            "name": "Movies",
+            "exclude": {
+                "genres": ["Horror"],  # Excluded
+                "justwatch": {"available_on": ["netflix"]},
+            },
+        }
+
+        result = media_cleaner.check_exclusions(library, media_data, plex_item)
+
+        # Should be False because genre is excluded (even though JustWatch passes)
+        assert result is False
