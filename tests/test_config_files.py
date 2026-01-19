@@ -11,14 +11,16 @@ class TestConfigFiles(unittest.TestCase):
     @patch.object(trakt.Trakt, "test_connection")
     @patch.object(Config, "test_api_connection")
     @patch.object(tautulli.Tautulli, "test_connection")
+    @patch("app.modules.tautulli.RawAPI")
     @patch("app.modules.radarr.RadarrAPI")
     def validate(
         self,
         filename,
-        mock_trakt_test_connection,
-        mock_arr_test_connection,
-        mock_tautulli_test_connection,
         mock_radarr_api,
+        mock_tautulli_rawapi,
+        mock_tautulli_test_connection,
+        mock_arr_test_connection,
+        mock_trakt_test_connection,
     ):
         config = load_config(filename)
         config.validate()
