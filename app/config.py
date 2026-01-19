@@ -15,6 +15,7 @@ from app.constants import (
     VALID_SORT_ORDERS,
 )
 from app.modules.tautulli import Tautulli
+from app.modules.radarr import DRadarr
 from app.modules.trakt import Trakt
 from app.utils import validate_units
 
@@ -33,6 +34,15 @@ def load_config(config_file):
         logger.error(exc)
 
     sys.exit(1)
+
+
+def test_radarr_connection(connection):
+    if not DRadarr(connection["name"], connection["url"], connection["api_key"]).validate_connection():
+        logger.error(
+            f"Failed to connect to {connection['name']} at {connection['url']}, check your configuration."
+        )
+        return False
+    return True
 
 
 class Config:
@@ -57,10 +67,10 @@ class Config:
 
     def validate_config(self):
         return (
-            self.validate_trakt()
-            and self.validate_sonarr_and_radarr()
-            and self.validate_tautulli()
-            and self.validate_libraries()
+                self.validate_trakt()
+                and self.validate_sonarr_and_radarr_instances()
+                and self.validate_tautulli()
+                and self.validate_libraries()
         )
 
     def validate_trakt(self):
@@ -82,20 +92,20 @@ class Config:
         instance_type = "radarr" if "radarr" in library else "sonarr"
         for setting in library:
             if (
-                setting in SETTINGS_PER_INSTANCE
-                and instance_type not in SETTINGS_PER_INSTANCE[setting]
+                    setting in SETTINGS_PER_INSTANCE
+                    and instance_type not in SETTINGS_PER_INSTANCE[setting]
             ):
                 self.log_and_exit(
                     f"'{setting}' can only be set for instances of type: {SETTINGS_PER_INSTANCE[setting]}"
                 )
 
-    def validate_sonarr_and_radarr(self):
+    def validate_sonarr_and_radarr_instances(self):
         sonarr_settings = self.settings.get("sonarr", [])
         radarr_settings = self.settings.get("radarr", [])
 
         # Check if sonarr_settings and radarr_settings are lists
         if not isinstance(sonarr_settings, list) or not isinstance(
-            radarr_settings, list
+                radarr_settings, list
         ):
             self.log_and_exit(
                 "sonarr and radarr settings should be a list of dictionaries."
@@ -103,7 +113,10 @@ class Config:
 
         return all(
             self.test_api_connection(connection)
-            for connection in sonarr_settings + radarr_settings
+            for connection in sonarr_settings
+        ) and all(
+            test_radarr_connection(connection)
+            for connection in radarr_settings
         )
 
     def test_api_connection(self, connection):
@@ -159,6 +172,7 @@ class Config:
             self.validate_sort_configuration(library)
             self.validate_settings_for_instance(library)
             self.validate_justwatch_exclusions(library)
+            self.validate_radarr_exclusions(library)
 
         return True
 
@@ -195,16 +209,14 @@ class Config:
                     f"'{mode}' must be a list of provider names."
                 )
 
-        return True
-
     def validate_library_connections(self, library):
         self.validate_connection(library, "sonarr")
         self.validate_connection(library, "radarr")
 
     def validate_connection(self, library, connection_name):
         if connection_name in library and not any(
-            connection["name"] == library[connection_name]
-            for connection in self.settings.get(connection_name, [])
+                connection["name"] == library[connection_name]
+                for connection in self.settings.get(connection_name, [])
         ):
             self.log_and_exit(
                 f"{connection_name.capitalize()} '{library[connection_name]}' is not configured. Please check your configuration."
@@ -224,8 +236,8 @@ class Config:
 
     def validate_trakt_configuration(self, library, trakt_configured):
         if (
-            len(library.get("exclude", {}).get("trakt_lists", [])) > 0
-            and not trakt_configured
+                len(library.get("exclude", {}).get("trakt_lists", [])) > 0
+                and not trakt_configured
         ):
             self.log_and_exit(
                 f"Trakt lists configured for {library['name']} but trakt is not configured, check your configuration."
@@ -256,8 +268,8 @@ class Config:
             )
 
         if (
-            "watch_status" in library
-            and "apply_last_watch_threshold_to_collections" in library
+                "watch_status" in library
+                and "apply_last_watch_threshold_to_collections" in library
         ):
             self.log_and_exit(
                 f"'apply_last_watch_threshold_to_collections' cannot be used when 'watch_status' is set in library '{library.get('name')}'. This would mean entire collections would be deleted when a single item in the collection meets the watch_status criteria."
@@ -277,3 +289,49 @@ class Config:
                 self.log_and_exit(
                     f"Invalid sort order '{sort_order}' in library '{library['name']}', supported values are {VALID_SORT_ORDERS}."
                 )
+
+    def validate_radarr_exclusions(self, library):
+        exclude = library.get("exclude", {})
+
+        # If exclude is not set, no need to validate
+        if not exclude:
+            return True
+
+        radar_exclusions = exclude.get("radarr", {})
+        if not radar_exclusions:
+            return True
+
+        if not library.get("radarr"):
+            self.log_and_exit(
+                f"Radarr exclusions set for library '{library['name']}' but no radarr instance is set."
+            )
+
+        allowed_exclusions = ["tags", "quality_profiles", "paths", "monitored"]
+        for exclusion in radar_exclusions:
+            if exclusion not in allowed_exclusions:
+                self.log_and_exit(
+                    f"Invalid exclusion '{exclusion}' in library '{library['name']}', supported values are {allowed_exclusions}."
+                )
+
+        radarr_settings = self.settings.get("radarr", [])
+        # Warn if tags do not exist in radarr
+        if "tags" in radar_exclusions:
+            for connection in radarr_settings:
+                radarr_instance = DRadarr(connection["name"], connection["url"], connection["api_key"])
+                tags = radarr_instance.get_tags()
+                for tag in radar_exclusions["tags"]:
+                    if tag not in [t["label"] for t in tags]:
+                        logger.warning(
+                            f"Radarr tag '{tag}' does not exist in instance '{connection['name']}'"
+                        )
+
+        # Warn if quality profiles do not exist in radarr
+        if "quality_profiles" in radar_exclusions:
+            profiles = radarr_instance.get_quality_profiles()
+            for profile in radar_exclusions["quality_profiles"]:
+                if profile not in [p["name"] for p in profiles]:
+                    logger.warning(
+                        f"Radarr profile '{profile}' does not exist in instance '{connection['name']}'"
+                    )
+
+        return True

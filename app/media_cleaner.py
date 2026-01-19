@@ -90,7 +90,7 @@ class MediaCleaner:
             show
             for show in unfiltered_all_show_data
             if show["seriesType"]
-            == library.get("series_type", DEFAULT_SONARR_SERIES_TYPE)
+               == library.get("series_type", DEFAULT_SONARR_SERIES_TYPE)
         ]
 
     def process_library(self, library, sonarr_instance, unfiltered_all_show_data):
@@ -98,7 +98,8 @@ class MediaCleaner:
             return 0
 
         all_show_data = self.filter_shows(library, unfiltered_all_show_data)
-        logger.info("Instance has %s items to process of type '%s'", len(all_show_data), library.get("series_type", DEFAULT_SONARR_SERIES_TYPE))
+        logger.info("Instance has %s items to process of type '%s'", len(all_show_data),
+                    library.get("series_type", DEFAULT_SONARR_SERIES_TYPE))
 
         if not all_show_data:
             return 0
@@ -129,19 +130,19 @@ class MediaCleaner:
         )
 
     def process_shows(
-        self,
-        library,
-        sonarr_instance,
-        plex_library,
-        all_show_data,
-        show_activity,
-        trakt_items,
-        max_actions_per_run,
+            self,
+            library,
+            sonarr_instance,
+            plex_library,
+            all_show_data,
+            show_activity,
+            trakt_items,
+            max_actions_per_run,
     ):
         saved_space = 0
         actions_performed = 0
         for sonarr_show in self.process_library_rules(
-            library, plex_library, all_show_data, show_activity, trakt_items
+                library, plex_library, all_show_data, show_activity, trakt_items
         ):
             if max_actions_per_run and actions_performed >= max_actions_per_run:
                 logger.info(
@@ -165,12 +166,12 @@ class MediaCleaner:
         return saved_space
 
     def process_show(
-        self,
-        library,
-        sonarr_instance,
-        sonarr_show,
-        actions_performed,
-        max_actions_per_run,
+            self,
+            library,
+            sonarr_instance,
+            sonarr_show,
+            actions_performed,
+            max_actions_per_run,
     ):
         disk_size = sonarr_show.get("statistics", {}).get("sizeOnDisk", 0)
         total_episodes = sonarr_show.get("statistics", {}).get("episodeFileCount", 0)
@@ -199,14 +200,14 @@ class MediaCleaner:
         return disk_size
 
     def delete_show_if_allowed(
-        self,
-        library,
-        sonarr_instance,
-        sonarr_show,
-        actions_performed,
-        max_actions_per_run,
-        disk_size,
-        total_episodes,
+            self,
+            library,
+            sonarr_instance,
+            sonarr_show,
+            actions_performed,
+            max_actions_per_run,
+            disk_size,
+            total_episodes,
     ):
         logger.info(
             "[%s/%s] Deleting show '%s' from sonarr instance  '%s' (%s - %s episodes)",
@@ -228,7 +229,7 @@ class MediaCleaner:
         else:
             self.delete_series(sonarr_instance, sonarr_show)
 
-    def process_library_movies(self, library, radarr_instance, all_movie_data):
+    def process_library_movies(self, library, radarr_instance):
         if not library_meets_disk_space_threshold(library, radarr_instance):
             return 0
 
@@ -246,26 +247,27 @@ class MediaCleaner:
             library,
             radarr_instance,
             movies_library,
-            all_movie_data,
             movie_activity,
             trakt_movies,
             max_actions_per_run,
         )
 
     def process_movies(
-        self,
-        library,
-        radarr_instance,
-        movies_library,
-        all_movie_data,
-        movie_activity,
-        trakt_movies,
-        max_actions_per_run,
+            self,
+            library,
+            radarr_instance,
+            movies_library,
+            movie_activity,
+            trakt_movies,
+            max_actions_per_run,
     ):
         saved_space = 0
         actions_performed = 0
+
+        all_movie_data = radarr_instance.get_movies()
+
         for radarr_movie in self.process_library_rules(
-            library, movies_library, all_movie_data, movie_activity, trakt_movies
+                library, movies_library, all_movie_data, movie_activity, trakt_movies, radarr_instance=radarr_instance
         ):
             if max_actions_per_run and actions_performed >= max_actions_per_run:
                 logger.info(
@@ -289,12 +291,12 @@ class MediaCleaner:
         return saved_space
 
     def process_movie(
-        self,
-        library,
-        radarr_instance,
-        radarr_movie,
-        actions_performed,
-        max_actions_per_run,
+            self,
+            library,
+            radarr_instance,
+            radarr_movie,
+            actions_performed,
+            max_actions_per_run,
     ):
         disk_size = radarr_movie.get("sizeOnDisk", 0)
 
@@ -355,13 +357,13 @@ class MediaCleaner:
             )
 
     def delete_movie_if_allowed(
-        self,
-        library,
-        radarr_instance,
-        radarr_movie,
-        actions_performed,
-        max_actions_per_run,
-        disk_size,
+            self,
+            library,
+            radarr_instance,
+            radarr_movie,
+            actions_performed,
+            max_actions_per_run,
+            disk_size,
     ):
         logger.info(
             "[%s/%s] Deleting movie '%s' from radarr instance  '%s' (%s)",
@@ -436,7 +438,7 @@ class MediaCleaner:
         plex_media_item = self.find_by_title_and_year(
             plex_library, title, year, alternate_titles
         )
-        
+
         return plex_media_item
 
     def find_by_guid(self, plex_library, guid):
@@ -449,18 +451,18 @@ class MediaCleaner:
 
     def match_title_and_year(self, plex_media_item, title, year):
         if (
-            title.lower() == plex_media_item.title.lower()
-            or f"{title.lower()} ({year})" == plex_media_item.title.lower()
+                title.lower() == plex_media_item.title.lower()
+                or f"{title.lower()} ({year})" == plex_media_item.title.lower()
         ):
             return True
         return False
 
     def match_year(self, plex_media_item, year):
         if (
-            not year
-            or not plex_media_item.year
-            or plex_media_item.year == year
-            or (abs(plex_media_item.year - year)) <= 2 # Allow 2 years of difference in the release date
+                not year
+                or not plex_media_item.year
+                or plex_media_item.year == year
+                or (abs(plex_media_item.year - year)) <= 2  # Allow 2 years of difference in the release date
         ):
             return True
         return False
@@ -469,7 +471,7 @@ class MediaCleaner:
         for _, plex_media_item in plex_library:
             for t in [title] + alternate_titles:
                 if self.match_title_and_year(
-                    plex_media_item, t, year
+                        plex_media_item, t, year
                 ) and self.match_year(plex_media_item, year):
                     return plex_media_item
         return None
@@ -494,9 +496,9 @@ class MediaCleaner:
                 if f"tmdb://{tmdb_id}" in guid.id:
                     return plex_media_item
         return None
-    
+
     def process_library_rules(
-        self, library_config, plex_library, all_data, activity_data, trakt_movies
+            self, library_config, plex_library, all_data, activity_data, trakt_movies, radarr_instance=None
     ):
         # get the time thresholds from the config
         last_watched_threshold = library_config.get("last_watched_threshold", None)
@@ -520,9 +522,9 @@ class MediaCleaner:
                     continue
                 last_watched = (datetime.now() - watched_data["last_watched"]).days
                 if (
-                    plex_media_item.collections
-                    and last_watched_threshold is not None
-                    and last_watched < last_watched_threshold
+                        plex_media_item.collections
+                        and last_watched_threshold is not None
+                        and last_watched < last_watched_threshold
                 ):
                     logger.debug(
                         f"{watched_data['title']} watched {last_watched} days ago, adding collection {plex_media_item.collections} to watched collections"
@@ -542,6 +544,7 @@ class MediaCleaner:
                 tvdb_id=media_data.get("tvdbId"),
                 tmdb_id=media_data.get("tmdbId"),
             )
+
             if plex_media_item is None:
                 if not media_data.get("movieFileId", {}) and media_data.get("statistics", {}).get("episodeFileCount", 0) == 0:
                     logger.debug(
@@ -554,14 +557,15 @@ class MediaCleaner:
                     unmatched += 1
                 continue
             if not self.is_movie_actionable(
-                library_config,
-                activity_data,
-                media_data,
-                trakt_movies,
-                plex_media_item,
-                last_watched_threshold,
-                added_at_threshold,
-                apply_last_watch_threshold_to_collections,
+                    library_config,
+                    activity_data,
+                    media_data,
+                    trakt_movies,
+                    plex_media_item,
+                    last_watched_threshold,
+                    added_at_threshold,
+                    apply_last_watch_threshold_to_collections,
+                    radarr_instance
             ):
                 continue
 
@@ -570,50 +574,51 @@ class MediaCleaner:
         logger.info(f"Found {len(all_data)} items, {unmatched} unmatched")
 
     def is_movie_actionable(
-        self,
-        library,
-        activity_data,
-        media_data,
-        trakt_movies,
-        plex_media_item,
-        last_watched_threshold,
-        added_at_threshold,
-        apply_last_watch_threshold_to_collections,
-    ):
-        if not self.check_watched_status(
+            self,
             library,
             activity_data,
             media_data,
+            trakt_movies,
             plex_media_item,
             last_watched_threshold,
+            added_at_threshold,
+            apply_last_watch_threshold_to_collections,
+            radarr_instance=None
+    ):
+        if not self.check_watched_status(
+                library,
+                activity_data,
+                media_data,
+                plex_media_item,
+                last_watched_threshold,
         ):
             return False
 
         if not self.check_collections(
-            apply_last_watch_threshold_to_collections,
-            media_data,
-            plex_media_item,
+                apply_last_watch_threshold_to_collections,
+                media_data,
+                plex_media_item,
         ):
             return False
 
-        if not self.check_trakt_movies(media_data, trakt_movies):
+        if not self.check_exclusions(library, media_data, plex_media_item, radarr_instance):
             return False
 
         if not self.check_added_date(media_data, plex_media_item, added_at_threshold):
             return False
 
-        if not self.check_exclusions(library, media_data, plex_media_item):
+        if not self.check_trakt_movies(media_data, trakt_movies):
             return False
 
         return True
 
     def check_watched_status(
-        self,
-        library,
-        activity_data,
-        media_data,
-        plex_media_item,
-        last_watched_threshold,
+            self,
+            library,
+            activity_data,
+            media_data,
+            plex_media_item,
+            last_watched_threshold,
     ):
         if watched_data := find_watched_data(plex_media_item, activity_data):
             last_watched = (datetime.now() - watched_data["last_watched"]).days
@@ -632,14 +637,14 @@ class MediaCleaner:
         return True
 
     def check_collections(
-        self,
-        apply_last_watch_threshold_to_collections,
-        media_data,
-        plex_media_item,
+            self,
+            apply_last_watch_threshold_to_collections,
+            media_data,
+            plex_media_item,
     ):
         if apply_last_watch_threshold_to_collections:
             if already_watched := self.watched_collections.intersection(
-                {c.tag for c in plex_media_item.collections}
+                    {c.tag for c in plex_media_item.collections}
             ):
                 logger.debug(
                     f"{media_data['title']} has watched collections ({already_watched}), skipping"
@@ -665,19 +670,20 @@ class MediaCleaner:
 
         return True
 
-    def check_exclusions(self, library, media_data, plex_media_item):
+    def check_exclusions(self, library, media_data, plex_media_item, radarr_instance=None):
         exclude = library.get("exclude", {})
         exclusion_checks = [
-            check_excluded_titles,
-            check_excluded_genres,
-            check_excluded_collections,
-            check_excluded_labels,
-            check_excluded_release_years,
-            check_excluded_studios,
-            check_excluded_producers,
-            check_excluded_directors,
-            check_excluded_writers,
-            check_excluded_actors,
+            lambda m, pmi, e: check_excluded_radarr_fields(m, pmi, e, radarr_instance),
+            lambda m, pmi, e: check_excluded_titles(m, pmi, e),
+            lambda m, pmi, e: check_excluded_genres(m, pmi, e),
+            lambda m, pmi, e: check_excluded_collections(m, pmi, e),
+            lambda m, pmi, e: check_excluded_labels(m, pmi, e),
+            lambda m, pmi, e: check_excluded_release_years(m, pmi, e),
+            lambda m, pmi, e: check_excluded_studios(m, pmi, e),
+            lambda m, pmi, e: check_excluded_producers(m, pmi, e),
+            lambda m, pmi, e: check_excluded_directors(m, pmi, e),
+            lambda m, pmi, e: check_excluded_writers(m, pmi, e),
+            lambda m, pmi, e: check_excluded_actors(m, pmi, e),
         ]
 
         if not all(
@@ -693,6 +699,48 @@ class MediaCleaner:
             return False
 
         return True
+
+
+def check_excluded_radarr_fields(media_data, plex_media_item, exclude, radarr_instance):
+    radarr_exclusions = exclude.get("radarr", {})
+
+    if not radarr_exclusions or not radarr_instance:
+        return True
+
+    radarr_media_item = radarr_instance.get_movie(media_data["tmdbId"])
+
+    if not radarr_media_item:
+        logger.warning(f"{media_data['title']} not found in Radarr, skipping")
+        return True
+    else:
+        # Radarr returns a list of movies, but TMDB ID is unique
+        radarr_media_item = radarr_media_item[0]
+
+    if 'monitored' in radarr_exclusions and radarr_exclusions.get("monitored") == radarr_media_item.get("monitored"):
+        logger.debug(f"{media_data['title']} has excluded radarr monitored status, skipping")
+        return False
+
+    if (radarr_exclusions.get('quality_profiles')
+            and radarr_instance.check_movie_has_quality_profiles(
+                radarr_media_item,
+                radarr_exclusions.get('quality_profiles')
+            )
+    ):
+        logger.debug(f"{media_data['title']} has excluded radarr quality profiles, skipping")
+        return False
+
+    if radarr_exclusions.get('tags') and radarr_instance.check_movie_has_tags(radarr_media_item,
+                                                                              radarr_exclusions.get('tags')):
+        logger.debug(f"{media_data['title']} has excluded radarr tags, skipping")
+        return False
+
+    if radarr_exclusions.get('paths'):
+        for path in radarr_exclusions.get('paths'):
+            if path in radarr_media_item.get('path'):
+                logger.debug(f"{media_data['title']} has excluded radarr path, skipping")
+                return False
+
+    return True
 
 
 def check_excluded_titles(media_data, plex_media_item, exclude):
@@ -731,9 +779,9 @@ def check_excluded_labels(media_data, plex_media_item, exclude):
 
 def check_excluded_release_years(media_data, plex_media_item, exclude):
     if (
-        exclude.get("release_years", 0)
-        and plex_media_item.year
-        and plex_media_item.year >= datetime.now().year - exclude.get("release_years")
+            exclude.get("release_years", 0)
+            and plex_media_item.year
+            and plex_media_item.year >= datetime.now().year - exclude.get("release_years")
     ):
         logger.debug(
             f"{media_data['title']} ({plex_media_item.year}) was released within the threshold years ({datetime.now().year} - {exclude.get('release_years', 0)} = {datetime.now().year - exclude.get('release_years', 0)}), skipping"
@@ -744,7 +792,7 @@ def check_excluded_release_years(media_data, plex_media_item, exclude):
 
 def check_excluded_studios(media_data, plex_media_item, exclude):
     if plex_media_item.studio and plex_media_item.studio.lower() in exclude.get(
-        "studios", []
+            "studios", []
     ):
         logger.debug(
             f"{media_data['title']} has excluded studio {plex_media_item.studio}, skipping"
@@ -842,7 +890,7 @@ def find_watched_data(plex_media_item, activity_data):
 
     for guid, history in activity_data.items():
         if guid_matches(plex_media_item, guid) or title_and_year_match(
-            plex_media_item, history
+                plex_media_item, history
         ):
             return history
 
@@ -855,11 +903,11 @@ def guid_matches(plex_media_item, guid):
 
 def title_and_year_match(plex_media_item, history):
     return (
-        history["title"] == plex_media_item.title
-        and history["year"]
-        and plex_media_item.year
-        and plex_media_item.year != history["year"]
-        and (abs(plex_media_item.year - history["year"])) <= 1
+            history["title"] == plex_media_item.title
+            and history["year"]
+            and plex_media_item.year
+            and plex_media_item.year != history["year"]
+            and (abs(plex_media_item.year - history["year"])) <= 1
     )
 
 
@@ -879,7 +927,7 @@ def get_sort_key_function(sort_field):
     sort_key_functions = {
         "title": lambda media_item: media_item.get("sortTitle", ""),
         "size": lambda media_item: media_item.get("sizeOnDisk")
-        or media_item.get("statistics", {}).get("sizeOnDisk", 0),
+                                   or media_item.get("statistics", {}).get("sizeOnDisk", 0),
         "release_year": lambda media_item: media_item.get("year", 0),
         "runtime": lambda media_item: media_item.get("runtime", 0),
         "added_date": lambda media_item: media_item.get("added", ""),
@@ -898,9 +946,9 @@ def get_sort_key_function(sort_field):
 def get_rating(media_item):
     ratings = media_item.get("ratings", {})
     return (
-        ratings.get("imdb", {}).get("value", 0)
-        or ratings.get("tmdb", {}).get("value", 0)
-        or ratings.get("value", 0)
+            ratings.get("imdb", {}).get("value", 0)
+            or ratings.get("tmdb", {}).get("value", 0)
+            or ratings.get("value", 0)
     )
 
 
@@ -908,11 +956,11 @@ def _get_config_value(config, key, default=None):
     return config[key] if key in config else default
 
 
-def library_meets_disk_space_threshold(library, pyarr):
+def library_meets_disk_space_threshold(library, dpyarr_instance):
     for item in library.get("disk_size_threshold", []):
         path = item.get("path")
         threshold = item.get("threshold")
-        disk_space = pyarr.get_disk_space()
+        disk_space = dpyarr_instance.get_disk_space()
         folder_found = False
         for folder in disk_space:
             if folder["path"] == path:

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Radarr-based exclusions for movie libraries (#115)
+  - Exclude by Radarr tags
+  - Exclude by quality profile
+  - Exclude by file path
+  - Exclude by monitored status
 - ARM64 Docker image support for Raspberry Pi and Apple Silicon
 - Better show matching with improved title comparison
 - Security policy (SECURITY.md) with vulnerability reporting guidelines

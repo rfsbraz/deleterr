@@ -13,7 +13,7 @@ def deleterr():
 
 
 @patch("app.deleterr.SonarrAPI")
-@patch("app.deleterr.RadarrAPI")
+@patch("app.modules.radarr.DRadarr")
 def test_process_radarr(radarr_mock, sonarr_mock, deleterr):
     # Arrange
     deleterr.radarr = {
@@ -33,12 +33,11 @@ def test_process_radarr(radarr_mock, sonarr_mock, deleterr):
     deleterr.media_cleaner.process_library_movies.assert_called_once_with(
         {"radarr": "Radarr1"},
         deleterr.radarr["Radarr1"],
-        [{"title": "Test Movie"}],
     )
 
 
 @patch("app.deleterr.SonarrAPI")
-@patch("app.deleterr.RadarrAPI")
+@patch("app.modules.radarr.DRadarr")
 def test_process_sonarr(radarr_mock, sonarr_mock, deleterr):
     # Arrange
     deleterr.sonarr = {

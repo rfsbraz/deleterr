@@ -296,3 +296,39 @@ libraries:
         not_available_on: ["any"]
 ```
 </details>
+
+#### Radarr Exclusions (Movies Only)
+
+For movie libraries using Radarr, you can exclude media based on Radarr-specific metadata. This allows you to protect movies based on their tags, quality profiles, file paths, or monitored status in Radarr.
+
+| Property | Description | Example |
+|----------|-------------|---------|
+| `radarr` -> `tags` | Exclude movies that have any of these Radarr tags. Tag names must match exactly (case-insensitive). | `["4K", "keep", "favorite"]` |
+| `radarr` -> `quality_profiles` | Exclude movies with any of these quality profiles. Profile names must match exactly. | `["Bluray-2160p", "Remux-2160p"]` |
+| `radarr` -> `paths` | Exclude movies in these paths. Uses partial matching (substring). | `["/media/4k", "/data/protected"]` |
+| `radarr` -> `monitored` | Exclude based on monitored status. Set to `true` to exclude monitored movies, `false` to exclude unmonitored movies. | `true` |
+
+<details>
+  <summary>See example</summary>
+
+```yaml
+libraries:
+  - name: "Movies"
+    radarr: Radarr
+    action_mode: "delete"
+    last_watched_threshold: 90
+    added_at_threshold: 180
+    exclude:
+      # Standard Plex exclusions
+      genres: ["horror"]
+      collections: ["Marvel Cinematic Universe"]
+      # Radarr-specific exclusions
+      radarr:
+        tags: ["4K", "favorite", "keep"]
+        quality_profiles: ["Bluray-2160p", "Remux-2160p"]
+        paths: ["/data/media/4k"]
+        monitored: true
+```
+</details>
+
+> **Note**: Radarr exclusions only apply to movie libraries with a `radarr` instance configured. They are ignored for TV show libraries using Sonarr.
