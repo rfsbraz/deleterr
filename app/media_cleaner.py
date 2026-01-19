@@ -23,8 +23,9 @@ class MediaCleaner:
         self._justwatch_instances = {}  # Cache for JustWatch instances per country
 
         # Setup connections
-        # SSL verification can be disabled for self-signed certificates
-        ssl_verify = config.settings.get("ssl_verify", True)
+        # SSL verification is disabled by default for self-signed certificates
+        # Set ssl_verify: true in config for secure connections
+        ssl_verify = config.settings.get("ssl_verify", False)
 
         self.tautulli = Tautulli(
             config.settings.get("tautulli").get("url"),
