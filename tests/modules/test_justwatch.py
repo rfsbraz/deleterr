@@ -145,7 +145,7 @@ class TestJustWatch:
     def test_available_on(self, mock_search_by_title_and_year):
         # Arrange
         mock_offer = MagicMock()
-        mock_offer.package.technical_name = "netflix"
+        mock_offer.technical_name = "netflix"
 
         mock_entry = MagicMock()
         mock_entry.offers = [mock_offer]
@@ -164,7 +164,7 @@ class TestJustWatch:
     def test_available_on_case_insensitive(self, mock_search_by_title_and_year):
         # Arrange
         mock_offer = MagicMock()
-        mock_offer.package.technical_name = "Netflix"
+        mock_offer.technical_name = "Netflix"
 
         mock_entry = MagicMock()
         mock_entry.offers = [mock_offer]
@@ -182,7 +182,7 @@ class TestJustWatch:
     def test_available_on_false(self, mock_search_by_title_and_year):
         # Arrange
         mock_offer = MagicMock()
-        mock_offer.package.technical_name = "amazon"
+        mock_offer.technical_name = "amazon"
 
         mock_entry = MagicMock()
         mock_entry.offers = [mock_offer]
@@ -201,7 +201,7 @@ class TestJustWatch:
     def test_available_on_any(self, mock_search_by_title_and_year):
         # Arrange
         mock_offer = MagicMock()
-        mock_offer.package.technical_name = "some_provider"
+        mock_offer.technical_name = "some_provider"
 
         mock_entry = MagicMock()
         mock_entry.offers = [mock_offer]

@@ -107,13 +107,13 @@ class JustWatch:
             return True
 
         # Check for specific providers
+        # Note: In simple-justwatch-python-api v0.13, technical_name is directly
+        # on the Offer object (not nested under package as in v0.14+)
         for offer in result.offers:
-            if offer.package and offer.package.technical_name:
-                offer_provider = offer.package.technical_name.lower()
+            if hasattr(offer, "technical_name") and offer.technical_name:
+                offer_provider = offer.technical_name.lower()
                 if offer_provider in providers_lower:
-                    logger.debug(
-                        f"'{title}' is available on {offer.package.technical_name}"
-                    )
+                    logger.debug(f"'{title}' is available on {offer.technical_name}")
                     return True
 
         logger.debug(
