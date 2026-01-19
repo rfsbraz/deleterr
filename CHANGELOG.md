@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.20] - 2026-01-19
 
 ### Added
 - Radarr-based exclusions for movie libraries (#115)
@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Contributing guidelines (CONTRIBUTING.md)
 
 ### Changed
-- SSL verification is now configurable via `ssl_verify` setting (defaults to `true`)
+- SSL verification is now configurable via `ssl_verify` setting (defaults to `false`)
 - Pinned pytest-mock dependency to 3.14.1 for reproducible builds
 
 ### Fixed
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build process - install cargo and rust for dependencies
 
 ### Security
-- SSL verification now enabled by default (was disabled)
+- SSL verification is now configurable, defaulting to disabled for backwards compatibility with self-signed certificates
 
 ## [0.9.0] - Previous Release
 
