@@ -27,6 +27,7 @@ from app.schema import (
     SonarrInstance,
     TraktConfig,
     JustWatchGlobalConfig,
+    OverseerrConfig,
     LibraryConfig,
     DiskSizeThreshold,
     SortConfig,
@@ -34,6 +35,7 @@ from app.schema import (
     TraktExclusions,
     JustWatchExclusions,
     RadarrExclusions,
+    OverseerrExclusions,
 )
 
 
@@ -291,6 +293,20 @@ justwatch:
 
 ---
 
+## Overseerr
+
+Optional. Connection settings for [Overseerr](https://overseerr.dev/) request-based exclusions.
+
+{overseerr_table}
+
+```yaml
+overseerr:
+  url: "http://localhost:5055"
+  api_key: "YOUR_OVERSEERR_API_KEY"
+```
+
+---
+
 ## Libraries
 
 Configuration for each Plex library to manage.
@@ -404,6 +420,31 @@ exclude:
     quality_profiles: ["Remux-2160p", "Bluray-2160p"]
     paths: ["/data/media/4k", "/data/protected"]
     monitored: true
+```
+
+### Overseerr Exclusions
+
+Exclude or include media based on Overseerr request status. Requires global `overseerr` config.
+
+{overseerr_exclusions_table}
+
+**Protect requested content:**
+```yaml
+exclude:
+  overseerr:
+    mode: "exclude"
+    include_pending: true
+```
+
+**Cleanup old user requests:**
+```yaml
+exclude:
+  overseerr:
+    mode: "include_only"
+    users: ["user1"]
+    request_status: ["approved"]
+    min_request_age_days: 90
+    update_status: true
 ```
 
 ---
@@ -548,6 +589,7 @@ libraries:
         sonarr_table=generate_table(SonarrInstance),
         trakt_table=generate_table(TraktConfig),
         justwatch_table=generate_table(JustWatchGlobalConfig),
+        overseerr_table=generate_table(OverseerrConfig),
         library_table=library_table,
         disk_table=generate_table(DiskSizeThreshold),
         sort_table=generate_table(SortConfig),
@@ -555,6 +597,7 @@ libraries:
         trakt_exclusions_table=generate_table(TraktExclusions, "trakt."),
         justwatch_exclusions_table=generate_table(JustWatchExclusions, "justwatch."),
         radarr_exclusions_table=generate_table(RadarrExclusions, "radarr."),
+        overseerr_exclusions_table=generate_table(OverseerrExclusions, "overseerr."),
     )
 
     output_path.write_text(doc, encoding="utf-8")

@@ -137,30 +137,6 @@ trakt:
 
 ---
 
-## Overseerr
-
-[Overseerr](https://overseerr.dev/) is a request management and media discovery tool for your media server. Deleterr can integrate with Overseerr to exclude or include media based on request status.
-
-This is useful for:
-- **Protecting requested content**: Don't delete media that users specifically requested through Overseerr
-- **Cleaning up old requests**: Delete content that was requested a long time ago and hasn't been watched
-- **Making media requestable again**: After deletion, update Overseerr so users can re-request the media
-
-| Property | Description | Example |
-|----------|-------------|---------|
-| `url` | URL of your Overseerr server. | `"http://localhost:5055"` |
-| `api_key` | Overseerr API key. You can find this in Overseerr Settings → General. | `"YOUR_OVERSEERR_API_KEY"` |
-
-<details>
-  <summary>See example</summary>
-
-```yaml
-overseerr:
-  url: "http://localhost:5055"
-  api_key: "YOUR_OVERSEERR_API_KEY"
-```
-</details>
-
 ## JustWatch
 
 Optional. Global settings for streaming availability lookups.
@@ -174,6 +150,23 @@ Optional. Global settings for streaming availability lookups.
 justwatch:
   country: "US"
   language: "en"
+```
+
+---
+
+## Overseerr
+
+Optional. Connection settings for [Overseerr](https://overseerr.dev/) request-based exclusions.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `url` | string | Yes | - | URL of your Overseerr server |
+| `api_key` | string | Yes | - | Overseerr API key. Found in Overseerr Settings → General |
+
+```yaml
+overseerr:
+  url: "http://localhost:5055"
+  api_key: "YOUR_OVERSEERR_API_KEY"
 ```
 
 ---
@@ -339,7 +332,7 @@ exclude:
 
 ### Overseerr Exclusions
 
-Exclude or include media based on Overseerr request status. This requires configuring the global `overseerr` settings first.
+Exclude or include media based on Overseerr request status. Requires global `overseerr` config.
 
 | Property | Type | Required | Default | Description |
 |----------|------|----------|---------|-------------|
