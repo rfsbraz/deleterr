@@ -1,0 +1,33 @@
+name: Validate Docs
+
+on:
+  pull_request:
+    paths:
+      - 'app/schema.py'
+      - 'docs/CONFIGURATION.md'
+      - 'scripts/generate_docs.py'
+
+jobs:
+  check-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pydantic
+
+      - name: Generate docs from schema
+        run: python -m scripts.generate_docs
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --exit-code docs/CONFIGURATION.md; then
+            echo "::error::Documentation is out of date with schema."
+            echo "::error::Run 'python -m scripts.generate_docs' and commit the changes."
+            exit 1
+          fi
+          echo "Documentation is up to date."

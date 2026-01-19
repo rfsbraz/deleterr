@@ -1,334 +1,398 @@
-# Deleterr Configuration Guide
+---
+title: Configuration Reference
+---
 
-This guide provides a detailed explanation for each configuration setting you'll need to set up Deleterr.
+# Configuration Reference
 
-You can find a sample configuration file in the [config](../config) directory.
+Complete reference for all Deleterr configuration options.
 
-Fields marked with **\*** are mandatory and must be configured.
+> **Note**: This documentation is auto-generated from the [Pydantic schema](../app/schema.py).
+> Run `python -m scripts.generate_docs` to regenerate after schema changes.
+
+---
+
+* TOC
+{:toc}
+
+---
 
 ## General Settings
 
-General settings set at the root level of the configuration file.
+Root-level settings that apply globally.
 
-| Property | Description | Example |
-|----------|-------------|---------|
-| `dry_run` | If true, actions are only logged, not performed. | `true` |
-| `plex_library_scan_after_actions` | Trigger a Plex library scan after actions are performed. | `false` |
-| `tautulli_library_scan_after_actions` | Trigger a Tautulli library scan after actions are performed. | `false` |
-| `action_delay` | Delay (in seconds) between actions. Defaults to `0`. Sometimes the Plex/Sonarr/Radarr instances start to timeout when the delay is set to zero (specially if deleting remote media). Increase this to prevent errors | `25` |
-
-<details>
-  <summary>See example</summary>
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `dry_run` | boolean | No | `true` | If true, actions are only logged, not performed |
+| `interactive` | boolean | No | `false` | If true, prompts for confirmation before each action |
+| `ssl_verify` | boolean | No | `false` | Enable SSL certificate verification for API connections |
+| `action_delay` | integer | No | `0` | Delay (in seconds) between actions. Increase if Plex/Sonarr/Radarr timeout on remote mounts |
+| `plex_library_scan_after_actions` | boolean | No | `false` | Trigger a Plex library scan after actions are performed |
+| `tautulli_library_scan_after_actions` | boolean | No | `false` | Trigger a Tautulli library scan after actions are performed |
 
 ```yaml
-dry_run: false
+dry_run: true
+ssl_verify: false
+action_delay: 25
+interactive: false
 plex_library_scan_after_actions: false
 tautulli_library_scan_after_actions: false
-action_delay: 0
 ```
-</details>
 
-## Plex *
-This section holds the connection details for your Plex server. The URL is the address where your Plex server is hosted, and the token is your unique Plex authentication token.
+---
 
-| Property | Description | Example |
-|----------|-------------|---------|
-| `url` | URL of your Plex server. | `"http://localhost:32400"` |
-| `token` | Plex authentication token. | `"YOUR_PLEX_TOKEN"` |
+## Plex
 
-<details>
-  <summary>See example</summary>
+**Required.** Connection details for your Plex server.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `url` | string | Yes | - | URL of your Plex server |
+| `token` | string | Yes | - | Plex authentication token. [How to get](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) |
 
 ```yaml
 plex:
-    url: "http://localhost:32400"
-    token: "YOUR_PLEX_TOKEN"
+  url: "http://localhost:32400"
+  token: "YOUR_PLEX_TOKEN"
 ```
-</details>
+
+---
+
+## Tautulli
+
+**Required.** Connection details for Tautulli (watch history tracking).
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `url` | string | Yes | - | URL of your Tautulli server |
+| `api_key` | string | Yes | - | Tautulli API key |
+
+```yaml
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "YOUR_TAUTULLI_API_KEY"
+```
+
+---
 
 ## Radarr
 
-Here, you can specify the connection settings for **one or more** Radarr instances.
+Connection settings for one or more Radarr instances.
 
-You can configure multiple Radarr instances by adding additional entries to the `radarr` array (useful for 4k instances, for example)
-
-| Property | Description | Example |
-|----------|-------------|---------|
-| `name` | Custom name for each Radarr connection. | `"Radarr"` |
-| `url` | URL of your Radarr server. | `"http://localhost:7878"` |
-| `api_key` | Radarr API key. | `"YOUR_RADARR_API_KEY1"` |
-
-<details>
-  <summary>See example</summary>
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `name` | string | Yes | - | Identifier for this Radarr instance (used in library config) |
+| `url` | string | Yes | - | URL of your Radarr server |
+| `api_key` | string | Yes | - | Radarr API key |
 
 ```yaml
 radarr:
   - name: "Radarr"
     url: "http://localhost:7878"
-    api_key: "YOUR_RADARR_API_KEY1"
+    api_key: "YOUR_RADARR_API_KEY"
   - name: "Radarr 4K"
     url: "http://localhost:7879"
-    api_key: "YOUR_RADARR_API_KEY2"
+    api_key: "YOUR_RADARR_4K_API_KEY"
 ```
-</details>
+
+---
 
 ## Sonarr
 
-Here, you can specify the connection settings for **one or more** Sonarr instances.
+Connection settings for one or more Sonarr instances.
 
-You can configure multiple Sonarr instances by adding additional entries to the `sonarr` array (useful for 4k instances, for example)
-
-| Property | Description | Example |
-|----------|-------------|---------|
-| `name` | Custom name for each Sonarr connection. | `"Sonarr"` |
-| `url` | URL of your Sonarr server. | `"http://localhost:8989"` |
-| `api_key` | Sonarr API key. | `"YOUR_SONARR_API_KEY1"` |
-
-<details>
-  <summary>See example</summary>
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `name` | string | Yes | - | Identifier for this Sonarr instance (used in library config) |
+| `url` | string | Yes | - | URL of your Sonarr server |
+| `api_key` | string | Yes | - | Sonarr API key |
 
 ```yaml
 sonarr:
   - name: "Sonarr"
     url: "http://localhost:8989"
-    api_key: "YOUR_SONARR_API_KEY1"
+    api_key: "YOUR_SONARR_API_KEY"
   - name: "Sonarr 4K"
     url: "http://localhost:8990"
-    api_key: "YOUR_SONARR_API_KEY2"
+    api_key: "YOUR_SONARR_4K_API_KEY"
 ```
-</details>
 
-## Tautulli *
-
-[Tautulli](https://tautulli.com/) is a third-party application for monitoring your Plex Media Server. It's used to determine the watch history of your media.
-
-| Property | Description | Example |
-|----------|-------------|---------|
-| `url` | URL of your Tautulli server. | `"http://localhost:8181"` |
-| `api_key` | Tautulli API key. | `"YOUR_TAUTULLI_API_KEY"` |
-
-<details>
-  <summary>See example</summary>
-
-```yaml
-tautulli:
-    url: "http://localhost:8181"
-    api_key: "YOUR_TAUTULLI_API_KEY"
-```
-</details>
+---
 
 ## Trakt
 
-If you use Trakt, this section is where you provide your Trakt application details. This is necessary for integration and fetching data from Trakt. The client ID and client secret can be obtained by [creating an application](https://trakt.tv/oauth/applications) on Trakt's website.
+Optional. Required only for Trakt list exclusions.
 
-| Property | Description | Example |
-|----------|-------------|---------|
-| `client_id` | Trakt client ID. | `"YOUR_TRAKT_CLIENT_ID"` |
-| `client_secret` | Trakt client secret. | `"YOUR_TRAKT_CLIENT_SECRET"` |
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `client_id` | string | Yes | - | Trakt client ID. Create an app at [trakt.tv/oauth/applications](https://trakt.tv/oauth/applications) |
+| `client_secret` | string | Yes | - | Trakt client secret |
 
-<details>
-  <summary>See example</summary>
+Create an application at [trakt.tv/oauth/applications](https://trakt.tv/oauth/applications) to get credentials.
 
 ```yaml
 trakt:
   client_id: "YOUR_TRAKT_CLIENT_ID"
   client_secret: "YOUR_TRAKT_CLIENT_SECRET"
 ```
-</details>
+
+---
 
 ## JustWatch
 
-JustWatch integration allows you to exclude media based on streaming availability. This is useful if you want to keep media that's currently available on streaming services you subscribe to, or conversely, delete media that's no longer available for streaming.
+Optional. Global settings for streaming availability lookups.
 
-The global JustWatch settings provide default values for all libraries. Individual libraries can override these settings.
-
-| Property | Description | Example |
-|----------|-------------|---------|
-| `country` | ISO 3166-1 alpha-2 country code for JustWatch lookup. | `"US"` |
-| `language` | Language code for JustWatch API. Defaults to `"en"`. | `"en"` |
-
-<details>
-  <summary>See example</summary>
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `country` | string | No | - | ISO 3166-1 alpha-2 country code (e.g., US, GB, DE) |
+| `language` | string | No | `"en"` | Language code for API responses |
 
 ```yaml
 justwatch:
   country: "US"
   language: "en"
 ```
-</details>
 
-### Library
+---
 
-For each of your Plex libraries, specify how you want Deleterr to behave. Define the name of the library, which instances to use, the action mode, and various thresholds related to watched status and addition date. You can also define exclusion rules here to protect certain media items from being actioned.
+## Libraries
 
-| Property | Description | Example |  Supported Values |
-|----------|-------------|---------|-------------------|
-| `name` | Name of the Plex library you wish to manage. Must match the name of your Plex Library | `"Movies", "TV Shows", "Anime` | - |
-| `radarr` | Identifier of the Radarr instance to be used for this library (matches a `name` under the `radarr` configuration). Exclusive with the `sonarr` property | `"Radarr", "Radarr 4K"` | - |
-| `sonarr` | Identifier of the Sonarr instance to be used for this library (matches a `name` under the `sonarr` configuration). Exclusive with the `radarr` property | `"Sonarr", "Sonarr 4K"` | - |
-| `series_type` | Only used if `sonarr` is set. It's required to filter for the show type, defaults to `standard`. | `"standard", "anime"` | `standard`, `anime`, `daily` |
-| `action_mode` | The action to perform on the media items. | `delete` | `delete` |
-| `last_watched_threshold` | Time threshold in days. Media watched in this period will not be actionable | `90` | - |
-| `add_list_exclusion_on_delete` | Prevent Radarr/Sonarr from importing the media automatically again from a list. Currently only works with Radarr. | `true` | `true`,`false` |
-| `watch_status` | Watch status. Media not in this is state will not be actionable | `-` | `watched`, `unwatched` |
-| `apply_last_watch_threshold_to_collections` | If set to `true`, the last watched threshold will be applied to all other items in the same collection. | `true` | `true`, `false` |
-| `added_at_threshold` | Media that added to Plex within this period (in days) will not be actionable | `180` | - |
-| `disk_size_threshold` | Library deletion will only happen when below this threshold. It requires a `path` (that the `sonarr` or `radarr` instance can access) and a size threshold | `path: /media/local` </br> `threshold: 1TB` | Valid units: [`B`, `KB`, `MB`, `GB`, `TB`, `PB`, `EB`] |
-| `max_actions_per_run` | Limit the number of actions performed per run. Defaults to `10` | `3000` | - |
-| `sort_config.field` | Field to sort media list by. Defaults to `title`	 | `title` | `title`, `size`, `release_year`, `runtime`, `added_date`, `rating`, `episodes`, `seasons` |
-| `sort_config.order` | Direction to sort media list by. Defaults to `asc`  | `asc` | `asc`, `desc` |
+Configuration for each Plex library to manage.
 
-<details>
-  <summary>See example</summary>
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `name` | string | Yes | - | Name of the Plex library (must match exactly) |
+| `radarr` | string | No | - | Name of the Radarr instance to use. Mutually exclusive with sonarr |
+| `sonarr` | string | No | - | Name of the Sonarr instance to use. Mutually exclusive with radarr |
+| `series_type` | string (`standard`, `anime`, `daily`) | No | `"standard"` | Series type filter for Sonarr libraries |
+| `action_mode` | string (`delete`) | Yes | - | Action to perform on matching media |
+| `watch_status` | string (`watched`, `unwatched`) | No | - | Filter by watch status. If not set, both watched and unwatched media are considered |
+| `last_watched_threshold` | integer | No | - | Days since last watch. Media watched within this period is protected |
+| `added_at_threshold` | integer | No | - | Days since added to Plex. Media added within this period is protected |
+| `apply_last_watch_threshold_to_collections` | boolean | No | `false` | Apply last watched threshold to all items in the same collection |
+| `add_list_exclusion_on_delete` | boolean | No | `false` | Prevent Radarr from re-importing deleted media from lists. Radarr only |
+| `max_actions_per_run` | integer | No | `10` | Maximum deletions per run |
+| `disk_size_threshold` | array | No | `[]` | Only delete when disk space is below threshold |
+| `sort` | object | No | - | Sorting configuration for deletion order |
+
+*One of `radarr` or `sonarr` is required per library.
+
+### Disk Size Threshold
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `path` | string | Yes | - | Path accessible by Sonarr/Radarr to check disk space |
+| `threshold` | string | Yes | - | Size threshold. Units: B, KB, MB, GB, TB, PB, EB |
+
+### Sort Configuration
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `field` | string (`title`, `size`, `release_year`, `runtime`, `added_date`, `rating`, `seasons`, `episodes`) | No | `"title"` | Field to sort by: title, size, release_year, runtime, added_date, rating, seasons, episodes |
+| `order` | string (`asc`, `desc`) | No | `"asc"` | Sort order: asc (ascending), desc (descending) |
 
 ```yaml
 libraries:
   - name: "Movies"
-    radarr: Radarr
+    radarr: "Radarr"
     action_mode: "delete"
+    watch_status: "watched"
     last_watched_threshold: 90
     added_at_threshold: 180
     apply_last_watch_threshold_to_collections: true
-    max_actions_per_run: 3000
-    sort_config:
-      field: "title"
-      order: "asc"
+    add_list_exclusion_on_delete: true
+    max_actions_per_run: 50
+    disk_size_threshold:
+      - path: "/data/media"
+        threshold: "1TB"
+    sort:
+      field: "size"
+      order: "desc"
 ```
-</details>
 
-#### Exclusions
+---
 
-For each library, you can also specify exclusions to prevent certain media from being affected by the actions.
+## Exclusions
 
-Metadata is matched against the media's metadata in Plex.
+Protect media from deletion based on metadata, Trakt lists, JustWatch, or Radarr-specific criteria.
 
-| Property | Description | Example |
-|----------|-------------|---------|
-| `titles` | Array of titles to exclude media. | `["Forrest Gump"]` |
-| `plex_labels` | Array of labels to exclude media. | `["children", "favorite"]` |
-| `genres` | Array of genres to exclude media. | `["horror", "thriller"]` |
-| `collections` | Exclude media that are part of specific collections. | `["Marvel Cinematic Universe"]` |
-| `actors` | Exclude media featuring specific actors. | `["Tom Cruise", "Brad Pitt"]` |
-| `producers` | Exclude media produced by specific producers. | `["Steven Spielberg"]` |
-| `directors` | Exclude media directed by specific directors. | `["Makoto Shinkai"]` |
-| `writers` | Exclude media written by specific writers. | `["Hayao Miyazaki"]` |
-| `studios` | Exclude media from specific studios. | `["Studio Ghibli"]` |
-| `release_years` | Exclude media released within the last X years. | `5` |
-| `trakt` -> `max_items_per_list` | Maximum number of items to fetch from each Trakt list. | `100` |
-| `trakt` -> `lists` | Array of Trakt list URLs to exclude media from. | `[ "https://trakt.tv/movies/trending", "https://trakt.tv/users/justin/lists/imdb-top-rated-movies" ]` |
+### Metadata Exclusions
 
-<details>
-  <summary>See example</summary>
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `titles` | array[string] | No | `[]` | Exact titles to exclude |
+| `plex_labels` | array[string] | No | `[]` | Plex labels to exclude |
+| `genres` | array[string] | No | `[]` | Genres to exclude |
+| `collections` | array[string] | No | `[]` | Collections to exclude |
+| `actors` | array[string] | No | `[]` | Actors to exclude |
+| `producers` | array[string] | No | `[]` | Producers to exclude |
+| `directors` | array[string] | No | `[]` | Directors to exclude |
+| `writers` | array[string] | No | `[]` | Writers to exclude |
+| `studios` | array[string] | No | `[]` | Studios to exclude |
+| `release_years` | integer | No | `0` | Exclude media released within last X years |
 
 ```yaml
-libraries:
-  - name: "Movies"
-    ...
-    exclude:
-      titles: ["Forrest Gump"]
-      plex_labels: ["children", "favorite"]
-      genres: ["horror", "thriller"]
-      collections: ["Marvel Cinematic Universe"]
-      actors: ["Tom Cruise", "Brad Pitt"]
-      producers: ["Steven Spielberg"]
-      directors: ["Makoto Shinkai"]
-      writers: ["Hayao Miyazaki"]
-      studios: ["Studio Ghibli"]
-      release_years: 5
-      trakt:
-        max_items_per_list: 200
-        lists:
-          [
-            "https://trakt.tv/movies/trending",
-            "https://trakt.tv/movies/popular",
-            "https://trakt.tv/movies/watched/yearly",
-            "https://trakt.tv/movies/collected/yearly",
-            "https://trakt.tv/users/justin/lists/imdb-top-rated-movies"
-          ]
+exclude:
+  titles: ["Forrest Gump", "The Godfather"]
+  plex_labels: ["favorite", "keep"]
+  genres: ["documentary"]
+  collections: ["Marvel Cinematic Universe"]
+  actors: ["Tom Hanks"]
+  directors: ["Christopher Nolan"]
+  studios: ["Studio Ghibli", "A24"]
+  release_years: 2
 ```
-</details>
 
-#### JustWatch Exclusions
+### Trakt Exclusions
 
-Exclude media based on streaming availability using JustWatch data. This allows you to keep or delete media based on whether it's currently available on specific streaming providers.
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `trakt.max_items_per_list` | integer | No | `100` | Maximum items to fetch from each Trakt list |
+| `trakt.lists` | array[string] | No | `[]` | Trakt list URLs to exclude. Supports official lists (trending, popular) and user lists |
 
-**Note:** `available_on` and `not_available_on` are mutually exclusive - use only one per library.
-
-| Property | Description | Example |
-|----------|-------------|---------|
-| `justwatch` -> `country` | Override the global country setting for this library. | `"US"` |
-| `justwatch` -> `language` | Override the global language setting for this library. | `"en"` |
-| `justwatch` -> `available_on` | Exclude media if it IS available on these providers. Use `["any"]` to match any streaming service. | `["netflix", "amazon"]` |
-| `justwatch` -> `not_available_on` | Exclude media if it is NOT available on these providers. | `["netflix"]` |
-
-Common provider names include: `netflix`, `amazon`, `disneyplus`, `hbomax`, `max`, `hulu`, `appletvplus`, `peacocktv`, `paramountplus`, `crunchyroll`, `stan`, `binge`.
-
-<details>
-  <summary>See example - Keep media available on streaming</summary>
-
-Keep movies that are available on Netflix or Disney+ (don't delete them):
+Supports official lists and user lists:
 
 ```yaml
+exclude:
+  trakt:
+    max_items_per_list: 200
+    lists:
+      # Official Trakt lists
+      - "https://trakt.tv/movies/trending"
+      - "https://trakt.tv/movies/popular"
+      - "https://trakt.tv/movies/watched/yearly"
+      # User lists
+      - "https://trakt.tv/users/justin/lists/imdb-top-rated-movies"
+```
+
+### JustWatch Exclusions
+
+Exclude based on streaming availability. `available_on` and `not_available_on` are mutually exclusive.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `justwatch.country` | string | No | - | Override global country setting for this library |
+| `justwatch.language` | string | No | - | Override global language setting for this library |
+| `justwatch.available_on` | array[string] | No | - | Exclude media available on these providers. Use ['any'] for any service. Mutually exclusive with not_available_on |
+| `justwatch.not_available_on` | array[string] | No | - | Exclude media NOT available on these providers. Mutually exclusive with available_on |
+
+Common providers: `netflix`, `amazon`, `disneyplus`, `hbomax`, `max`, `hulu`, `appletvplus`, `peacocktv`, `paramountplus`, `crunchyroll`, `stan`, `binge`
+
+**Keep media that's available on streaming:**
+```yaml
+exclude:
+  justwatch:
+    country: "US"
+    available_on: ["netflix", "disneyplus"]
+```
+
+**Keep media NOT available on streaming:**
+```yaml
+exclude:
+  justwatch:
+    country: "US"
+    not_available_on: ["any"]
+```
+
+### Radarr Exclusions (Movies Only)
+
+Exclude based on Radarr-specific metadata. Only applies to movie libraries.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `radarr.tags` | array[string] | No | `[]` | Radarr tags to exclude (case-insensitive) |
+| `radarr.quality_profiles` | array[string] | No | `[]` | Quality profiles to exclude (exact match) |
+| `radarr.paths` | array[string] | No | `[]` | Paths to exclude (substring match) |
+| `radarr.monitored` | boolean | No | - | True to exclude monitored movies, False to exclude unmonitored |
+
+```yaml
+exclude:
+  radarr:
+    tags: ["4K", "keep", "favorite"]
+    quality_profiles: ["Remux-2160p", "Bluray-2160p"]
+    paths: ["/data/media/4k", "/data/protected"]
+    monitored: true
+```
+
+---
+
+## Complete Example
+
+```yaml
+dry_run: true
+ssl_verify: false
+action_delay: 10
+plex_library_scan_after_actions: false
+
+plex:
+  url: "http://localhost:32400"
+  token: "YOUR_PLEX_TOKEN"
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "YOUR_TAUTULLI_API_KEY"
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "YOUR_RADARR_API_KEY"
+
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "YOUR_SONARR_API_KEY"
+
+trakt:
+  client_id: "YOUR_TRAKT_CLIENT_ID"
+  client_secret: "YOUR_TRAKT_CLIENT_SECRET"
+
+justwatch:
+  country: "US"
+
 libraries:
   - name: "Movies"
-    radarr: Radarr
+    radarr: "Radarr"
     action_mode: "delete"
-    exclude:
-      justwatch:
-        country: "US"
-        available_on: ["netflix", "disneyplus"]
-```
-</details>
-
-<details>
-  <summary>See example - Delete media not on streaming</summary>
-
-Only delete movies that are NOT available on any streaming service:
-
-```yaml
-libraries:
-  - name: "Movies"
-    radarr: Radarr
-    action_mode: "delete"
-    exclude:
-      justwatch:
-        country: "US"
-        not_available_on: ["any"]
-```
-</details>
-
-#### Radarr Exclusions (Movies Only)
-
-For movie libraries using Radarr, you can exclude media based on Radarr-specific metadata. This allows you to protect movies based on their tags, quality profiles, file paths, or monitored status in Radarr.
-
-| Property | Description | Example |
-|----------|-------------|---------|
-| `radarr` -> `tags` | Exclude movies that have any of these Radarr tags. Tag names must match exactly (case-insensitive). | `["4K", "keep", "favorite"]` |
-| `radarr` -> `quality_profiles` | Exclude movies with any of these quality profiles. Profile names must match exactly. | `["Bluray-2160p", "Remux-2160p"]` |
-| `radarr` -> `paths` | Exclude movies in these paths. Uses partial matching (substring). | `["/media/4k", "/data/protected"]` |
-| `radarr` -> `monitored` | Exclude based on monitored status. Set to `true` to exclude monitored movies, `false` to exclude unmonitored movies. | `true` |
-
-<details>
-  <summary>See example</summary>
-
-```yaml
-libraries:
-  - name: "Movies"
-    radarr: Radarr
-    action_mode: "delete"
+    watch_status: "watched"
     last_watched_threshold: 90
     added_at_threshold: 180
+    apply_last_watch_threshold_to_collections: true
+    add_list_exclusion_on_delete: true
+    max_actions_per_run: 20
+    sort:
+      field: "size"
+      order: "desc"
     exclude:
-      # Standard Plex exclusions
-      genres: ["horror"]
-      collections: ["Marvel Cinematic Universe"]
-      # Radarr-specific exclusions
+      plex_labels: ["favorite", "keep"]
+      genres: ["documentary"]
+      release_years: 2
+      trakt:
+        max_items_per_list: 100
+        lists:
+          - "https://trakt.tv/movies/trending"
+          - "https://trakt.tv/movies/popular"
+      justwatch:
+        not_available_on: ["any"]
       radarr:
-        tags: ["4K", "favorite", "keep"]
-        quality_profiles: ["Bluray-2160p", "Remux-2160p"]
-        paths: ["/data/media/4k"]
+        tags: ["keep"]
         monitored: true
-```
-</details>
 
-> **Note**: Radarr exclusions only apply to movie libraries with a `radarr` instance configured. They are ignored for TV show libraries using Sonarr.
+  - name: "TV Shows"
+    sonarr: "Sonarr"
+    series_type: "standard"
+    action_mode: "delete"
+    last_watched_threshold: 180
+    added_at_threshold: 365
+    max_actions_per_run: 10
+    exclude:
+      plex_labels: ["favorite"]
+      trakt:
+        lists:
+          - "https://trakt.tv/shows/trending"
+```
+
+---
+
+## Next Steps
+
+- [Templates](templates) - Ready-to-use configuration examples
+- [Getting Started](getting-started) - Installation guide

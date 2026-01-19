@@ -5,6 +5,12 @@ Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files ba
 
 Setup Deleterr to run on a schedule and it will automatically delete media files that meet your criteria. This allows to keep your library fresh and clean, without having to manually manage it to free up space.
 
+## Documentation
+
+- **[Getting Started](https://rfsbraz.github.io/deleterr/getting-started)** - Docker setup and first run
+- **[Configuration Reference](https://rfsbraz.github.io/deleterr/CONFIGURATION)** - All settings explained
+- **[Templates](https://rfsbraz.github.io/deleterr/templates)** - Copy-paste ready configurations
+
 ## WARNING
 
 * **DO NOT USE THIS WITH MEDIA CONTENT YOU CAN'T AFFORD TO LOSE**
@@ -145,7 +151,7 @@ docker run -v ./config:/config -v ./logs:/config/logs ghcr.io/rfsbraz/deleterr:l
 
 Deleterr is configured via a YAML file. An example configuration file, `settings.example.yaml`, is provided. Copy this file to `settings.yaml` and adjust the settings as needed.
 
-Please refer to the [configuration guide](./docs/CONFIGURATION.md) for a full list of options and their descriptions.
+Please refer to the [configuration guide](https://rfsbraz.github.io/deleterr/CONFIGURATION) for a full list of options and their descriptions.
 
 ## Image Availability
 

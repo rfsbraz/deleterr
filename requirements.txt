@@ -1,4 +1,5 @@
 PlexAPI==4.15.16
+pydantic>=2.0.0
 pyarr==5.2.0
 PyYAML==6.0.2
 requests==2.32.4

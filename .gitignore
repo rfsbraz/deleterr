@@ -201,5 +201,6 @@ pip-selfcheck.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python,virtualenv
 
-# Exception for app/deleterr/scripts
+# Exception for scripts directories
 !/app/scripts/
+!/scripts/
