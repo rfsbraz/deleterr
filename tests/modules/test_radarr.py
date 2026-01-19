@@ -189,3 +189,18 @@ def test_get_quality_profiles_caching(dradarr):
     assert profiles1 == profiles2
     # API should only be called once
     assert dradarr.instance.get_quality_profile.call_count == 1
+
+
+def test_check_movie_has_tags_case_insensitive(dradarr):
+    """Test that tag matching is case-insensitive."""
+    dradarr.instance.get_tag.return_value = [
+        {"id": 1, "label": "4K-Protection"},
+        {"id": 2, "label": "keep"},
+    ]
+    movie = {"tags": [1, 2]}
+
+    # Test various case combinations
+    assert dradarr.check_movie_has_tags(movie, ["4k-protection"])  # lowercase
+    assert dradarr.check_movie_has_tags(movie, ["4K-PROTECTION"])  # uppercase
+    assert dradarr.check_movie_has_tags(movie, ["KEEP"])  # uppercase
+    assert dradarr.check_movie_has_tags(movie, ["Keep"])  # mixed case

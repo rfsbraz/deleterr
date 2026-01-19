@@ -33,8 +33,9 @@ class DRadarr:
     def check_movie_has_tags(self, movie, tags):
         movie_tags = movie.get("tags", [])
 
-        # Get the numeric id of all the tags
-        tag_ids = [tag['id'] for tag in self.get_tags() if tag["label"] in tags]
+        # Get the numeric id of all the tags (case-insensitive comparison)
+        tags_lower = [t.lower() for t in tags]
+        tag_ids = [tag['id'] for tag in self.get_tags() if tag["label"].lower() in tags_lower]
 
         # See if movie tags and tags have any common elements
         return bool(set(movie_tags) & set(tag_ids))
