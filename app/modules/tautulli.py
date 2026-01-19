@@ -28,8 +28,8 @@ def filter_by_most_recent(data, key, sort_key):
 
 
 class Tautulli:
-    def __init__(self, url, api_key):
-        self.api = RawAPI(url, api_key, verify=False)
+    def __init__(self, url, api_key, ssl_verify=True):
+        self.api = RawAPI(url, api_key, verify=ssl_verify)
 
     def test_connection(self):
         self.api.status()

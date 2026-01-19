@@ -51,6 +51,7 @@ def test_calculate_min_date(library_config, expected_days):
         assert result.date() == expected.date()
 
 
+@patch("app.modules.tautulli.RawAPI", MagicMock())
 def test_determine_key():
     # Arrange
     tautulli_instance = Tautulli("id", "secret")
@@ -103,6 +104,7 @@ def test_fetch_history_data(mock_api):
     )
 
 
+@patch("app.modules.tautulli.RawAPI", MagicMock())
 @patch.object(Tautulli, "_calculate_min_date", return_value="2022-01-01")
 @patch.object(
     Tautulli,
@@ -134,6 +136,7 @@ def test_get_activity(
         {"rating_key": "123", "stopped": "2022-01-02"}, {"guid": "guid"}
     )
 
+@patch("app.modules.tautulli.RawAPI", MagicMock())
 @patch.object(Tautulli, "_calculate_min_date", return_value="2022-01-01")
 @patch.object(
     Tautulli,

@@ -23,9 +23,14 @@ class MediaCleaner:
         self._justwatch_instances = {}  # Cache for JustWatch instances per country
 
         # Setup connections
+        # SSL verification is disabled by default for self-signed certificates
+        # Set ssl_verify: true in config for secure connections
+        ssl_verify = config.settings.get("ssl_verify", False)
+
         self.tautulli = Tautulli(
             config.settings.get("tautulli").get("url"),
             config.settings.get("tautulli").get("api_key"),
+            ssl_verify=ssl_verify,
         )
 
         self.trakt = Trakt(
@@ -33,10 +38,9 @@ class MediaCleaner:
             config.settings.get("trakt", {}).get("client_secret"),
         )
 
-        # Disable SSL verification to support required secure connections
-        # Certificates are not always valid for local connections
+        # Configure session with SSL verification setting
         session = requests.Session()
-        session.verify = False
+        session.verify = ssl_verify
 
         self.plex = PlexServer(
             config.settings.get("plex").get("url"),
