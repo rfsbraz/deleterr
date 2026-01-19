@@ -79,6 +79,11 @@ def main():
     """
     Deleterr application entry point. Parses arguments, configs and
     initializes the application.
+
+    Supports two modes:
+    1. Single run (default): Runs once and exits. Use with external schedulers (Ofelia, cron).
+    2. Scheduler mode: Runs as a long-lived process with built-in scheduling.
+       Enable via `scheduler.enabled: true` in settings.yaml.
     """
 
     locale.setlocale(locale.LC_ALL, "")
@@ -91,7 +96,7 @@ def main():
     logger.info("Running version %s", get_file_contents("/app/commit_tag.txt"))
     logger.info("Log level set to %s", log_level)
 
-    parser = argparse.ArgumentParser(description="Process some integers.")
+    parser = argparse.ArgumentParser(description="Deleterr - Automated media cleanup for Plex")
     parser.add_argument(
         "--config",
         "--c",
@@ -100,6 +105,16 @@ def main():
     )
     parser.add_argument(
         "--jw-providers", action="store_true", help="Gather JustWatch providers"
+    )
+    parser.add_argument(
+        "--scheduler",
+        action="store_true",
+        help="Force scheduler mode (overrides config setting)",
+    )
+    parser.add_argument(
+        "--run-once",
+        action="store_true",
+        help="Force single run mode (overrides scheduler config)",
     )
 
     args, unknown = parser.parse_known_args()
@@ -121,7 +136,27 @@ def main():
 
         return
 
-    Deleterr(config)
+    # Determine run mode
+    scheduler_config = config.settings.get("scheduler", {})
+    scheduler_enabled = scheduler_config.get("enabled", False)
+
+    # CLI flags override config
+    if args.run_once:
+        scheduler_enabled = False
+    elif args.scheduler:
+        scheduler_enabled = True
+
+    if scheduler_enabled:
+        # Run in scheduler mode (long-lived process)
+        from app.scheduler import DeleterrScheduler
+
+        logger.info("Starting in scheduler mode")
+        scheduler = DeleterrScheduler(config)
+        scheduler.start()  # Blocks until shutdown
+    else:
+        # Run once and exit (for external schedulers like Ofelia or cron)
+        logger.info("Running in single-run mode")
+        Deleterr(config)
 
 
 if __name__ == "__main__":

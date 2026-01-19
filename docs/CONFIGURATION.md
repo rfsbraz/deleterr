@@ -171,6 +171,48 @@ overseerr:
 
 ---
 
+## Scheduler
+
+Optional. Built-in scheduler as an alternative to external schedulers like Ofelia or system cron.
+
+When enabled, Deleterr runs as a long-lived process and executes cleanup on the configured schedule. When disabled (default), Deleterr runs once and exits, suitable for triggering via external schedulers.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `enabled` | boolean | No | `false` | Enable built-in scheduler. When false, Deleterr runs once and exits |
+| `schedule` | string | No | `"weekly"` | Cron expression or preset (hourly, daily, weekly, monthly) |
+| `timezone` | string | No | `"UTC"` | Timezone for schedule (e.g., America/New_York, Europe/London) |
+| `run_on_startup` | boolean | No | `false` | Run immediately when container starts, in addition to scheduled runs |
+
+**Schedule Presets:**
+- `hourly` - Every hour at minute 0
+- `daily` - Daily at 3 AM
+- `weekly` - Sunday at 3 AM
+- `monthly` - First day of month at 3 AM
+
+**Using a preset:**
+```yaml
+scheduler:
+  enabled: true
+  schedule: "weekly"
+  timezone: "America/New_York"
+```
+
+**Using a cron expression:**
+```yaml
+scheduler:
+  enabled: true
+  schedule: "0 3 * * 0"  # Sunday at 3 AM
+  timezone: "UTC"
+  run_on_startup: true
+```
+
+**Command-line overrides:**
+- `--scheduler` - Force scheduler mode (overrides config)
+- `--run-once` - Force single run mode (overrides scheduler config)
+
+---
+
 ## Libraries
 
 Configuration for each Plex library to manage.
@@ -371,6 +413,12 @@ dry_run: true
 ssl_verify: false
 action_delay: 10
 plex_library_scan_after_actions: false
+
+# Built-in scheduler (remove this section to use external scheduler like Ofelia)
+scheduler:
+  enabled: true
+  schedule: "weekly"
+  timezone: "UTC"
 
 plex:
   url: "http://localhost:32400"
