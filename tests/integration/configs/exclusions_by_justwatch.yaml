@@ -1,0 +1,55 @@
+# Exclusions by JustWatch streaming availability
+# Tests: Movies available on streaming services should be protected from deletion
+
+dry_run: false
+interactive: false
+action_delay: 0
+
+plex:
+  url: "http://localhost:32400"
+  token: "test-plex-token"
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "test-tautulli-key"
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "test-radarr-key"
+
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "test-sonarr-key"
+
+# Global JustWatch settings
+justwatch:
+  country: "US"
+  language: "en"
+
+libraries:
+  # Movies - exclude if available on Netflix or Amazon
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 30
+    max_actions_per_run: 10
+    exclude:
+      justwatch:
+        available_on:
+          - "netflix"
+          - "amazon"
+
+  # TV Shows - keep rare content not on streaming
+  - name: "TV Shows"
+    sonarr: "Sonarr"
+    action_mode: "delete"
+    last_watched_threshold: 30
+    max_actions_per_run: 10
+    series_type: standard
+    exclude:
+      justwatch:
+        not_available_on:
+          - "netflix"
+          - "hulu"

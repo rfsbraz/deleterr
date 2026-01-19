@@ -679,3 +679,671 @@ class TestE2ECombinedRules:
                     radarr_client.del_movie(movie_id, delete_files=True)
                 except Exception:
                     pass
+
+
+class TestE2EJustWatchExclusions:
+    """End-to-end tests for JustWatch streaming availability exclusions."""
+
+    def test_available_on_excludes_streaming_movie(
+        self, docker_services, radarr_seeder, radarr_client: RadarrAPI, mocker
+    ):
+        """Test that movies available on streaming services are NOT deleted when using available_on."""
+        # Add test movies to Radarr
+        streaming_movie = radarr_seeder.add_movie({
+            "title": "The Matrix",
+            "year": 1999,
+            "tmdbId": 603,
+        })
+        non_streaming_movie = radarr_seeder.add_movie({
+            "title": "Rare Indie Film",
+            "year": 2010,
+            "tmdbId": 508943,  # Using a real TMDB ID
+        })
+
+        assert "id" in streaming_movie, f"Failed to add streaming movie: {streaming_movie}"
+        assert "id" in non_streaming_movie, f"Failed to add non-streaming movie: {non_streaming_movie}"
+
+        streaming_id = streaming_movie["id"]
+        non_streaming_id = non_streaming_movie["id"]
+
+        try:
+            # Create mock Plex items
+            plex_streaming = MockPlexItem(
+                title="The Matrix",
+                year=1999,
+                rating_key="5001",
+                guids=["tmdb://603"],
+                added_at=datetime.now() - timedelta(days=90),
+            )
+            plex_non_streaming = MockPlexItem(
+                title="Rare Indie Film",
+                year=2010,
+                rating_key="5002",
+                guids=["tmdb://508943"],
+                added_at=datetime.now() - timedelta(days=90),
+            )
+
+            # Mock JustWatch to return controlled results
+            mock_justwatch = MagicMock()
+            # The Matrix is "available" on Netflix
+            mock_justwatch.available_on.side_effect = lambda title, year, media_type, providers: (
+                title == "The Matrix"
+            )
+
+            from app.media_cleaner import check_excluded_justwatch
+
+            exclude_config = {
+                "justwatch": {
+                    "available_on": ["netflix", "amazon"],
+                }
+            }
+
+            # Streaming movie should be excluded (available_on = exclude if available)
+            media_streaming = {"title": "The Matrix", "year": 1999, "tmdbId": 603}
+            result_streaming = check_excluded_justwatch(
+                media_streaming, plex_streaming, exclude_config, mock_justwatch
+            )
+            assert result_streaming is False, "Movie on streaming should be excluded"
+
+            # Non-streaming movie should be actionable
+            media_non_streaming = {"title": "Rare Indie Film", "year": 2010, "tmdbId": 508943}
+            result_non_streaming = check_excluded_justwatch(
+                media_non_streaming, plex_non_streaming, exclude_config, mock_justwatch
+            )
+            assert result_non_streaming is True, "Movie NOT on streaming should be actionable"
+
+            # Delete only the non-streaming movie (the one that passed exclusion check)
+            radarr_client.del_movie(non_streaming_id, delete_files=True)
+
+            # Verify streaming movie still exists (it was protected)
+            movies_after = radarr_client.get_movie()
+            movie_ids = [m["id"] for m in movies_after]
+            assert streaming_id in movie_ids, "Streaming movie should NOT be deleted"
+            assert non_streaming_id not in movie_ids, "Non-streaming movie should be deleted"
+
+        finally:
+            for movie_id in [streaming_id, non_streaming_id]:
+                try:
+                    radarr_client.del_movie(movie_id, delete_files=True)
+                except Exception:
+                    pass
+
+    def test_not_available_on_excludes_non_streaming_movie(
+        self, docker_services, radarr_seeder, radarr_client: RadarrAPI, mocker
+    ):
+        """Test that movies NOT available on streaming are excluded when using not_available_on."""
+        # Add test movies
+        rare_movie = radarr_seeder.add_movie({
+            "title": "Obscure Classic",
+            "year": 1975,
+            "tmdbId": 694,  # The Shining
+        })
+        common_movie = radarr_seeder.add_movie({
+            "title": "Popular Netflix Movie",
+            "year": 2020,
+            "tmdbId": 562,  # Die Hard
+        })
+
+        assert "id" in rare_movie
+        assert "id" in common_movie
+
+        rare_id = rare_movie["id"]
+        common_id = common_movie["id"]
+
+        try:
+            plex_rare = MockPlexItem(
+                title="Obscure Classic",
+                year=1975,
+                rating_key="6001",
+                guids=["tmdb://694"],
+            )
+            plex_common = MockPlexItem(
+                title="Popular Netflix Movie",
+                year=2020,
+                rating_key="6002",
+                guids=["tmdb://562"],
+            )
+
+            # Mock JustWatch - rare movie is NOT on streaming
+            mock_justwatch = MagicMock()
+            mock_justwatch.is_not_available_on.side_effect = lambda title, year, media_type, providers: (
+                title == "Obscure Classic"
+            )
+
+            from app.media_cleaner import check_excluded_justwatch
+
+            exclude_config = {
+                "justwatch": {
+                    "not_available_on": ["netflix"],
+                }
+            }
+
+            # Rare movie (not on streaming) should be excluded
+            media_rare = {"title": "Obscure Classic", "year": 1975, "tmdbId": 694}
+            result_rare = check_excluded_justwatch(
+                media_rare, plex_rare, exclude_config, mock_justwatch
+            )
+            assert result_rare is False, "Movie NOT on streaming should be excluded with not_available_on"
+
+            # Common movie (on streaming) should be actionable
+            media_common = {"title": "Popular Netflix Movie", "year": 2020, "tmdbId": 562}
+            result_common = check_excluded_justwatch(
+                media_common, plex_common, exclude_config, mock_justwatch
+            )
+            assert result_common is True, "Movie on streaming should be actionable with not_available_on"
+
+            # Delete only the common movie
+            radarr_client.del_movie(common_id, delete_files=True)
+
+            # Verify rare movie still exists
+            movies_after = radarr_client.get_movie()
+            movie_ids = [m["id"] for m in movies_after]
+            assert rare_id in movie_ids, "Rare movie should NOT be deleted"
+            assert common_id not in movie_ids, "Common movie should be deleted"
+
+        finally:
+            for movie_id in [rare_id, common_id]:
+                try:
+                    radarr_client.del_movie(movie_id, delete_files=True)
+                except Exception:
+                    pass
+
+    def test_justwatch_with_any_provider(
+        self, docker_services, radarr_seeder, radarr_client: RadarrAPI, mocker
+    ):
+        """Test that 'any' provider matches movies available on ANY streaming service."""
+        # Add test movies
+        any_streaming = radarr_seeder.add_movie({
+            "title": "Widely Available Movie",
+            "year": 2019,
+            "tmdbId": 1726,  # Iron Man
+        })
+        no_streaming = radarr_seeder.add_movie({
+            "title": "Theatrical Only Movie",
+            "year": 2023,
+            "tmdbId": 9654,
+        })
+
+        assert "id" in any_streaming
+        assert "id" in no_streaming
+
+        any_streaming_id = any_streaming["id"]
+        no_streaming_id = no_streaming["id"]
+
+        try:
+            plex_any = MockPlexItem(
+                title="Widely Available Movie",
+                year=2019,
+                rating_key="7001",
+                guids=["tmdb://1726"],
+            )
+            plex_none = MockPlexItem(
+                title="Theatrical Only Movie",
+                year=2023,
+                rating_key="7002",
+                guids=["tmdb://9654"],
+            )
+
+            # Mock JustWatch - first movie is on "some service"
+            mock_justwatch = MagicMock()
+            mock_justwatch.available_on.side_effect = lambda title, year, media_type, providers: (
+                title == "Widely Available Movie" and "any" in [p.lower() for p in providers]
+            )
+
+            from app.media_cleaner import check_excluded_justwatch
+
+            exclude_config = {
+                "justwatch": {
+                    "available_on": ["any"],
+                }
+            }
+
+            # Movie on any streaming should be excluded
+            media_any = {"title": "Widely Available Movie", "year": 2019, "tmdbId": 1726}
+            result_any = check_excluded_justwatch(
+                media_any, plex_any, exclude_config, mock_justwatch
+            )
+            assert result_any is False, "Movie on ANY streaming should be excluded"
+
+            # Movie not on streaming should be actionable
+            media_none = {"title": "Theatrical Only Movie", "year": 2023, "tmdbId": 9654}
+            result_none = check_excluded_justwatch(
+                media_none, plex_none, exclude_config, mock_justwatch
+            )
+            assert result_none is True, "Movie not on streaming should be actionable"
+
+            # Delete only the theatrical movie
+            radarr_client.del_movie(no_streaming_id, delete_files=True)
+
+            # Verify streaming movie still exists
+            movies_after = radarr_client.get_movie()
+            movie_ids = [m["id"] for m in movies_after]
+            assert any_streaming_id in movie_ids, "Streaming movie should NOT be deleted"
+
+        finally:
+            for movie_id in [any_streaming_id, no_streaming_id]:
+                try:
+                    radarr_client.del_movie(movie_id, delete_files=True)
+                except Exception:
+                    pass
+
+    def test_justwatch_combined_with_other_exclusions(
+        self, docker_services, radarr_seeder, radarr_client: RadarrAPI, mocker
+    ):
+        """Test JustWatch exclusions work correctly with other exclusion rules."""
+        # Add test movies
+        horror_streaming = radarr_seeder.add_movie({
+            "title": "Horror on Netflix",
+            "year": 2020,
+            "tmdbId": 475557,  # Joker
+        })
+        action_not_streaming = radarr_seeder.add_movie({
+            "title": "Action Not on Streaming",
+            "year": 2018,
+            "tmdbId": 299536,  # Infinity War
+        })
+
+        assert "id" in horror_streaming
+        assert "id" in action_not_streaming
+
+        horror_id = horror_streaming["id"]
+        action_id = action_not_streaming["id"]
+
+        try:
+            # Horror movie on streaming - protected by BOTH genre AND streaming
+            plex_horror = MockPlexItem(
+                title="Horror on Netflix",
+                year=2020,
+                rating_key="8001",
+                guids=["tmdb://475557"],
+                genres=["Horror", "Thriller"],
+            )
+            # Action movie not on streaming - only protected by genre would fail
+            plex_action = MockPlexItem(
+                title="Action Not on Streaming",
+                year=2018,
+                rating_key="8002",
+                guids=["tmdb://299536"],
+                genres=["Action", "Adventure"],
+            )
+
+            mock_justwatch = MagicMock()
+            # Only horror movie is on streaming
+            mock_justwatch.available_on.side_effect = lambda title, year, media_type, providers: (
+                title == "Horror on Netflix"
+            )
+
+            from app.media_cleaner import check_excluded_genres, check_excluded_justwatch
+
+            exclude_config = {
+                "genres": ["Horror"],
+                "justwatch": {
+                    "available_on": ["netflix"],
+                },
+            }
+
+            # Horror movie: excluded by genre (False) AND would be excluded by JustWatch
+            media_horror = {"title": "Horror on Netflix", "year": 2020, "tmdbId": 475557}
+            genre_result = check_excluded_genres(media_horror, plex_horror, exclude_config)
+            jw_result = check_excluded_justwatch(media_horror, plex_horror, exclude_config, mock_justwatch)
+            assert genre_result is False, "Horror genre should exclude"
+            assert jw_result is False, "JustWatch should also exclude (on streaming)"
+
+            # Action movie: NOT excluded by genre, NOT excluded by JustWatch
+            media_action = {"title": "Action Not on Streaming", "year": 2018, "tmdbId": 299536}
+            genre_result_action = check_excluded_genres(media_action, plex_action, exclude_config)
+            jw_result_action = check_excluded_justwatch(media_action, plex_action, exclude_config, mock_justwatch)
+            assert genre_result_action is True, "Action genre should not exclude"
+            assert jw_result_action is True, "JustWatch should not exclude (not on streaming)"
+
+            # Delete only the action movie (passes all checks)
+            radarr_client.del_movie(action_id, delete_files=True)
+
+            # Verify horror movie still exists
+            movies_after = radarr_client.get_movie()
+            movie_ids = [m["id"] for m in movies_after]
+            assert horror_id in movie_ids, "Horror movie should NOT be deleted"
+            assert action_id not in movie_ids, "Action movie should be deleted"
+
+        finally:
+            for movie_id in [horror_id, action_id]:
+                try:
+                    radarr_client.del_movie(movie_id, delete_files=True)
+                except Exception:
+                    pass
+
+    def test_justwatch_detects_show_type_for_series(
+        self, docker_services, sonarr_seeder, sonarr_client: SonarrAPI, mocker
+    ):
+        """Test that JustWatch correctly identifies TV shows as 'show' type."""
+        # Add test series to Sonarr
+        streaming_series = sonarr_seeder.add_series({
+            "title": "Breaking Bad",
+            "year": 2008,
+            "tvdbId": 81189,
+        })
+
+        assert "id" in streaming_series, f"Failed to add series: {streaming_series}"
+        series_id = streaming_series["id"]
+
+        try:
+            plex_series = MockPlexItem(
+                title="Breaking Bad",
+                year=2008,
+                rating_key="9001",
+                guids=["tvdb://81189"],
+            )
+
+            mock_justwatch = MagicMock()
+            # Track what media_type was passed
+            call_args = []
+            def track_call(title, year, media_type, providers):
+                call_args.append(media_type)
+                return True  # Available on streaming
+
+            mock_justwatch.available_on.side_effect = track_call
+
+            from app.media_cleaner import check_excluded_justwatch
+
+            exclude_config = {
+                "justwatch": {
+                    "available_on": ["netflix"],
+                }
+            }
+
+            # Series data has tvdbId but no tmdbId -> should be detected as "show"
+            media_series = {"title": "Breaking Bad", "year": 2008, "tvdbId": 81189}
+            check_excluded_justwatch(media_series, plex_series, exclude_config, mock_justwatch)
+
+            # Verify JustWatch was called with "show" as media_type
+            assert len(call_args) == 1, "JustWatch should be called once"
+            assert call_args[0] == "show", f"Media type should be 'show', got '{call_args[0]}'"
+
+        finally:
+            try:
+                sonarr_client.del_series(series_id, delete_files=True)
+            except Exception:
+                pass
+
+
+@pytest.mark.slow
+class TestE2EJustWatchRealAPI:
+    """
+    End-to-end tests using the REAL JustWatch API.
+
+    These tests make actual network calls to JustWatch and may be slow or flaky
+    depending on network conditions and API availability. Run with:
+        pytest -m "integration and slow" -v
+
+    Note: These tests use well-known titles that are likely to remain on streaming
+    services, but results may change over time as licensing agreements change.
+    """
+
+    def test_real_justwatch_available_on_with_radarr(
+        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
+    ):
+        """
+        Test full flow with real JustWatch API: The Matrix should be available on streaming.
+
+        This test seeds a real movie in Radarr and checks its streaming availability
+        using the actual JustWatch API.
+        """
+        from app.modules.justwatch import JustWatch
+        from app.media_cleaner import check_excluded_justwatch
+
+        # Add The Matrix to Radarr (a movie very likely to be on some streaming service)
+        matrix_movie = radarr_seeder.add_movie({
+            "title": "The Matrix",
+            "year": 1999,
+            "tmdbId": 603,
+        })
+
+        assert "id" in matrix_movie, f"Failed to add movie: {matrix_movie}"
+        movie_id = matrix_movie["id"]
+
+        try:
+            # Create mock Plex item
+            plex_item = MockPlexItem(
+                title="The Matrix",
+                year=1999,
+                rating_key="real_jw_1",
+                guids=["tmdb://603"],
+            )
+
+            # Use REAL JustWatch instance
+            justwatch = JustWatch("US", "en")
+
+            # Check if The Matrix is available on ANY streaming service
+            media_data = {"title": "The Matrix", "year": 1999, "tmdbId": 603}
+
+            # First, verify the JustWatch API returns data
+            search_result = justwatch.search_by_title_and_year("The Matrix", 1999, "movie")
+            assert search_result is not None, "JustWatch should find The Matrix"
+
+            # Check available_on with "any" provider
+            is_streaming = justwatch.available_on("The Matrix", 1999, "movie", ["any"])
+
+            # The Matrix is a popular movie - it should be on SOME streaming service
+            # Note: This could fail if The Matrix is temporarily removed from all services
+            print(f"The Matrix streaming availability (any): {is_streaming}")
+
+            # Test the exclusion check with real JustWatch
+            exclude_config = {
+                "justwatch": {
+                    "available_on": ["any"],
+                }
+            }
+
+            result = check_excluded_justwatch(media_data, plex_item, exclude_config, justwatch)
+
+            if is_streaming:
+                assert result is False, "Movie on streaming should be excluded"
+            else:
+                assert result is True, "Movie NOT on streaming should be actionable"
+                print("WARNING: The Matrix not found on any streaming service - unusual")
+
+        finally:
+            try:
+                radarr_client.del_movie(movie_id, delete_files=True)
+            except Exception:
+                pass
+
+    def test_real_justwatch_tv_show_with_sonarr(
+        self, docker_services, sonarr_seeder, sonarr_client: SonarrAPI
+    ):
+        """
+        Test full flow with real JustWatch API for TV shows.
+
+        Uses Breaking Bad which has been consistently available on Netflix.
+        """
+        from app.modules.justwatch import JustWatch
+        from app.media_cleaner import check_excluded_justwatch
+
+        # Add Breaking Bad to Sonarr
+        bb_series = sonarr_seeder.add_series({
+            "title": "Breaking Bad",
+            "year": 2008,
+            "tvdbId": 81189,
+        })
+
+        assert "id" in bb_series, f"Failed to add series: {bb_series}"
+        series_id = bb_series["id"]
+
+        try:
+            plex_item = MockPlexItem(
+                title="Breaking Bad",
+                year=2008,
+                rating_key="real_jw_2",
+                guids=["tvdb://81189"],
+            )
+
+            # Use REAL JustWatch instance
+            justwatch = JustWatch("US", "en")
+
+            # Search for Breaking Bad
+            search_result = justwatch.search_by_title_and_year("Breaking Bad", 2008, "show")
+            assert search_result is not None, "JustWatch should find Breaking Bad"
+            print(f"Found: {search_result.title} ({search_result.release_year})")
+
+            # Check if it's on Netflix (Breaking Bad has been on Netflix for years)
+            # Note: This could change if Netflix loses the rights
+            is_on_netflix = justwatch.available_on("Breaking Bad", 2008, "show", ["netflix"])
+            print(f"Breaking Bad on Netflix: {is_on_netflix}")
+
+            # Check if it's on ANY service
+            is_streaming = justwatch.available_on("Breaking Bad", 2008, "show", ["any"])
+            print(f"Breaking Bad on any streaming: {is_streaming}")
+
+            # Test exclusion check
+            media_data = {"title": "Breaking Bad", "year": 2008, "tvdbId": 81189}
+            exclude_config = {
+                "justwatch": {
+                    "available_on": ["any"],
+                }
+            }
+
+            result = check_excluded_justwatch(media_data, plex_item, exclude_config, justwatch)
+
+            # Breaking Bad should definitely be streaming somewhere
+            assert is_streaming is True, "Breaking Bad should be on some streaming service"
+            assert result is False, "Breaking Bad should be excluded (on streaming)"
+
+        finally:
+            try:
+                sonarr_client.del_series(series_id, delete_files=True)
+            except Exception:
+                pass
+
+    def test_real_justwatch_obscure_title(
+        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
+    ):
+        """
+        Test with a more obscure title that may not be on major streaming services.
+
+        Uses an older, less popular movie to test the not_available_on logic.
+        """
+        from app.modules.justwatch import JustWatch
+        from app.media_cleaner import check_excluded_justwatch
+
+        # Add an older, less mainstream movie
+        # "The Seventh Seal" (1957) - classic but not always on mainstream streaming
+        movie = radarr_seeder.add_movie({
+            "title": "The Seventh Seal",
+            "year": 1957,
+            "tmdbId": 490,
+        })
+
+        assert "id" in movie, f"Failed to add movie: {movie}"
+        movie_id = movie["id"]
+
+        try:
+            plex_item = MockPlexItem(
+                title="The Seventh Seal",
+                year=1957,
+                rating_key="real_jw_3",
+                guids=["tmdb://490"],
+            )
+
+            justwatch = JustWatch("US", "en")
+
+            # Search for the movie
+            search_result = justwatch.search_by_title_and_year("The Seventh Seal", 1957, "movie")
+
+            if search_result:
+                print(f"Found: {search_result.title} ({search_result.release_year})")
+
+                # Check if it's on Netflix specifically
+                is_on_netflix = justwatch.available_on("The Seventh Seal", 1957, "movie", ["netflix"])
+                print(f"The Seventh Seal on Netflix: {is_on_netflix}")
+
+                # Test not_available_on logic
+                media_data = {"title": "The Seventh Seal", "year": 1957, "tmdbId": 490}
+                exclude_config = {
+                    "justwatch": {
+                        "not_available_on": ["netflix"],
+                    }
+                }
+
+                result = check_excluded_justwatch(media_data, plex_item, exclude_config, justwatch)
+
+                # If NOT on Netflix, should be excluded (not_available_on = protect if NOT on service)
+                is_not_on_netflix = justwatch.is_not_available_on("The Seventh Seal", 1957, "movie", ["netflix"])
+                print(f"The Seventh Seal NOT on Netflix: {is_not_on_netflix}")
+
+                if is_not_on_netflix:
+                    assert result is False, "Movie NOT on Netflix should be excluded with not_available_on"
+                else:
+                    assert result is True, "Movie on Netflix should be actionable with not_available_on"
+            else:
+                print("WARNING: The Seventh Seal not found in JustWatch - may be regional")
+
+        finally:
+            try:
+                radarr_client.del_movie(movie_id, delete_files=True)
+            except Exception:
+                pass
+
+    def test_real_justwatch_multiple_providers(
+        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
+    ):
+        """
+        Test checking multiple specific streaming providers.
+        """
+        from app.modules.justwatch import JustWatch
+        from app.media_cleaner import check_excluded_justwatch
+
+        # Use a popular recent movie likely to be on multiple services
+        movie = radarr_seeder.add_movie({
+            "title": "Dune",
+            "year": 2021,
+            "tmdbId": 438631,
+        })
+
+        assert "id" in movie, f"Failed to add movie: {movie}"
+        movie_id = movie["id"]
+
+        try:
+            plex_item = MockPlexItem(
+                title="Dune",
+                year=2021,
+                rating_key="real_jw_4",
+                guids=["tmdb://438631"],
+            )
+
+            justwatch = JustWatch("US", "en")
+
+            search_result = justwatch.search_by_title_and_year("Dune", 2021, "movie")
+            assert search_result is not None, "JustWatch should find Dune (2021)"
+
+            # Check multiple providers
+            providers_to_check = ["netflix", "amazon", "hulu", "max", "disneyplus", "appletv"]
+            available_on = []
+
+            for provider in providers_to_check:
+                if justwatch.available_on("Dune", 2021, "movie", [provider]):
+                    available_on.append(provider)
+
+            print(f"Dune (2021) available on: {available_on if available_on else 'none of the checked services'}")
+
+            # Test with specific providers
+            media_data = {"title": "Dune", "year": 2021, "tmdbId": 438631}
+            exclude_config = {
+                "justwatch": {
+                    "available_on": ["netflix", "amazon", "max"],
+                }
+            }
+
+            result = check_excluded_justwatch(media_data, plex_item, exclude_config, justwatch)
+
+            # If on any of the specified providers, should be excluded
+            is_on_specified = any(p in available_on for p in ["netflix", "amazon", "max"])
+            if is_on_specified:
+                assert result is False, f"Dune on {[p for p in ['netflix', 'amazon', 'max'] if p in available_on]} should be excluded"
+            else:
+                assert result is True, "Dune not on specified providers should be actionable"
+
+        finally:
+            try:
+                radarr_client.del_movie(movie_id, delete_files=True)
+            except Exception:
+                pass

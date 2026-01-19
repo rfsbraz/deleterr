@@ -136,6 +136,27 @@ trakt:
 ```
 </details>
 
+## JustWatch
+
+JustWatch integration allows you to exclude media based on streaming availability. This is useful if you want to keep media that's currently available on streaming services you subscribe to, or conversely, delete media that's no longer available for streaming.
+
+The global JustWatch settings provide default values for all libraries. Individual libraries can override these settings.
+
+| Property | Description | Example |
+|----------|-------------|---------|
+| `country` | ISO 3166-1 alpha-2 country code for JustWatch lookup. | `"US"` |
+| `language` | Language code for JustWatch API. Defaults to `"en"`. | `"en"` |
+
+<details>
+  <summary>See example</summary>
+
+```yaml
+justwatch:
+  country: "US"
+  language: "en"
+```
+</details>
+
 ### Library
 
 For each of your Plex libraries, specify how you want Deleterr to behave. Define the name of the library, which instances to use, the action mode, and various thresholds related to watched status and addition date. You can also define exclusion rules here to protect certain media items from being actioned.
@@ -224,5 +245,54 @@ libraries:
             "https://trakt.tv/movies/collected/yearly",
             "https://trakt.tv/users/justin/lists/imdb-top-rated-movies"
           ]
+```
+</details>
+
+#### JustWatch Exclusions
+
+Exclude media based on streaming availability using JustWatch data. This allows you to keep or delete media based on whether it's currently available on specific streaming providers.
+
+**Note:** `available_on` and `not_available_on` are mutually exclusive - use only one per library.
+
+| Property | Description | Example |
+|----------|-------------|---------|
+| `justwatch` -> `country` | Override the global country setting for this library. | `"US"` |
+| `justwatch` -> `language` | Override the global language setting for this library. | `"en"` |
+| `justwatch` -> `available_on` | Exclude media if it IS available on these providers. Use `["any"]` to match any streaming service. | `["netflix", "amazon"]` |
+| `justwatch` -> `not_available_on` | Exclude media if it is NOT available on these providers. | `["netflix"]` |
+
+Common provider names include: `netflix`, `amazon`, `disneyplus`, `hbomax`, `max`, `hulu`, `appletvplus`, `peacocktv`, `paramountplus`, `crunchyroll`, `stan`, `binge`.
+
+<details>
+  <summary>See example - Keep media available on streaming</summary>
+
+Keep movies that are available on Netflix or Disney+ (don't delete them):
+
+```yaml
+libraries:
+  - name: "Movies"
+    radarr: Radarr
+    action_mode: "delete"
+    exclude:
+      justwatch:
+        country: "US"
+        available_on: ["netflix", "disneyplus"]
+```
+</details>
+
+<details>
+  <summary>See example - Delete media not on streaming</summary>
+
+Only delete movies that are NOT available on any streaming service:
+
+```yaml
+libraries:
+  - name: "Movies"
+    radarr: Radarr
+    action_mode: "delete"
+    exclude:
+      justwatch:
+        country: "US"
+        not_available_on: ["any"]
 ```
 </details>

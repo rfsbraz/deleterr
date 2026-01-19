@@ -1,0 +1,93 @@
+# Config file for testing JustWatch integration
+# This validates that JustWatch exclusion configuration works correctly
+
+# Plex connection details
+plex:
+  url: "http://localhost:32400"
+  token: "YOUR_PLEX_TOKEN"
+
+# Radarr connection details
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "YOUR_RADARR_API_KEY"
+
+# Sonarr connection details
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "YOUR_SONARR_API_KEY"
+
+# Tautulli connection details
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "YOUR_TAUTULLI_API_KEY"
+
+# Global JustWatch configuration
+justwatch:
+  country: "US"
+  language: "en"
+
+# If true, Deleterr will only log what it would do
+dry_run: true
+
+# Library configuration with JustWatch exclusions
+libraries:
+  # Movies library with available_on exclusion
+  # Excludes movies that ARE available on specified streaming services
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 30
+    added_at_threshold: 90
+    max_actions_per_run: 10
+    sort:
+      field: release_year
+      order: asc
+    exclude:
+      titles: ["Forrest Gump"]
+      genres: ["horror"]
+      justwatch:
+        available_on: ["netflix", "amazon", "disneyplus"]  # Don't delete if on these services
+
+  # TV Shows library with not_available_on exclusion
+  # Excludes shows that are NOT available on specified services (keep rare content)
+  - name: "TV Shows"
+    sonarr: "Sonarr"
+    action_mode: "delete"
+    last_watched_threshold: 365
+    added_at_threshold: 180
+    max_actions_per_run: 10
+    series_type: standard
+    sort:
+      field: seasons
+      order: desc
+    exclude:
+      titles: []
+      genres: []
+      justwatch:
+        not_available_on: ["netflix", "hulu"]  # Keep shows not on these services
+
+  # Library with library-level country override
+  - name: "UK Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 60
+    added_at_threshold: 120
+    max_actions_per_run: 5
+    exclude:
+      justwatch:
+        country: "GB"  # Override global country for UK library
+        language: "en"
+        available_on: ["bbc", "itv", "channel4"]
+
+  # Library using 'any' provider match
+  - name: "Streaming Check"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 30
+    added_at_threshold: 90
+    max_actions_per_run: 10
+    exclude:
+      justwatch:
+        available_on: ["any"]  # Exclude if available on ANY streaming service

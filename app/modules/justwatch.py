@@ -7,45 +7,139 @@ class JustWatch:
     def __init__(self, country, language):
         self.country = country
         self.language = language
+        self._search_cache = {}  # Cache for search results
         logger.debug(
             "JustWatch instance created with country: %s and language: %s",
             country,
             language,
         )
 
-    """
-    Search for a title on JustWatch API
-    Returns:
-    [MediaEntry(entry_id='ts8', object_id=8, object_type='SHOW', title='Better Call Saul', url='https://justwatch.com/pt/serie/better-call-saul', release_year=2015, release_date='2015-02-08', runtime_minutes=50, short_description='Six years before Saul Goodman meets Walter White. We meet him when the man who will become Saul Goodman is known as Jimmy McGill, a small-time lawyer searching for his destiny, and, more immediately, hustling to make ends meet. Working alongside, and, often, against Jimmy, is “fixer” Mike Ehrmantraut. The series tracks Jimmy’s transformation into Saul Goodman, the man who puts “criminal” in “criminal lawyer".', genres=['crm', 'drm'], imdb_id='tt3032476', poster='https://images.justwatch.com/poster/269897858/s718/better-call-saul.jpg', backdrops=['https://images.justwatch.com/backdrop/171468199/s1920/better-call-saul.jpg', 'https://images.justwatch.com/backdrop/269897860/s1920/better-call-saul.jpg', 'https://images.justwatch.com/backdrop/302946702/s1920/better-call-saul.jpg', 'https://images.justwatch.com/backdrop/304447863/s1920/better-call-saul.jpg', 'https://images.justwatch.com/backdrop/273394969/s1920/better-call-saul.jpg'], offers=[Offer(id='b2Z8dHM4OlBUOjg6ZmxhdHJhdGU6NGs=', monetization_type='FLATRATE', presentation_type='_4K', price_string=None, price_value=None, price_currency='EUR', last_change_retail_price_value=None, type='AGGREGATED', package=OfferPackage(id='cGF8OA==', package_id=8, name='Netflix', technical_name='netflix', icon='https://images.justwatch.com/icon/207360008/s100/netflix.png'), url='http://www.netflix.com/title/80021955', element_count=6, available_to=None, deeplink_roku='launch/12?contentID=80021955&MediaType=show', subtitle_languages=[], video_technology=[], audio_technology=[], audio_languages=[])])]
-    """
-
     def _search(self, title, max_results=5, detailed=False):
-        return search(title, self.country, self.language, max_results, detailed)
+        """
+        Search for a title on JustWatch API with caching and error handling.
+
+        Returns:
+            List of MediaEntry objects, or empty list on error
+        """
+        cache_key = f"{title}:{max_results}:{detailed}"
+
+        if cache_key in self._search_cache:
+            logger.debug(f"Cache hit for JustWatch search: {title}")
+            return self._search_cache[cache_key]
+
+        try:
+            results = search(title, self.country, self.language, max_results, detailed)
+            self._search_cache[cache_key] = results
+            return results
+        except Exception as e:
+            logger.warning(f"JustWatch API error while searching for '{title}': {e}")
+            return []
 
     def search_by_title_and_year(self, title, year, media_type):
+        """
+        Search for a specific title and year combination.
+
+        Args:
+            title: The title to search for
+            year: The release year to match
+            media_type: 'movie' or 'show' (currently unused but kept for future use)
+
+        Returns:
+            MediaEntry if found, None otherwise
+        """
         results = self._search(title)
+        if not results:
+            return None
+
+        # Try exact match first
         for entry in results:
             if entry.title == title and entry.release_year == year:
                 return entry
+
+        # Try case-insensitive match
+        for entry in results:
+            if entry.title.lower() == title.lower() and entry.release_year == year:
+                return entry
+
+        # Try with 1-year tolerance (release dates can vary by region)
+        for entry in results:
+            if (
+                entry.title.lower() == title.lower()
+                and year
+                and entry.release_year
+                and abs(entry.release_year - year) <= 1
+            ):
+                logger.debug(
+                    f"Matched '{title}' with year tolerance: {entry.release_year} vs {year}"
+                )
+                return entry
+
         return None
 
     def available_on(self, title, year, media_type, providers):
+        """
+        Check if a title is available on any of the specified streaming providers.
+
+        Args:
+            title: The title to check
+            year: The release year
+            media_type: 'movie' or 'show'
+            providers: List of provider technical names (e.g., ['netflix', 'amazon'])
+                      Use ['any'] to match any streaming provider
+
+        Returns:
+            True if the title is available on any of the specified providers
+        """
         result = self.search_by_title_and_year(title, year, media_type)
         if not result:
-            logger.debug("No results found for title: {title}")
+            logger.debug(f"No JustWatch results found for title: {title} ({year})")
             return False
 
-        if "any" in providers and result.offers:
-            logger.debug("Title {title} available on any provider")
+        # Check if offers exist
+        if not result.offers:
+            logger.debug(f"No streaming offers found for: {title} ({year})")
+            return False
+
+        # Handle 'any' provider - matches if any offer exists
+        providers_lower = [p.lower() for p in providers]
+        if "any" in providers_lower:
+            logger.debug(f"'{title}' is available on streaming (any provider match)")
             return True
 
-        for provider in providers:
-            for offer in result.offers:
-                if offer.package.technical_name == provider.lower():
-                    logger.debug("Title {title} available on {provider}")
+        # Check for specific providers
+        for offer in result.offers:
+            if offer.package and offer.package.technical_name:
+                offer_provider = offer.package.technical_name.lower()
+                if offer_provider in providers_lower:
+                    logger.debug(
+                        f"'{title}' is available on {offer.package.technical_name}"
+                    )
                     return True
 
+        logger.debug(
+            f"'{title}' is not available on any of the specified providers: {providers}"
+        )
         return False
 
     def is_not_available_on(self, title, year, media_type, providers):
+        """
+        Check if a title is NOT available on the specified streaming providers.
+
+        This is the inverse of available_on() - returns True if the title
+        cannot be found on any of the specified providers.
+
+        Args:
+            title: The title to check
+            year: The release year
+            media_type: 'movie' or 'show'
+            providers: List of provider technical names
+
+        Returns:
+            True if the title is NOT available on the specified providers
+        """
         return not self.available_on(title, year, media_type, providers)
+
+    def clear_cache(self):
+        """Clear the search cache."""
+        self._search_cache.clear()
+        logger.debug("JustWatch search cache cleared")
