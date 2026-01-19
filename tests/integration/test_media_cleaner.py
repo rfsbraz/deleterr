@@ -820,6 +820,7 @@ class TestMaxActionsPerRun:
             cleaner = MediaCleaner(mock_config)
 
             mock_radarr = MagicMock()
+            mock_radarr.get_movies.return_value = movies_to_process
             mock_movies_library = MagicMock()
             mock_movies_library.all.return_value = []
 
@@ -827,8 +828,7 @@ class TestMaxActionsPerRun:
                 library,
                 mock_radarr,
                 mock_movies_library,
-                movies_to_process,
-                {},  # activity_data
+                {},  # movie_activity
                 {},  # trakt_movies
                 max_actions_per_run=2,
             )
