@@ -137,6 +137,30 @@ trakt:
 
 ---
 
+## Overseerr
+
+[Overseerr](https://overseerr.dev/) is a request management and media discovery tool for your media server. Deleterr can integrate with Overseerr to exclude or include media based on request status.
+
+This is useful for:
+- **Protecting requested content**: Don't delete media that users specifically requested through Overseerr
+- **Cleaning up old requests**: Delete content that was requested a long time ago and hasn't been watched
+- **Making media requestable again**: After deletion, update Overseerr so users can re-request the media
+
+| Property | Description | Example |
+|----------|-------------|---------|
+| `url` | URL of your Overseerr server. | `"http://localhost:5055"` |
+| `api_key` | Overseerr API key. You can find this in Overseerr Settings → General. | `"YOUR_OVERSEERR_API_KEY"` |
+
+<details>
+  <summary>See example</summary>
+
+```yaml
+overseerr:
+  url: "http://localhost:5055"
+  api_key: "YOUR_OVERSEERR_API_KEY"
+```
+</details>
+
 ## JustWatch
 
 Optional. Global settings for streaming availability lookups.
@@ -311,6 +335,38 @@ exclude:
     quality_profiles: ["Remux-2160p", "Bluray-2160p"]
     paths: ["/data/media/4k", "/data/protected"]
     monitored: true
+```
+
+### Overseerr Exclusions
+
+Exclude or include media based on Overseerr request status. This requires configuring the global `overseerr` settings first.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `overseerr.mode` | string (`exclude`, `include_only`) | No | `"exclude"` | How to handle requested media. `exclude` protects requested items from deletion. `include_only` deletes ONLY requested items |
+| `overseerr.users` | array[string] | No | `[]` | Only consider requests from these users (username, email, or Plex username). If empty, all requests are considered |
+| `overseerr.include_pending` | boolean | No | `true` | Whether to include pending (not yet approved) requests |
+| `overseerr.request_status` | array[string] | No | `[]` | Only consider requests with these statuses: `pending`, `approved`, `declined`. If empty, all statuses are considered |
+| `overseerr.min_request_age_days` | integer | No | `0` | Only consider requests older than this many days |
+| `overseerr.update_status` | boolean | No | `false` | After deletion, mark the media as deleted in Overseerr so it can be requested again |
+
+**Protect requested content:**
+```yaml
+exclude:
+  overseerr:
+    mode: "exclude"
+    include_pending: true
+```
+
+**Cleanup old user requests:**
+```yaml
+exclude:
+  overseerr:
+    mode: "include_only"
+    users: ["user1"]
+    request_status: ["approved"]
+    min_request_age_days: 90
+    update_status: true
 ```
 
 ---

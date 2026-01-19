@@ -17,6 +17,7 @@ from app.constants import (
 from app.modules.tautulli import Tautulli
 from app.modules.radarr import DRadarr
 from app.modules.trakt import Trakt
+from app.modules.overseerr import Overseerr
 from app.utils import validate_units
 
 
@@ -70,6 +71,7 @@ class Config:
                 self.validate_trakt()
                 and self.validate_sonarr_and_radarr_instances()
                 and self.validate_tautulli()
+                and self.validate_overseerr()
                 and self.validate_libraries()
         )
 
@@ -85,6 +87,40 @@ class Config:
             return True
         except Exception as err:
             logger.error("Failed to connect to Trakt, check your configuration.")
+            logger.debug(f"Error: {err}")
+            return False
+
+    def validate_overseerr(self):
+        """Validate Overseerr connection if configured."""
+        overseerr_config = self.settings.get("overseerr")
+        if not overseerr_config:
+            return True
+
+        if not overseerr_config.get("url"):
+            logger.error("Overseerr URL is required when overseerr is configured.")
+            return False
+
+        if not overseerr_config.get("api_key"):
+            logger.error("Overseerr API key is required when overseerr is configured.")
+            return False
+
+        try:
+            ssl_verify = self.settings.get("ssl_verify", False)
+            overseerr = Overseerr(
+                overseerr_config.get("url"),
+                overseerr_config.get("api_key"),
+                ssl_verify=ssl_verify,
+            )
+            if not overseerr.test_connection():
+                logger.error(
+                    f"Failed to connect to Overseerr at {overseerr_config.get('url')}, check your configuration."
+                )
+                return False
+            return True
+        except Exception as err:
+            logger.error(
+                f"Failed to connect to Overseerr at {overseerr_config.get('url')}, check your configuration."
+            )
             logger.debug(f"Error: {err}")
             return False
 
@@ -173,6 +209,7 @@ class Config:
             self.validate_settings_for_instance(library)
             self.validate_justwatch_exclusions(library)
             self.validate_radarr_exclusions(library)
+            self.validate_overseerr_exclusions(library)
 
         return True
 
@@ -333,5 +370,62 @@ class Config:
                     logger.warning(
                         f"Radarr profile '{profile}' does not exist in instance '{connection['name']}'"
                     )
+
+        return True
+
+    def validate_overseerr_exclusions(self, library):
+        """Validate Overseerr exclusion configuration for a library."""
+        overseerr_exclusions = library.get("exclude", {}).get("overseerr", {})
+        if not overseerr_exclusions:
+            return True
+
+        # Require global Overseerr config if exclusions are used
+        if not self.settings.get("overseerr"):
+            self.log_and_exit(
+                f"Overseerr exclusions in library '{library.get('name')}' require a global 'overseerr' configuration. "
+                "Add overseerr.url and overseerr.api_key to your config."
+            )
+
+        # Validate mode
+        valid_modes = ["exclude", "include_only"]
+        mode = overseerr_exclusions.get("mode", "exclude")
+        if mode not in valid_modes:
+            self.log_and_exit(
+                f"Invalid Overseerr exclusion mode '{mode}' in library '{library.get('name')}'. "
+                f"Supported values are {valid_modes}."
+            )
+
+        # Validate users list format
+        users = overseerr_exclusions.get("users")
+        if users is not None and not isinstance(users, list):
+            self.log_and_exit(
+                f"Overseerr exclusions in library '{library.get('name')}': "
+                "'users' must be a list of usernames or emails."
+            )
+
+        # Validate request_status list format
+        request_status = overseerr_exclusions.get("request_status")
+        if request_status is not None:
+            if not isinstance(request_status, list):
+                self.log_and_exit(
+                    f"Overseerr exclusions in library '{library.get('name')}': "
+                    "'request_status' must be a list of status values."
+                )
+            valid_statuses = ["pending", "approved", "declined"]
+            for status in request_status:
+                if status.lower() not in valid_statuses:
+                    self.log_and_exit(
+                        f"Invalid Overseerr request_status '{status}' in library '{library.get('name')}'. "
+                        f"Supported values are {valid_statuses}."
+                    )
+
+        # Validate min_request_age_days format
+        min_request_age_days = overseerr_exclusions.get("min_request_age_days")
+        if min_request_age_days is not None:
+            if not isinstance(min_request_age_days, int) or min_request_age_days < 0:
+                self.log_and_exit(
+                    f"Overseerr exclusions in library '{library.get('name')}': "
+                    "'min_request_age_days' must be a non-negative integer."
+                )
 
         return True
