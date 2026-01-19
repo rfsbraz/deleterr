@@ -2,8 +2,7 @@ name: Create and publish a Docker image to GitHub Packages
 
 on:
   schedule:
-    # Nightly at 2:00 AM
-    - cron:  '0 2 * * *'
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2:00 AM
   push:
     branches:
       - 'develop'
@@ -13,29 +12,27 @@ on:
     branches:
       - 'develop'
 
-# Defines two custom environment variables for the workflow. These are used for the Container registry domain, and a name for the Docker image that this workflow builds.
 env:
   IMAGE_NAME: ${{ github.repository }}
 
-# There is a single job in this workflow. It's configured to run on the latest available version of Ubuntu.
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
- 
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-          
-      # Uses the `docker/login-action` action to log in to the Container registry registry using the account and password that will publish the packages. Once published, the packages are scoped to the account defined here.
-      - name: Log in to the Container registry
+
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -43,19 +40,19 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about) to extract tags and labels that will be applied to the specified image. The `id` "meta" allows the output of this step to be referenced in a subsequent step. The `images` value provides the base name for the tags and labels.
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ env.IMAGE_NAME }}
             ghcr.io/${{ env.IMAGE_NAME }}
+            ${{ github.event_name != 'pull_request' && env.IMAGE_NAME || '' }}
           flavor: |
             latest=auto
           tags: |
@@ -64,23 +61,28 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=ref,event=branch
-            type=ref,event=pr
             type=ref,event=tag
+            type=ref,event=pr
+            type=sha,prefix=,format=short
 
-      - name: Get the current date
-        id: date
-        run: echo "::set-output name=date::$(date +'%Y-%m-%dT%H:%M:%S')"
+      - name: Get build metadata
+        id: build_meta
+        run: |
+          echo "date=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_OUTPUT
+          echo "version=${{ steps.meta.outputs.version }}" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
-            COMMIT_TAG=${{ steps.meta.outputs.tags }}
+            VERSION=${{ steps.build_meta.outputs.version }}
             BRANCH=${{ github.ref_name }}
             COMMIT=${{ github.sha }}
-            BUILD_DATE=${{ steps.date.outputs.date }}
+            BUILD_DATE=${{ steps.build_meta.outputs.date }}
