@@ -5,4 +5,4 @@ requests==2.32.3
 tautulli==4.3.4.2140
 trakt.py==4.4.0
 pytest-mock==3.14.1
-simple-justwatch-python-api==0.14
+simple-justwatch-python-api==0.13
