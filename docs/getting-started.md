@@ -21,9 +21,37 @@ Before starting, ensure you have:
 
 ## Docker Compose Setup
 
-The recommended setup uses [Ofelia](https://github.com/mcuadros/ofelia) as a scheduler to run Deleterr on a schedule.
+There are two ways to schedule Deleterr: using the **built-in scheduler** (recommended for simplicity) or an **external scheduler** like Ofelia.
 
-### 1. Create docker-compose.yml
+### Option A: Built-in Scheduler (Recommended)
+
+The simplest setup - Deleterr handles its own scheduling:
+
+```yaml
+version: "3.9"
+services:
+  deleterr:
+    image: ghcr.io/rfsbraz/deleterr:latest
+    container_name: deleterr
+    environment:
+      LOG_LEVEL: INFO
+    volumes:
+      - ./config:/config
+      - ./logs:/config/logs
+    restart: unless-stopped
+```
+
+Add to your `settings.yaml`:
+```yaml
+scheduler:
+  enabled: true
+  schedule: "weekly"  # or "daily", "hourly", "monthly", or cron expression
+  timezone: "America/New_York"
+```
+
+### Option B: External Scheduler (Ofelia)
+
+For more advanced scheduling control, use [Ofelia](https://github.com/mcuadros/ofelia):
 
 ```yaml
 version: "3.9"
@@ -52,7 +80,7 @@ services:
       ofelia.job-run.deleterr.container: "deleterr"
 ```
 
-### 2. Create settings.yaml
+### Create settings.yaml
 
 Create `config/settings.yaml` with your configuration. Start with dry run enabled:
 
@@ -90,7 +118,30 @@ docker compose up -d
 
 ## Scheduling Options
 
-Ofelia supports cron-like scheduling. Common patterns:
+### Built-in Scheduler
+
+The built-in scheduler supports presets and standard cron expressions:
+
+| Schedule | Value |
+|----------|-------|
+| Weekly (Sunday 3am) | `weekly` |
+| Daily at 3am | `daily` |
+| Hourly | `hourly` |
+| Monthly (1st at 3am) | `monthly` |
+| Custom cron | `0 3 * * 0` (Sunday 3am) |
+
+Example configuration:
+```yaml
+scheduler:
+  enabled: true
+  schedule: "0 4 * * 1,4"  # Monday and Thursday at 4am
+  timezone: "Europe/London"
+  run_on_startup: true  # Also run when container starts
+```
+
+### Ofelia (External Scheduler)
+
+If using Ofelia, common scheduling patterns:
 
 | Schedule | Label Value |
 |----------|-------------|

@@ -28,6 +28,7 @@ from app.schema import (
     TraktConfig,
     JustWatchGlobalConfig,
     OverseerrConfig,
+    SchedulerConfig,
     LibraryConfig,
     DiskSizeThreshold,
     SortConfig,
@@ -307,6 +308,43 @@ overseerr:
 
 ---
 
+## Scheduler
+
+Optional. Built-in scheduler as an alternative to external schedulers like Ofelia or system cron.
+
+When enabled, Deleterr runs as a long-lived process and executes cleanup on the configured schedule. When disabled (default), Deleterr runs once and exits, suitable for triggering via external schedulers.
+
+{scheduler_table}
+
+**Schedule Presets:**
+- `hourly` - Every hour at minute 0
+- `daily` - Daily at 3 AM
+- `weekly` - Sunday at 3 AM
+- `monthly` - First day of month at 3 AM
+
+**Using a preset:**
+```yaml
+scheduler:
+  enabled: true
+  schedule: "weekly"
+  timezone: "America/New_York"
+```
+
+**Using a cron expression:**
+```yaml
+scheduler:
+  enabled: true
+  schedule: "0 3 * * 0"  # Sunday at 3 AM
+  timezone: "UTC"
+  run_on_startup: true
+```
+
+**Command-line overrides:**
+- `--scheduler` - Force scheduler mode (overrides config)
+- `--run-once` - Force single run mode (overrides scheduler config)
+
+---
+
 ## Libraries
 
 Configuration for each Plex library to manage.
@@ -457,6 +495,12 @@ ssl_verify: false
 action_delay: 10
 plex_library_scan_after_actions: false
 
+# Built-in scheduler (remove this section to use external scheduler like Ofelia)
+scheduler:
+  enabled: true
+  schedule: "weekly"
+  timezone: "UTC"
+
 plex:
   url: "http://localhost:32400"
   token: "YOUR_PLEX_TOKEN"
@@ -590,6 +634,7 @@ libraries:
         trakt_table=generate_table(TraktConfig),
         justwatch_table=generate_table(JustWatchGlobalConfig),
         overseerr_table=generate_table(OverseerrConfig),
+        scheduler_table=generate_table(SchedulerConfig),
         library_table=library_table,
         disk_table=generate_table(DiskSizeThreshold),
         sort_table=generate_table(SortConfig),
