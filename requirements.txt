@@ -1,10 +1,10 @@
 PlexAPI==4.15.16
 pydantic>=2.0.0
 pyarr==5.2.0
-PyYAML==6.0.2
-requests==2.32.4
-tautulli==4.3.4.2140
+PyYAML==6.0.3
+requests==2.32.5
+tautulli==4.6.7.2142
 trakt.py==4.4.0
-pytest-mock==3.14.1
+pytest-mock==3.15.1
 simple-justwatch-python-api==0.13
 APScheduler>=3.10.0
