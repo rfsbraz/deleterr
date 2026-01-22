@@ -7,6 +7,7 @@ from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 
 from app import logger
 from app.modules.justwatch import JustWatch
+from app.modules.overseerr import Overseerr
 from app.modules.tautulli import Tautulli
 from app.modules.trakt import Trakt
 from app.utils import parse_size_to_bytes, print_readable_freed_space
@@ -37,6 +38,17 @@ class MediaCleaner:
             config.settings.get("trakt", {}).get("client_id"),
             config.settings.get("trakt", {}).get("client_secret"),
         )
+
+        # Initialize Overseerr if configured
+        overseerr_config = config.settings.get("overseerr", {})
+        if overseerr_config.get("url") and overseerr_config.get("api_key"):
+            self.overseerr = Overseerr(
+                overseerr_config.get("url"),
+                overseerr_config.get("api_key"),
+                ssl_verify=ssl_verify,
+            )
+        else:
+            self.overseerr = None
 
         # Configure session with SSL verification setting
         session = requests.Session()
@@ -222,6 +234,7 @@ class MediaCleaner:
             print_readable_freed_space(disk_size),
             total_episodes,
         )
+        deleted = False
         if self.config.settings.get("interactive"):
             logger.info(
                 "Would you like to delete show '%s' from sonarr instance '%s'? (y/n)",
@@ -230,8 +243,14 @@ class MediaCleaner:
             )
             if input().lower() == "y":
                 self.delete_series(sonarr_instance, sonarr_show)
+                deleted = True
         else:
             self.delete_series(sonarr_instance, sonarr_show)
+            deleted = True
+
+        # Update Overseerr status after successful deletion
+        if deleted:
+            self._update_overseerr_status(library, sonarr_show, "tv")
 
     def process_library_movies(self, library, radarr_instance):
         if not library_meets_disk_space_threshold(library, radarr_instance):
@@ -377,6 +396,7 @@ class MediaCleaner:
             library.get("name"),
             print_readable_freed_space(disk_size),
         )
+        deleted = False
         if self.config.settings.get("interactive"):
             logger.info(
                 "Would you like to delete movie '%s' from radarr instance '%s'? (y/n)",
@@ -389,11 +409,51 @@ class MediaCleaner:
                     delete_files=True,
                     add_exclusion=library.get("add_list_exclusion_on_delete", False),
                 )
+                deleted = True
         else:
             radarr_instance.del_movie(
                 radarr_movie["id"],
                 delete_files=True,
                 add_exclusion=library.get("add_list_exclusion_on_delete", False),
+            )
+            deleted = True
+
+        # Update Overseerr status after successful deletion
+        if deleted:
+            self._update_overseerr_status(library, radarr_movie, "movie")
+
+    def _update_overseerr_status(self, library, media_data, media_type):
+        """
+        Update Overseerr status after deletion if configured.
+
+        Args:
+            library: Library configuration
+            media_data: Media data from Sonarr/Radarr
+            media_type: 'movie' or 'tv'
+        """
+        overseerr_config = library.get("exclude", {}).get("overseerr", {})
+        if not overseerr_config.get("update_status") or not self.overseerr:
+            return
+
+        tmdb_id = media_data.get("tmdbId")
+        if not tmdb_id:
+            logger.debug(
+                f"Cannot update Overseerr status for '{media_data.get('title')}': no TMDB ID"
+            )
+            return
+
+        try:
+            if self.overseerr.mark_as_deleted(tmdb_id, media_type):
+                logger.info(
+                    f"Updated Overseerr status for '{media_data.get('title')}' (TMDB: {tmdb_id})"
+                )
+            else:
+                logger.warning(
+                    f"Failed to update Overseerr status for '{media_data.get('title')}'"
+                )
+        except Exception as e:
+            logger.warning(
+                f"Error updating Overseerr status for '{media_data.get('title')}': {e}"
             )
 
     def get_library_config(self, config, show):
@@ -702,6 +762,12 @@ class MediaCleaner:
         ):
             return False
 
+        # Overseerr exclusion check (requires overseerr instance)
+        if not check_excluded_overseerr(
+            media_data, plex_media_item, exclude, self.overseerr
+        ):
+            return False
+
         return True
 
 
@@ -882,6 +948,112 @@ def check_excluded_justwatch(media_data, plex_media_item, exclude, justwatch_ins
         if justwatch_instance.is_not_available_on(title, year, media_type, providers):
             logger.debug(
                 f"{title} is not available on streaming service(s) {providers}, skipping"
+            )
+            return False
+
+    return True
+
+
+def check_excluded_overseerr(media_data, plex_media_item, exclude, overseerr_instance):
+    """
+    Check if media should be excluded/included based on Overseerr requests.
+
+    Args:
+        media_data: Media data from Sonarr/Radarr
+        plex_media_item: Plex media item
+        exclude: Exclusion configuration from library
+        overseerr_instance: Overseerr instance (may be None if not configured)
+
+    Returns:
+        True if media should NOT be excluded (i.e., is actionable)
+        False if media should be excluded (i.e., skip this media)
+    """
+    from app.modules.overseerr import (
+        REQUEST_STATUS_PENDING,
+        REQUEST_STATUS_APPROVED,
+        REQUEST_STATUS_DECLINED,
+    )
+
+    overseerr_config = exclude.get("overseerr", {})
+
+    if not overseerr_config or not overseerr_instance:
+        return True
+
+    tmdb_id = media_data.get("tmdbId")
+    if not tmdb_id:
+        logger.debug(
+            f"'{media_data.get('title')}' has no TMDB ID, cannot check Overseerr requests"
+        )
+        return True
+
+    mode = overseerr_config.get("mode", "exclude")
+    users = overseerr_config.get("users")
+    include_pending = overseerr_config.get("include_pending", True)
+    request_status_filter = overseerr_config.get("request_status")
+    min_request_age_days = overseerr_config.get("min_request_age_days")
+
+    # Map status names to constants
+    status_name_map = {
+        "pending": REQUEST_STATUS_PENDING,
+        "approved": REQUEST_STATUS_APPROVED,
+        "declined": REQUEST_STATUS_DECLINED,
+    }
+
+    # Get request data for advanced filtering
+    request_data = overseerr_instance.get_request_data(tmdb_id)
+
+    # Basic request check (considering users and include_pending)
+    if users:
+        is_requested = overseerr_instance.is_requested_by(tmdb_id, users, include_pending)
+    else:
+        is_requested = overseerr_instance.is_requested(tmdb_id, include_pending)
+
+    # Apply request_status filter if specified
+    if is_requested and request_status_filter and request_data:
+        # Convert status filter to numeric values
+        allowed_statuses = [
+            status_name_map.get(s.lower())
+            for s in request_status_filter
+            if s.lower() in status_name_map
+        ]
+        if allowed_statuses:
+            current_status = request_data.get("status")
+            if current_status not in allowed_statuses:
+                # Request exists but doesn't match status filter
+                is_requested = False
+                logger.debug(
+                    f"'{media_data.get('title')}' request status doesn't match filter {request_status_filter}, treating as not requested"
+                )
+
+    # Apply min_request_age_days filter if specified
+    if is_requested and min_request_age_days and request_data:
+        created_at = request_data.get("created_at")
+        if created_at:
+            try:
+                # Parse ISO format date string
+                request_date = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                age_days = (datetime.now(request_date.tzinfo) - request_date).days
+                if age_days < min_request_age_days:
+                    # Request is too recent
+                    is_requested = False
+                    logger.debug(
+                        f"'{media_data.get('title')}' request is only {age_days} days old (min: {min_request_age_days}), treating as not requested"
+                    )
+            except (ValueError, TypeError) as e:
+                logger.debug(f"Could not parse request date for '{media_data.get('title')}': {e}")
+
+    if mode == "exclude":
+        # Exclude mode: skip requested items (don't delete them)
+        if is_requested:
+            logger.debug(
+                f"'{media_data.get('title')}' has Overseerr request, skipping"
+            )
+            return False
+    elif mode == "include_only":
+        # Include-only mode: ONLY delete items that were requested
+        if not is_requested:
+            logger.debug(
+                f"'{media_data.get('title')}' not requested via Overseerr, skipping"
             )
             return False
 

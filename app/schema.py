@@ -186,6 +186,52 @@ class JustWatchExclusions(BaseModel):
         return self
 
 
+class OverseerrConfig(BaseModel):
+    """Overseerr connection settings for request-based exclusions."""
+
+    url: str = Field(
+        ...,
+        description="URL of your Overseerr server",
+        json_schema_extra={"example": "http://localhost:5055"},
+    )
+    api_key: str = Field(
+        ...,
+        description="Overseerr API key. Found in Overseerr Settings → General",
+        json_schema_extra={"example": "YOUR_OVERSEERR_API_KEY"},
+    )
+
+
+class OverseerrExclusions(BaseModel):
+    """Overseerr request-based exclusions."""
+
+    mode: Literal["exclude", "include_only"] = Field(
+        default="exclude",
+        description="How to handle requested media. `exclude` protects requested items from deletion. `include_only` deletes ONLY requested items",
+    )
+    users: list[str] = Field(
+        default_factory=list,
+        description="Only consider requests from these users (username, email, or Plex username). If empty, all requests are considered",
+        json_schema_extra={"example": ["user1", "admin"]},
+    )
+    include_pending: bool = Field(
+        default=True,
+        description="Whether to include pending (not yet approved) requests",
+    )
+    request_status: list[str] = Field(
+        default_factory=list,
+        description="Only consider requests with these statuses: `pending`, `approved`, `declined`. If empty, all statuses are considered",
+        json_schema_extra={"example": ["approved"]},
+    )
+    min_request_age_days: int = Field(
+        default=0,
+        description="Only consider requests older than this many days",
+    )
+    update_status: bool = Field(
+        default=False,
+        description="After deletion, mark the media as deleted in Overseerr so it can be requested again",
+    )
+
+
 class RadarrExclusions(BaseModel):
     """Radarr-specific exclusions. Only applies to movie libraries."""
 
@@ -274,6 +320,10 @@ class Exclusions(BaseModel):
     radarr: Optional[RadarrExclusions] = Field(
         default=None,
         description="Radarr-specific exclusions (movies only)",
+    )
+    overseerr: Optional[OverseerrExclusions] = Field(
+        default=None,
+        description="Overseerr request-based exclusions",
     )
 
 
@@ -409,6 +459,10 @@ class DeleterrConfig(BaseModel):
     justwatch: Optional[JustWatchGlobalConfig] = Field(
         default=None,
         description="Global JustWatch settings for streaming availability lookups",
+    )
+    overseerr: Optional[OverseerrConfig] = Field(
+        default=None,
+        description="Overseerr connection settings for request-based exclusions",
     )
 
     # Libraries
