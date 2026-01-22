@@ -45,6 +45,24 @@ trakt:
 #   country: "US"  # ISO 3166-1 alpha-2 country code
 #   language: "en"  # Language code (defaults to "en")
 
+# Built-in scheduler (optional)
+# Enable this to run Deleterr as a long-lived process with automatic scheduling.
+# When disabled (default), Deleterr runs once and exits - use external schedulers
+# like Ofelia or system cron to trigger runs.
+# scheduler:
+#   enabled: true                    # Enable built-in scheduler
+#   schedule: "weekly"               # Preset or cron expression (see below)
+#   timezone: "America/New_York"     # Timezone for schedule (defaults to UTC)
+#   run_on_startup: false            # Also run immediately when container starts
+#
+# Schedule presets:
+#   - "hourly"   - Every hour at minute 0
+#   - "daily"    - Daily at 3 AM
+#   - "weekly"   - Sunday at 3 AM
+#   - "monthly"  - First day of month at 3 AM
+#
+# Or use cron expressions: "0 3 * * 0" (minute hour day month day_of_week)
+
 # If true, Deleterr will only log what it would do but not perform the actions
 dry_run: true
 

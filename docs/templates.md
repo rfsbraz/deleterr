@@ -13,6 +13,68 @@ Ready-to-use configurations for common scenarios. Copy, paste, and customize.
 
 ---
 
+## Docker Compose Examples
+
+### Built-in Scheduler (Recommended)
+
+Single container with integrated scheduling:
+
+```yaml
+version: "3.9"
+services:
+  deleterr:
+    image: ghcr.io/rfsbraz/deleterr:latest
+    container_name: deleterr
+    environment:
+      LOG_LEVEL: INFO
+      TZ: America/New_York
+    volumes:
+      - ./config:/config
+      - ./logs:/config/logs
+    restart: unless-stopped
+```
+
+Add to your `settings.yaml`:
+```yaml
+scheduler:
+  enabled: true
+  schedule: "weekly"
+  timezone: "America/New_York"
+```
+
+### External Scheduler (Ofelia)
+
+For advanced scheduling with Docker socket access:
+
+```yaml
+version: "3.9"
+services:
+  deleterr:
+    image: ghcr.io/rfsbraz/deleterr:latest
+    container_name: deleterr
+    environment:
+      LOG_LEVEL: INFO
+    volumes:
+      - ./config:/config
+      - ./logs:/config/logs
+    restart: no
+
+  scheduler:
+    image: mcuadros/ofelia:latest
+    container_name: scheduler
+    depends_on:
+      - deleterr
+    command: daemon --docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    labels:
+      ofelia.job-run.deleterr.schedule: "@weekly"
+      ofelia.job-run.deleterr.container: "deleterr"
+```
+
+---
+
 ## 1. Minimal Movies
 
 Basic single-library setup with sensible defaults.

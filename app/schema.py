@@ -114,6 +114,35 @@ class JustWatchGlobalConfig(BaseModel):
     )
 
 
+class SchedulerConfig(BaseModel):
+    """
+    Built-in scheduler configuration.
+
+    Provides an alternative to external schedulers like Ofelia or system cron.
+    When enabled, Deleterr runs as a long-lived process and executes on the
+    configured schedule.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable built-in scheduler. When false, Deleterr runs once and exits (for external schedulers)",
+    )
+    schedule: str = Field(
+        default="weekly",
+        description="Cron expression or preset (hourly, daily, weekly, monthly). Examples: 'weekly', '0 3 * * 0' (Sunday 3 AM)",
+        json_schema_extra={"example": "weekly"},
+    )
+    timezone: str = Field(
+        default="UTC",
+        description="Timezone for schedule (e.g., 'America/New_York', 'Europe/London')",
+        json_schema_extra={"example": "UTC"},
+    )
+    run_on_startup: bool = Field(
+        default=False,
+        description="Run immediately when container starts, in addition to scheduled runs",
+    )
+
+
 class DiskSizeThreshold(BaseModel):
     """Disk size threshold configuration."""
 
@@ -463,6 +492,12 @@ class DeleterrConfig(BaseModel):
     overseerr: Optional[OverseerrConfig] = Field(
         default=None,
         description="Overseerr connection settings for request-based exclusions",
+    )
+
+    # Scheduler
+    scheduler: Optional[SchedulerConfig] = Field(
+        default=None,
+        description="Built-in scheduler configuration. Alternative to external schedulers like Ofelia",
     )
 
     # Libraries
