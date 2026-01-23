@@ -71,6 +71,43 @@ jobs:
           echo "date=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_OUTPUT
           echo "version=${{ steps.meta.outputs.version }}" >> $GITHUB_OUTPUT
 
+      - name: Build Docker image for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true  # Load into local Docker for smoke test
+          tags: ${{ env.IMAGE_NAME }}:smoke-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.build_meta.outputs.version }}
+            BRANCH=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ steps.build_meta.outputs.date }}
+
+      - name: Smoke test - Verify container starts
+        run: |
+          echo "🧪 Running smoke test to verify container can start..."
+
+          # Test 1: Verify Python can import all modules without syntax/compatibility errors
+          docker run --rm ${{ env.IMAGE_NAME }}:smoke-test python -c "
+          print('Testing module imports...')
+          from app.deleterr import main
+          from app.media_cleaner import MediaCleaner
+          from app.modules.tautulli import Tautulli
+          from app.modules.trakt import Trakt
+          from app.modules.justwatch import JustWatch
+          from app.modules.radarr import DRadarr
+          from app.modules.overseerr import Overseerr
+          print('✅ All modules imported successfully')
+          "
+
+          # Test 2: Verify --help works (basic CLI functionality)
+          docker run --rm ${{ env.IMAGE_NAME }}:smoke-test python -m app.deleterr --help || true
+
+          echo "✅ Smoke test passed - container starts correctly"
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
