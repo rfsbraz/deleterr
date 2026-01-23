@@ -2,7 +2,6 @@
 # Tests: If any item in a collection was recently watched, protect the entire collection
 
 dry_run: false
-interactive: false
 action_delay: 0
 
 plex:

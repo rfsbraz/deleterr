@@ -193,7 +193,6 @@ Root-level settings that apply globally.
 dry_run: true
 ssl_verify: false
 action_delay: 25
-interactive: false
 plex_library_scan_after_actions: false
 tautulli_library_scan_after_actions: false
 ```
@@ -577,7 +576,7 @@ libraries:
 """
 
     # Generate general settings table (subset of DeleterrConfig)
-    general_fields = ["dry_run", "interactive", "ssl_verify", "action_delay",
+    general_fields = ["dry_run", "ssl_verify", "action_delay",
                       "plex_library_scan_after_actions", "tautulli_library_scan_after_actions"]
     general_lines = ["| Property | Type | Required | Default | Description |"]
     general_lines.append("|----------|------|----------|---------|-------------|")

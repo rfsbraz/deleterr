@@ -57,10 +57,6 @@ class Config:
         if self.settings.get("dry_run"):
             logger.info("Running in dry-run mode, no changes will be made.")
 
-        if self.settings.get("interactive"):
-            logger.info(
-                "Running in interactive mode, you will be prompted before any changes are made."
-            )
 
     def log_and_exit(self, msg):
         logger.error(msg)

@@ -2,7 +2,6 @@
 # Tests: Movies available on streaming services should be protected from deletion
 
 dry_run: false
-interactive: false
 action_delay: 0
 
 plex:

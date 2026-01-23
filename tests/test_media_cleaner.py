@@ -378,72 +378,6 @@ def test_process_show_not_dry_run(mock_delete_show_if_allowed, standard_config):
     assert result == 100
 
 
-@patch.object(MediaCleaner, "delete_series")
-@patch("builtins.input", return_value="y")
-def test_delete_show_if_allowed_interactive_yes(
-    mock_input, mock_delete_series, standard_config
-):
-    # Arrange
-    library = {"name": "Test Library"}
-    sonarr_instance = MagicMock()
-    sonarr_show = {"title": "Test Show"}
-    actions_performed = 0
-    max_actions_per_run = 1
-    disk_size = 100
-    total_episodes = 10
-
-    media_cleaner = MediaCleaner(standard_config)
-    media_cleaner.config.settings = {"interactive": True}
-
-    # Act
-    media_cleaner.delete_show_if_allowed(
-        library,
-        sonarr_instance,
-        sonarr_show,
-        actions_performed,
-        max_actions_per_run,
-        disk_size,
-        total_episodes,
-    )
-
-    # Assert
-    mock_delete_series.assert_called_once_with(sonarr_instance, sonarr_show)
-    mock_input.assert_called_once_with()
-
-
-@patch.object(MediaCleaner, "delete_series")
-@patch("builtins.input", return_value="n")
-def test_delete_show_if_allowed_not_interactive_yes(
-    mock_input, mock_delete_series, standard_config
-):
-    # Arrange
-    library = {"name": "Test Library"}
-    sonarr_instance = MagicMock()
-    sonarr_show = {"title": "Test Show"}
-    actions_performed = 0
-    max_actions_per_run = 1
-    disk_size = 100
-    total_episodes = 10
-
-    media_cleaner = MediaCleaner(standard_config)
-    media_cleaner.config.settings = {"interactive": False}
-
-    # Act
-    media_cleaner.delete_show_if_allowed(
-        library,
-        sonarr_instance,
-        sonarr_show,
-        actions_performed,
-        max_actions_per_run,
-        disk_size,
-        total_episodes,
-    )
-
-    # Assert
-    mock_delete_series.assert_called_once_with(sonarr_instance, sonarr_show)
-    mock_input.assert_not_called()
-
-
 def test_check_exclusions(mocker, standard_config):
     # Arrange
     library = {"name": "Test Library", "exclude": {}}
@@ -1036,8 +970,7 @@ def test_delete_series_no_errors(standard_config):
     mock_sonarr.del_series.assert_called_once_with(sonarr_show["id"], delete_files=True)
 
 
-@patch("builtins.input", return_value="y")
-def test_delete_movie_if_allowed_interactive_yes(mock_input, standard_config):
+def test_delete_movie_if_allowed(standard_config):
     # Arrange
     library = {"name": "Test Library"}
     radarr_instance = MagicMock()
@@ -1047,64 +980,6 @@ def test_delete_movie_if_allowed_interactive_yes(mock_input, standard_config):
     disk_size = 100
 
     media_cleaner_instance = MediaCleaner(standard_config)
-    media_cleaner_instance.config.settings = {"interactive": True}
-
-    # Act
-    media_cleaner_instance.delete_movie_if_allowed(
-        library,
-        radarr_instance,
-        radarr_movie,
-        actions_performed,
-        max_actions_per_run,
-        disk_size,
-    )
-
-    # Assert
-    mock_input.assert_called_once()
-    radarr_instance.del_movie.assert_called_once_with(
-        radarr_movie["id"], delete_files=True, add_exclusion=False
-    )
-
-
-@patch("builtins.input", return_value="n")
-def test_delete_movie_if_allowed_interactive_no(mock_input, standard_config):
-    # Arrange
-    library = {"name": "Test Library"}
-    radarr_instance = MagicMock()
-    radarr_movie = {"id": 1, "title": "Test Movie"}
-    actions_performed = 0
-    max_actions_per_run = 1
-    disk_size = 100
-
-    media_cleaner_instance = MediaCleaner(standard_config)
-    media_cleaner_instance.config.settings = {"interactive": True}
-
-    # Act
-    media_cleaner_instance.delete_movie_if_allowed(
-        library,
-        radarr_instance,
-        radarr_movie,
-        actions_performed,
-        max_actions_per_run,
-        disk_size,
-    )
-
-    # Assert
-    mock_input.assert_called_once()
-    radarr_instance.del_movie.assert_not_called()
-
-
-def test_delete_movie_if_allowed_not_interactive(standard_config):
-    # Arrange
-    library = {"name": "Test Library"}
-    radarr_instance = MagicMock()
-    radarr_movie = {"id": 1, "title": "Test Movie"}
-    actions_performed = 0
-    max_actions_per_run = 1
-    disk_size = 100
-
-    media_cleaner_instance = MediaCleaner(standard_config)
-    media_cleaner_instance.config.settings = {"interactive": False}
 
     # Act
     media_cleaner_instance.delete_movie_if_allowed(

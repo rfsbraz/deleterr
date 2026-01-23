@@ -2,7 +2,6 @@
 # Tests: Nothing should be deleted when dry_run is enabled
 
 dry_run: true
-interactive: false
 action_delay: 0
 
 plex:

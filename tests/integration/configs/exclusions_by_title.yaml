@@ -2,7 +2,6 @@
 # Tests: Specific titles should be protected from deletion
 
 dry_run: false
-interactive: false
 action_delay: 0
 
 plex:

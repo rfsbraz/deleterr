@@ -2,7 +2,6 @@
 # Tests: Multiple exclusion rules can be combined
 
 dry_run: false
-interactive: false
 action_delay: 0
 
 plex:

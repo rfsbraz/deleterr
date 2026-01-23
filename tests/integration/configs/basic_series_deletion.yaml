@@ -2,7 +2,6 @@
 # Tests: TV shows older than 30 days since last watched are deleted
 
 dry_run: false
-interactive: false
 action_delay: 0
 
 plex:

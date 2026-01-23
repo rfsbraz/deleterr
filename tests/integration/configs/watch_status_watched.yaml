@@ -2,7 +2,6 @@
 # Tests: Only delete movies that have been watched (not unwatched ones)
 
 dry_run: false
-interactive: false
 action_delay: 0
 
 plex:
