@@ -18,6 +18,7 @@ jobs:
     steps:
       - name: Purge badge cache
         uses: kevincobain2000/action-camo-purge@v1
+        continue-on-error: true  # Don't fail on fork PRs
 
       - name: Checkout repository
         uses: actions/checkout@v4

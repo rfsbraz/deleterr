@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   comment-pr:
+    # Only run for PRs from the same repo (fork PRs don't get Docker images pushed)
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     name: Add Docker testing instructions
     steps:
