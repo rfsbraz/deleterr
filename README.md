@@ -163,7 +163,7 @@ The image is available through:
 ### Tags
 
 * `latest`: The latest stable release
-* `nightly`: The latest development release
+* `edge`: The latest development build (from main branch)
 * `X.Y.Z`: A specific version
 * `X.Y`: The latest release in the vX.Y series
 * `X`: The latest release in the vX series

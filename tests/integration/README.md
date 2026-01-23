@@ -214,7 +214,7 @@ Since Plex requires authentication tokens and is complex to automate, we use a F
 
 Integration tests run automatically on:
 - Every pull request
-- Pushes to `develop` and `main` branches
+- Pushes to `main` branch
 
 See `.github/workflows/integration-tests.yml` for the workflow configuration.
 

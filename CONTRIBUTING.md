@@ -32,7 +32,7 @@ Feature requests are welcome! Please:
 
 ### Pull Requests
 
-1. **Fork the repository** and create your branch from `develop`
+1. **Fork the repository** and create your branch from `main`
 2. **Follow existing code style** - the project uses consistent patterns
 3. **Add tests** if applicable
 4. **Update documentation** for any changed functionality

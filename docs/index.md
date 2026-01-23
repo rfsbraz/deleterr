@@ -61,4 +61,4 @@ ghcr.io/rfsbraz/deleterr:latest
 rfsbraz/deleterr:latest
 ```
 
-**Tags**: `latest` (stable), `nightly` (development), `X.Y.Z` (specific version)
+**Tags**: `latest` (stable), `edge` (development), `X.Y.Z` (specific version)
