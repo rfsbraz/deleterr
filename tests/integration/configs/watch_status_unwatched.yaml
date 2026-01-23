@@ -2,7 +2,6 @@
 # Tests: Only delete movies that have never been watched
 
 dry_run: false
-interactive: false
 action_delay: 0
 
 plex:

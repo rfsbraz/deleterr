@@ -2,7 +2,6 @@
 # Tests: Only anime series should be affected (not standard series)
 
 dry_run: false
-interactive: false
 action_delay: 0
 
 plex:

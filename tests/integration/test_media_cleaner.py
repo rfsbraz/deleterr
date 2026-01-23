@@ -756,8 +756,7 @@ class TestDryRunMode:
         mock_config = MagicMock()
         mock_config.settings = {
             "dry_run": True,
-            "interactive": False,
-            "plex": {"url": "http://localhost:32400", "token": "test"},
+                        "plex": {"url": "http://localhost:32400", "token": "test"},
             "tautulli": {"url": "http://localhost:8181", "api_key": "test"},
         }
 
@@ -793,8 +792,7 @@ class TestMaxActionsPerRun:
         mock_config = MagicMock()
         mock_config.settings = {
             "dry_run": True,  # Use dry run so we don't actually delete
-            "interactive": False,
-            "action_delay": 0,
+                        "action_delay": 0,
             "plex": {"url": "http://localhost:32400", "token": "test"},
             "tautulli": {"url": "http://localhost:8181", "api_key": "test"},
         }
@@ -849,8 +847,7 @@ class TestAddListExclusion:
         mock_config = MagicMock()
         mock_config.settings = {
             "dry_run": False,
-            "interactive": False,
-            "plex": {"url": "http://localhost:32400", "token": "test"},
+                        "plex": {"url": "http://localhost:32400", "token": "test"},
             "tautulli": {"url": "http://localhost:8181", "api_key": "test"},
         }
 

@@ -234,23 +234,10 @@ class MediaCleaner:
             print_readable_freed_space(disk_size),
             total_episodes,
         )
-        deleted = False
-        if self.config.settings.get("interactive"):
-            logger.info(
-                "Would you like to delete show '%s' from sonarr instance '%s'? (y/n)",
-                sonarr_show["title"],
-                library.get("name"),
-            )
-            if input().lower() == "y":
-                self.delete_series(sonarr_instance, sonarr_show)
-                deleted = True
-        else:
-            self.delete_series(sonarr_instance, sonarr_show)
-            deleted = True
+        self.delete_series(sonarr_instance, sonarr_show)
 
         # Update Overseerr status after successful deletion
-        if deleted:
-            self._update_overseerr_status(library, sonarr_show, "tv")
+        self._update_overseerr_status(library, sonarr_show, "tv")
 
     def process_library_movies(self, library, radarr_instance):
         if not library_meets_disk_space_threshold(library, radarr_instance):
@@ -396,31 +383,14 @@ class MediaCleaner:
             library.get("name"),
             print_readable_freed_space(disk_size),
         )
-        deleted = False
-        if self.config.settings.get("interactive"):
-            logger.info(
-                "Would you like to delete movie '%s' from radarr instance '%s'? (y/n)",
-                radarr_movie["title"],
-                library.get("name"),
-            )
-            if input().lower() == "y":
-                radarr_instance.del_movie(
-                    radarr_movie["id"],
-                    delete_files=True,
-                    add_exclusion=library.get("add_list_exclusion_on_delete", False),
-                )
-                deleted = True
-        else:
-            radarr_instance.del_movie(
-                radarr_movie["id"],
-                delete_files=True,
-                add_exclusion=library.get("add_list_exclusion_on_delete", False),
-            )
-            deleted = True
+        radarr_instance.del_movie(
+            radarr_movie["id"],
+            delete_files=True,
+            add_exclusion=library.get("add_list_exclusion_on_delete", False),
+        )
 
         # Update Overseerr status after successful deletion
-        if deleted:
-            self._update_overseerr_status(library, radarr_movie, "movie")
+        self._update_overseerr_status(library, radarr_movie, "movie")
 
     def _update_overseerr_status(self, library, media_data, media_type):
         """

@@ -2,7 +2,6 @@
 # Tests: Deleted movies should be added to Radarr's exclusion list
 
 dry_run: false
-interactive: false
 action_delay: 0
 
 plex:

@@ -443,10 +443,6 @@ class DeleterrConfig(BaseModel):
         default=True,
         description="If true, actions are only logged, not performed",
     )
-    interactive: bool = Field(
-        default=False,
-        description="If true, prompts for confirmation before each action",
-    )
     ssl_verify: bool = Field(
         default=False,
         description="Enable SSL certificate verification for API connections",

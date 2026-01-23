@@ -2,7 +2,6 @@
 # Tests: Deletion should stop after max_actions_per_run is reached
 
 dry_run: false
-interactive: false
 action_delay: 0
 
 plex:

@@ -23,7 +23,6 @@ Root-level settings that apply globally.
 | Property | Type | Required | Default | Description |
 |----------|------|----------|---------|-------------|
 | `dry_run` | boolean | No | `true` | If true, actions are only logged, not performed |
-| `interactive` | boolean | No | `false` | If true, prompts for confirmation before each action |
 | `ssl_verify` | boolean | No | `false` | Enable SSL certificate verification for API connections |
 | `action_delay` | integer | No | `0` | Delay (in seconds) between actions. Increase if Plex/Sonarr/Radarr timeout on remote mounts |
 | `plex_library_scan_after_actions` | boolean | No | `false` | Trigger a Plex library scan after actions are performed |
@@ -33,7 +32,6 @@ Root-level settings that apply globally.
 dry_run: true
 ssl_verify: false
 action_delay: 25
-interactive: false
 plex_library_scan_after_actions: false
 tautulli_library_scan_after_actions: false
 ```

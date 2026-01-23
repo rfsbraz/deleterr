@@ -2,7 +2,6 @@
 # Tests: Oldest added items should be deleted first
 
 dry_run: false
-interactive: false
 action_delay: 0
 
 plex:

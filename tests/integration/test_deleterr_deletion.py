@@ -16,10 +16,9 @@ pytestmark = pytest.mark.integration
 class MockConfig:
     """Mock config object for MediaCleaner tests."""
 
-    def __init__(self, dry_run=False, interactive=False, action_delay=0):
+    def __init__(self, dry_run=False, action_delay=0):
         self.settings = {
             "dry_run": dry_run,
-            "interactive": interactive,
             "action_delay": action_delay,
         }
 

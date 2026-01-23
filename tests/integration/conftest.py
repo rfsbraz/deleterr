@@ -396,7 +396,6 @@ def integration_config(docker_services):
     """
     return {
         "dry_run": True,  # Default to dry run for safety
-        "interactive": False,
         "action_delay": 0,
         "plex": {
             "url": PLEX_MOCK_URL,
