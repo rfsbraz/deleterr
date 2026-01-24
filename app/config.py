@@ -20,13 +20,26 @@ from app.modules.trakt import Trakt
 from app.modules.overseerr import Overseerr
 from app.utils import validate_units
 
+def env_constructor(loader, node):
+    env_var = loader.construct_scalar(node)
+    env_value = os.getenv(env_var)
+    
+    if env_value is None:
+        message = f"Environment variable '{env_var}' is not set."
+        logger.error(message)
+        raise ValueError(message)
+    
+    return env_value
+
 
 def load_config(config_file):
     try:
         full_path = os.path.abspath(config_file)
+        
         with open(full_path, "r", encoding="utf8") as stream:
             logger.debug("Loading configuration from %s", full_path)
-            return Config(yaml.safe_load(stream))
+            return load_yaml(stream)
+                      
     except FileNotFoundError:
         logger.error(
             f"Configuration file {config_file} not found. Copy the example config and edit it to your needs."
@@ -36,6 +49,13 @@ def load_config(config_file):
 
     sys.exit(1)
 
+def load_yaml(stream):
+    class CustomLoader(yaml.SafeLoader):
+        pass
+    
+    CustomLoader.add_constructor('!env', env_constructor)
+
+    return Config(yaml.load(stream, Loader=CustomLoader))  
 
 def test_radarr_connection(connection):
     if not DRadarr(connection["name"], connection["url"], connection["api_key"]).validate_connection():
