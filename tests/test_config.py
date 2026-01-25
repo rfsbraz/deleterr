@@ -1,6 +1,10 @@
-import pytest
+import os
+from io import StringIO
 
-from app.config import Config
+import pytest
+import yaml
+
+from app.config import Config, load_yaml
 from app.constants import (
     SETTINGS_PER_ACTION,
     SETTINGS_PER_INSTANCE,
@@ -264,3 +268,37 @@ class TestJustWatchValidation:
         ]
         validator = Config({"libraries": [library_config], "radarr": radarr_config})
         assert validator.validate_libraries() == True
+
+
+# Test cases for env_constructor
+def test_env_constructor_with_existing_variable():
+    """Test that env_constructor returns the value when the environment variable exists."""
+    test_env_var = "TEST_VAR_EXISTS"
+    test_env_value = "test_value_123"
+    os.environ[test_env_var] = test_env_value
+    
+    yaml_content = f"""
+test_key: !env {test_env_var}
+"""
+    
+    try:
+        config = load_yaml(StringIO(yaml_content))
+        
+        assert config.settings['test_key'] == test_env_value
+    finally:
+        del os.environ[test_env_var]
+
+
+def test_env_constructor_with_missing_variable():
+    """Test that env_constructor raises ValueError when the environment variable doesn't exist."""
+    test_env_var = "TEST_VAR_MISSING"
+    
+    if test_env_var in os.environ:
+        del os.environ[test_env_var]
+    
+    yaml_content = f"""
+test_key: !env {test_env_var}
+"""
+    
+    with pytest.raises(ValueError):
+        load_yaml(StringIO(yaml_content))
