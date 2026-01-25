@@ -5,7 +5,7 @@
 | Version | Supported          |
 | ------- | ------------------ |
 | latest  | :white_check_mark: |
-| nightly | :white_check_mark: |
+| edge    | :white_check_mark: |
 | < 1.0   | :x:                |
 
 ## Reporting a Vulnerability
