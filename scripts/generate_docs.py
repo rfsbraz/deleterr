@@ -183,6 +183,46 @@ Complete reference for all Deleterr configuration options.
 
 ---
 
+## Environment Variables
+
+You can use environment variables in your configuration file using the `!env` tag. This is useful for keeping sensitive information like API keys and tokens out of your configuration file.
+
+```yaml
+plex:
+  url: "http://localhost:32400"
+  token: !env PLEX_TOKEN
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: !env TAUTULLI_API_KEY
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: !env RADARR_API_KEY
+```
+
+When using Docker, you can pass environment variables using the `-e` flag:
+
+```bash
+docker run -e PLEX_TOKEN=your_token -e TAUTULLI_API_KEY=your_key ...
+```
+
+Or in a `docker-compose.yml`:
+
+```yaml
+services:
+  deleterr:
+    image: ghcr.io/rfsbraz/deleterr:latest
+    environment:
+      - PLEX_TOKEN=your_token
+      - TAUTULLI_API_KEY=your_key
+```
+
+> **Note**: If an environment variable is not set, Deleterr will fail to start with an error message indicating which variable is missing.
+
+---
+
 ## General Settings
 
 Root-level settings that apply globally.
