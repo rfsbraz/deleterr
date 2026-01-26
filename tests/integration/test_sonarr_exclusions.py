@@ -371,10 +371,10 @@ class TestSonarrCombinedExclusions:
         keep_tag = sonarr_seeder.create_tag("keep")
         favorite_tag = sonarr_seeder.create_tag("favorite")
 
-        # Add a test series
+        # Add a test series - using valid TVDB ID that doesn't conflict with seed data
         test_series = {
             "title": "Multi-Exclusion Test Series",
-            "tvdbId": 295685,  # Westworld
+            "tvdbId": 296762,  # Westworld (correct TVDB ID)
             "seriesType": "standard",
         }
         result = sonarr_seeder.add_series(test_series)
