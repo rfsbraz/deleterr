@@ -531,47 +531,38 @@ class SonarrSeeder(ServiceSeeder):
         return series
 
     def update_series_monitored(self, series_id: int, monitored: bool) -> Dict:
-        """Update the monitored status of a series using the series editor endpoint.
+        """Update the monitored status of a series using direct PUT.
 
-        Uses the /api/v3/series/editor endpoint which is more reliable
-        for updating series attributes.
+        Uses the /api/v3/series/{id} endpoint with the full series object,
+        which is more reliable for persisting monitored status changes.
         """
-        # First get current series to check current state
-        resp = requests.get(
-            f"{self.base_url}/api/v3/series/{series_id}",
-            headers=self.headers,
-            timeout=10
-        )
-        current = resp.json()
-        print(f"Before monitored update - tags: {current.get('tags', [])}, monitored: {current.get('monitored')}")
-
-        payload = {
-            "seriesIds": [series_id],
-            "monitored": monitored
-        }
-
-        print(f"Updating monitored to {monitored}, payload: {payload}")
-
-        resp = requests.put(
-            f"{self.base_url}/api/v3/series/editor",
-            headers=self.headers,
-            json=payload,
-            timeout=10
-        )
-
-        print(f"Series editor response: {resp.status_code}")
-        if resp.text:
-            print(f"Response body (first 500 chars): {resp.text[:500]}")
-
-        # Fetch and return the updated series
+        # Get current series
         resp = requests.get(
             f"{self.base_url}/api/v3/series/{series_id}",
             headers=self.headers,
             timeout=10
         )
         series = resp.json()
-        print(f"After monitored update - tags: {series.get('tags', [])}, monitored: {series.get('monitored')}")
-        return series
+        print(f"Before monitored update - tags: {series.get('tags', [])}, monitored: {series.get('monitored')}")
+
+        # Update monitored field
+        series["monitored"] = monitored
+
+        print(f"Updating monitored to {monitored} via direct PUT")
+
+        # PUT the full series back
+        resp = requests.put(
+            f"{self.base_url}/api/v3/series/{series_id}",
+            headers=self.headers,
+            json=series,
+            timeout=10
+        )
+
+        print(f"Direct PUT response: {resp.status_code}")
+
+        result = resp.json()
+        print(f"After monitored update - tags: {result.get('tags', [])}, monitored: {result.get('monitored')}")
+        return result
 
 
 class PlexMockSeeder:
