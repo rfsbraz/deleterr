@@ -223,7 +223,7 @@ class TestSonarrMonitoredStatusExclusions:
         # Using unique TVDB ID to avoid conflicts with seed data
         test_series = {
             "title": "Monitored Test Series",
-            "tvdbId": 289590,  # The Good Place (different from seed data)
+            "tvdbId": 378426,  # Severance (different from seed data)
             "seriesType": "standard",
         }
         result = sonarr_seeder.add_series(test_series)
@@ -235,11 +235,10 @@ class TestSonarrMonitoredStatusExclusions:
             series = sonarr_client.get_series(series_id)
             assert series["monitored"] is False
 
-            # Update monitored status to True
+            # Update monitored status to True - fetch fresh data to avoid stale state
             updated = sonarr_seeder.update_series_monitored(series_id, True)
-            assert updated["monitored"] is True
 
-            # Verify the change persists
+            # Verify the change by fetching fresh data (Sonarr PUT response may not reflect change)
             series = sonarr_client.get_series(series_id)
             assert series["monitored"] is True
 
