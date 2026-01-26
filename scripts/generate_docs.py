@@ -36,6 +36,7 @@ from app.schema import (
     TraktExclusions,
     JustWatchExclusions,
     RadarrExclusions,
+    SonarrExclusions,
     OverseerrExclusions,
 )
 
@@ -499,6 +500,29 @@ exclude:
     monitored: true
 ```
 
+### Sonarr Exclusions (TV Shows Only)
+
+Exclude based on Sonarr-specific metadata. Only applies to TV show libraries.
+
+{sonarr_exclusions_table}
+
+**Protect continuing shows from deletion:**
+```yaml
+exclude:
+  sonarr:
+    status: ["continuing", "upcoming"]
+```
+
+**Protect tagged shows:**
+```yaml
+exclude:
+  sonarr:
+    tags: ["4K", "keep", "favorite"]
+    quality_profiles: ["Remux-2160p"]
+    paths: ["/data/media/4k"]
+    monitored: true
+```
+
 ### Overseerr Exclusions
 
 Exclude or include media based on Overseerr request status. Requires global `overseerr` config.
@@ -605,6 +629,10 @@ libraries:
       trakt:
         lists:
           - "https://trakt.tv/shows/trending"
+      sonarr:
+        status: ["continuing", "upcoming"]
+        tags: ["keep"]
+        monitored: true
 ```
 
 ---
@@ -681,6 +709,7 @@ libraries:
         trakt_exclusions_table=generate_table(TraktExclusions, "trakt."),
         justwatch_exclusions_table=generate_table(JustWatchExclusions, "justwatch."),
         radarr_exclusions_table=generate_table(RadarrExclusions, "radarr."),
+        sonarr_exclusions_table=generate_table(SonarrExclusions, "sonarr."),
         overseerr_exclusions_table=generate_table(OverseerrExclusions, "overseerr."),
     )
 

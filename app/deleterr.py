@@ -5,7 +5,7 @@ import locale
 import os
 
 from app.modules.radarr import DRadarr
-from pyarr.sonarr import SonarrAPI
+from app.modules.sonarr import DSonarr
 
 from app import logger
 from app.config import load_config
@@ -20,7 +20,7 @@ class Deleterr:
         self.media_cleaner = MediaCleaner(config)
 
         self.sonarr = {
-            connection["name"]: SonarrAPI(connection["url"], connection["api_key"])
+            connection["name"]: DSonarr(connection["name"], connection["url"], connection["api_key"])
             for connection in config.settings.get("sonarr", [])
         }
         self.radarr = {

@@ -464,6 +464,70 @@ class SonarrSeeder(ServiceSeeder):
                 # Best-effort cleanup; continue with remaining items
                 pass
 
+    def get_tags(self) -> List[Dict]:
+        """Get all tags from Sonarr."""
+        resp = requests.get(
+            f"{self.base_url}/api/v3/tag",
+            headers=self.headers,
+            timeout=10
+        )
+        return resp.json()
+
+    def create_tag(self, label: str) -> Dict:
+        """Create a new tag in Sonarr."""
+        # Check if tag already exists
+        existing_tags = self.get_tags()
+        for tag in existing_tags:
+            if tag.get("label", "").lower() == label.lower():
+                return tag
+
+        resp = requests.post(
+            f"{self.base_url}/api/v3/tag",
+            headers=self.headers,
+            json={"label": label},
+            timeout=10
+        )
+        return resp.json()
+
+    def add_tag_to_series(self, series_id: int, tag_id: int) -> Dict:
+        """Add a tag to a series."""
+        # Get current series data
+        resp = requests.get(
+            f"{self.base_url}/api/v3/series/{series_id}",
+            headers=self.headers,
+            timeout=10
+        )
+        series = resp.json()
+
+        # Add tag if not already present
+        if tag_id not in series.get("tags", []):
+            series["tags"] = series.get("tags", []) + [tag_id]
+            resp = requests.put(
+                f"{self.base_url}/api/v3/series/{series_id}",
+                headers=self.headers,
+                json=series,
+                timeout=10
+            )
+            return resp.json()
+        return series
+
+    def update_series_monitored(self, series_id: int, monitored: bool) -> Dict:
+        """Update the monitored status of a series."""
+        resp = requests.get(
+            f"{self.base_url}/api/v3/series/{series_id}",
+            headers=self.headers,
+            timeout=10
+        )
+        series = resp.json()
+        series["monitored"] = monitored
+        resp = requests.put(
+            f"{self.base_url}/api/v3/series/{series_id}",
+            headers=self.headers,
+            json=series,
+            timeout=10
+        )
+        return resp.json()
+
 
 class PlexMockSeeder:
     """Seeds the mock Plex server with test data."""
