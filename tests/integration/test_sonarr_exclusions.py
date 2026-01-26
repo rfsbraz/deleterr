@@ -382,15 +382,21 @@ class TestSonarrCombinedExclusions:
         series_id = result["id"]
 
         try:
-            # Add multiple tags
-            sonarr_seeder.add_tag_to_series(series_id, keep_tag["id"])
-            sonarr_seeder.add_tag_to_series(series_id, favorite_tag["id"])
+            # Add multiple tags in a single operation to avoid race conditions
+            series_with_tags = sonarr_seeder.add_tags_to_series(
+                series_id, [keep_tag["id"], favorite_tag["id"]]
+            )
 
-            # Update to monitored
-            sonarr_seeder.update_series_monitored(series_id, True)
+            # Verify tags were added before proceeding
+            assert keep_tag["id"] in series_with_tags.get("tags", []), \
+                f"Keep tag {keep_tag['id']} not in series tags: {series_with_tags.get('tags')}"
+            assert favorite_tag["id"] in series_with_tags.get("tags", []), \
+                f"Favorite tag {favorite_tag['id']} not in series tags: {series_with_tags.get('tags')}"
 
-            # Get updated series
-            series = sonarr_client.get_series(series_id)
+            # Update to monitored, passing the series to avoid race condition
+            series = sonarr_seeder.update_series_monitored(
+                series_id, True, series=series_with_tags
+            )
 
             # Verify all criteria
             dsonarr = DSonarr("TestSonarr", SONARR_URL, sonarr_seeder.api_key)

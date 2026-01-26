@@ -491,6 +491,10 @@ class SonarrSeeder(ServiceSeeder):
 
     def add_tag_to_series(self, series_id: int, tag_id: int) -> Dict:
         """Add a tag to a series."""
+        return self.add_tags_to_series(series_id, [tag_id])
+
+    def add_tags_to_series(self, series_id: int, tag_ids: List[int]) -> Dict:
+        """Add multiple tags to a series in a single operation."""
         # Get current series data
         resp = requests.get(
             f"{self.base_url}/api/v3/series/{series_id}",
@@ -499,9 +503,12 @@ class SonarrSeeder(ServiceSeeder):
         )
         series = resp.json()
 
-        # Add tag if not already present
-        if tag_id not in series.get("tags", []):
-            series["tags"] = series.get("tags", []) + [tag_id]
+        # Add tags that aren't already present
+        current_tags = series.get("tags", [])
+        new_tags = [tid for tid in tag_ids if tid not in current_tags]
+
+        if new_tags:
+            series["tags"] = current_tags + new_tags
             resp = requests.put(
                 f"{self.base_url}/api/v3/series/{series_id}",
                 headers=self.headers,
@@ -511,14 +518,23 @@ class SonarrSeeder(ServiceSeeder):
             return resp.json()
         return series
 
-    def update_series_monitored(self, series_id: int, monitored: bool) -> Dict:
-        """Update the monitored status of a series."""
-        resp = requests.get(
-            f"{self.base_url}/api/v3/series/{series_id}",
-            headers=self.headers,
-            timeout=10
-        )
-        series = resp.json()
+    def update_series_monitored(
+        self, series_id: int, monitored: bool, series: Optional[Dict] = None
+    ) -> Dict:
+        """Update the monitored status of a series.
+
+        Args:
+            series_id: The series ID to update
+            monitored: The monitored status to set
+            series: Optional existing series dict to update (avoids race conditions)
+        """
+        if series is None:
+            resp = requests.get(
+                f"{self.base_url}/api/v3/series/{series_id}",
+                headers=self.headers,
+                timeout=10
+            )
+            series = resp.json()
         series["monitored"] = monitored
         resp = requests.put(
             f"{self.base_url}/api/v3/series/{series_id}",
