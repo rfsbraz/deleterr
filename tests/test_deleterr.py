@@ -12,7 +12,7 @@ def deleterr():
         yield Deleterr(MagicMock())
 
 
-@patch("app.deleterr.SonarrAPI")
+@patch("app.deleterr.DSonarr")
 @patch("app.modules.radarr.DRadarr")
 def test_process_radarr(radarr_mock, sonarr_mock, deleterr):
     # Arrange
@@ -36,7 +36,7 @@ def test_process_radarr(radarr_mock, sonarr_mock, deleterr):
     )
 
 
-@patch("app.deleterr.SonarrAPI")
+@patch("app.deleterr.DSonarr")
 @patch("app.modules.radarr.DRadarr")
 def test_process_sonarr(radarr_mock, sonarr_mock, deleterr):
     # Arrange

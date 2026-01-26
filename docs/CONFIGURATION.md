@@ -410,6 +410,35 @@ exclude:
     monitored: true
 ```
 
+### Sonarr Exclusions (TV Shows Only)
+
+Exclude based on Sonarr-specific metadata. Only applies to TV show libraries.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `sonarr.status` | array[string] | No | `[]` | Sonarr series status to exclude: continuing, ended, upcoming, deleted |
+| `sonarr.tags` | array[string] | No | `[]` | Sonarr tags to exclude (case-insensitive) |
+| `sonarr.quality_profiles` | array[string] | No | `[]` | Quality profiles to exclude (exact match) |
+| `sonarr.paths` | array[string] | No | `[]` | Paths to exclude (substring match) |
+| `sonarr.monitored` | boolean | No | - | True to exclude monitored shows, False to exclude unmonitored |
+
+**Protect continuing shows from deletion:**
+```yaml
+exclude:
+  sonarr:
+    status: ["continuing", "upcoming"]
+```
+
+**Protect tagged shows:**
+```yaml
+exclude:
+  sonarr:
+    tags: ["4K", "keep", "favorite"]
+    quality_profiles: ["Remux-2160p"]
+    paths: ["/data/media/4k"]
+    monitored: true
+```
+
 ### Overseerr Exclusions
 
 Exclude or include media based on Overseerr request status. Requires global `overseerr` config.
@@ -523,6 +552,10 @@ libraries:
       trakt:
         lists:
           - "https://trakt.tv/shows/trending"
+      sonarr:
+        status: ["continuing", "upcoming"]
+        tags: ["keep"]
+        monitored: true
 ```
 
 ---

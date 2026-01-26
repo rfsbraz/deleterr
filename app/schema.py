@@ -285,6 +285,35 @@ class RadarrExclusions(BaseModel):
     )
 
 
+class SonarrExclusions(BaseModel):
+    """Sonarr-specific exclusions. Only applies to TV show libraries."""
+
+    status: list[str] = Field(
+        default_factory=list,
+        description="Sonarr series status to exclude: continuing, ended, upcoming, deleted",
+        json_schema_extra={"example": ["continuing", "upcoming"]},
+    )
+    tags: list[str] = Field(
+        default_factory=list,
+        description="Sonarr tags to exclude (case-insensitive)",
+        json_schema_extra={"example": ["4K", "keep", "favorite"]},
+    )
+    quality_profiles: list[str] = Field(
+        default_factory=list,
+        description="Quality profiles to exclude (exact match)",
+        json_schema_extra={"example": ["Remux-2160p", "Bluray-2160p"]},
+    )
+    paths: list[str] = Field(
+        default_factory=list,
+        description="Paths to exclude (substring match)",
+        json_schema_extra={"example": ["/data/media/4k"]},
+    )
+    monitored: Optional[bool] = Field(
+        default=None,
+        description="True to exclude monitored shows, False to exclude unmonitored",
+    )
+
+
 class Exclusions(BaseModel):
     """Exclusion rules to protect media from deletion."""
 
@@ -349,6 +378,10 @@ class Exclusions(BaseModel):
     radarr: Optional[RadarrExclusions] = Field(
         default=None,
         description="Radarr-specific exclusions (movies only)",
+    )
+    sonarr: Optional[SonarrExclusions] = Field(
+        default=None,
+        description="Sonarr-specific exclusions (TV shows only)",
     )
     overseerr: Optional[OverseerrExclusions] = Field(
         default=None,

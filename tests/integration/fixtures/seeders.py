@@ -464,6 +464,106 @@ class SonarrSeeder(ServiceSeeder):
                 # Best-effort cleanup; continue with remaining items
                 pass
 
+    def get_tags(self) -> List[Dict]:
+        """Get all tags from Sonarr."""
+        resp = requests.get(
+            f"{self.base_url}/api/v3/tag",
+            headers=self.headers,
+            timeout=10
+        )
+        return resp.json()
+
+    def create_tag(self, label: str) -> Dict:
+        """Create a new tag in Sonarr."""
+        # Check if tag already exists
+        existing_tags = self.get_tags()
+        for tag in existing_tags:
+            if tag.get("label", "").lower() == label.lower():
+                return tag
+
+        resp = requests.post(
+            f"{self.base_url}/api/v3/tag",
+            headers=self.headers,
+            json={"label": label},
+            timeout=10
+        )
+        return resp.json()
+
+    def add_tag_to_series(self, series_id: int, tag_id: int) -> Dict:
+        """Add a tag to a series."""
+        return self.add_tags_to_series(series_id, [tag_id])
+
+    def add_tags_to_series(self, series_id: int, tag_ids: List[int]) -> Dict:
+        """Add multiple tags to a series using the series editor endpoint.
+
+        Uses the /api/v3/series/editor endpoint with applyTags: "add"
+        which is the recommended approach for tag operations.
+        """
+        # Use the series editor endpoint with applyTags
+        payload = {
+            "seriesIds": [series_id],
+            "tags": tag_ids,
+            "applyTags": "add"
+        }
+
+        print(f"Adding tags {tag_ids} to series {series_id}")
+        print(f"Payload: {payload}")
+
+        resp = requests.put(
+            f"{self.base_url}/api/v3/series/editor",
+            headers=self.headers,
+            json=payload,
+            timeout=10
+        )
+
+        print(f"Series editor response: {resp.status_code}")
+        if resp.text:
+            print(f"Response body: {resp.text[:500]}")
+
+        # Fetch and return the updated series
+        resp = requests.get(
+            f"{self.base_url}/api/v3/series/{series_id}",
+            headers=self.headers,
+            timeout=10
+        )
+        series = resp.json()
+        print(f"Series tags after update: {series.get('tags', [])}")
+        return series
+
+    def update_series_monitored(self, series_id: int, monitored: bool) -> Dict:
+        """Update the monitored status of a series using direct PUT.
+
+        Uses the /api/v3/series/{id} endpoint with the full series object,
+        which is more reliable for persisting monitored status changes.
+        """
+        # Get current series
+        resp = requests.get(
+            f"{self.base_url}/api/v3/series/{series_id}",
+            headers=self.headers,
+            timeout=10
+        )
+        series = resp.json()
+        print(f"Before monitored update - tags: {series.get('tags', [])}, monitored: {series.get('monitored')}")
+
+        # Update monitored field
+        series["monitored"] = monitored
+
+        print(f"Updating monitored to {monitored} via direct PUT")
+
+        # PUT the full series back
+        resp = requests.put(
+            f"{self.base_url}/api/v3/series/{series_id}",
+            headers=self.headers,
+            json=series,
+            timeout=10
+        )
+
+        print(f"Direct PUT response: {resp.status_code}")
+
+        result = resp.json()
+        print(f"After monitored update - tags: {result.get('tags', [])}, monitored: {result.get('monitored')}")
+        return result
+
 
 class PlexMockSeeder:
     """Seeds the mock Plex server with test data."""

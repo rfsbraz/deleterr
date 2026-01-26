@@ -237,7 +237,7 @@ def test_process_shows(mock_process_show, mock_process_library_rules, standard_c
 
     # Assert
     mock_process_library_rules.assert_called_once_with(
-        library, plex_library, all_show_data, show_activity, trakt_items
+        library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
     )
     mock_process_show.assert_called_once()
     assert result == 10
@@ -274,7 +274,7 @@ def test_process_shows_with_delay(
 
     # Assert
     mock_process_library_rules.assert_called_once_with(
-        library, plex_library, all_show_data, show_activity, trakt_items
+        library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
     )
     mock_process_show.assert_called_once()
     mock_sleep.assert_called_once_with(10)
@@ -314,7 +314,7 @@ def test_process_shows_max_actions(
 
     # Assert
     mock_process_library_rules.assert_called_once_with(
-        library, plex_library, all_show_data, show_activity, trakt_items
+        library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
     )
     assert mock_process_show.call_count == 10
     assert result == 10 * 5

@@ -158,7 +158,7 @@ class MediaCleaner:
         saved_space = 0
         actions_performed = 0
         for sonarr_show in self.process_library_rules(
-                library, plex_library, all_show_data, show_activity, trakt_items
+                library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
         ):
             if max_actions_per_run and actions_performed >= max_actions_per_run:
                 logger.info(
@@ -532,7 +532,7 @@ class MediaCleaner:
         return None
 
     def process_library_rules(
-            self, library_config, plex_library, all_data, activity_data, trakt_movies, radarr_instance=None
+            self, library_config, plex_library, all_data, activity_data, trakt_movies, radarr_instance=None, sonarr_instance=None
     ):
         # get the time thresholds from the config
         last_watched_threshold = library_config.get("last_watched_threshold", None)
@@ -599,7 +599,8 @@ class MediaCleaner:
                     last_watched_threshold,
                     added_at_threshold,
                     apply_last_watch_threshold_to_collections,
-                    radarr_instance
+                    radarr_instance,
+                    sonarr_instance
             ):
                 continue
 
@@ -617,7 +618,8 @@ class MediaCleaner:
             last_watched_threshold,
             added_at_threshold,
             apply_last_watch_threshold_to_collections,
-            radarr_instance=None
+            radarr_instance=None,
+            sonarr_instance=None
     ):
         if not self.check_watched_status(
                 library,
@@ -635,7 +637,7 @@ class MediaCleaner:
         ):
             return False
 
-        if not self.check_exclusions(library, media_data, plex_media_item, radarr_instance):
+        if not self.check_exclusions(library, media_data, plex_media_item, radarr_instance, sonarr_instance):
             return False
 
         if not self.check_added_date(media_data, plex_media_item, added_at_threshold):
@@ -704,10 +706,11 @@ class MediaCleaner:
 
         return True
 
-    def check_exclusions(self, library, media_data, plex_media_item, radarr_instance=None):
+    def check_exclusions(self, library, media_data, plex_media_item, radarr_instance=None, sonarr_instance=None):
         exclude = library.get("exclude", {})
         exclusion_checks = [
             lambda m, pmi, e: check_excluded_radarr_fields(m, pmi, e, radarr_instance),
+            lambda m, pmi, e: check_excluded_sonarr_fields(m, pmi, e, sonarr_instance),
             lambda m, pmi, e: check_excluded_titles(m, pmi, e),
             lambda m, pmi, e: check_excluded_genres(m, pmi, e),
             lambda m, pmi, e: check_excluded_collections(m, pmi, e),
@@ -778,6 +781,70 @@ def check_excluded_radarr_fields(media_data, plex_media_item, exclude, radarr_in
         for path in radarr_exclusions.get('paths'):
             if path in radarr_media_item.get('path'):
                 logger.debug(f"{media_data['title']} has excluded radarr path, skipping")
+                return False
+
+    return True
+
+
+def check_excluded_sonarr_fields(media_data, plex_media_item, exclude, sonarr_instance):
+    """
+    Check if a TV show should be excluded based on Sonarr-specific fields.
+
+    Args:
+        media_data: Media data from Sonarr
+        plex_media_item: Plex media item
+        exclude: Exclusion configuration from library
+        sonarr_instance: DSonarr instance (may be None if not configured)
+
+    Returns:
+        True if media should NOT be excluded (i.e., is actionable)
+        False if media should be excluded (i.e., skip this media)
+    """
+    sonarr_exclusions = exclude.get("sonarr", {})
+
+    if not sonarr_exclusions or not sonarr_instance:
+        return True
+
+    # For TV shows, media_data already contains the series data from Sonarr
+    # We use this directly rather than fetching again
+    sonarr_media_item = media_data
+
+    # Check status exclusion
+    if sonarr_exclusions.get('status'):
+        series_status = sonarr_media_item.get("status", "").lower()
+        excluded_statuses = [s.lower() for s in sonarr_exclusions.get('status')]
+        if series_status in excluded_statuses:
+            logger.debug(f"{media_data['title']} has excluded sonarr status '{series_status}', skipping")
+            return False
+
+    # Check monitored exclusion
+    if 'monitored' in sonarr_exclusions and sonarr_exclusions.get("monitored") == sonarr_media_item.get("monitored"):
+        logger.debug(f"{media_data['title']} has excluded sonarr monitored status, skipping")
+        return False
+
+    # Check quality profiles exclusion
+    if (sonarr_exclusions.get('quality_profiles')
+            and sonarr_instance.check_series_has_quality_profiles(
+                sonarr_media_item,
+                sonarr_exclusions.get('quality_profiles')
+            )
+    ):
+        logger.debug(f"{media_data['title']} has excluded sonarr quality profiles, skipping")
+        return False
+
+    # Check tags exclusion
+    if sonarr_exclusions.get('tags') and sonarr_instance.check_series_has_tags(
+            sonarr_media_item,
+            sonarr_exclusions.get('tags')
+    ):
+        logger.debug(f"{media_data['title']} has excluded sonarr tags, skipping")
+        return False
+
+    # Check paths exclusion
+    if sonarr_exclusions.get('paths'):
+        for path in sonarr_exclusions.get('paths'):
+            if path in sonarr_media_item.get('path', ''):
+                logger.debug(f"{media_data['title']} has excluded sonarr path, skipping")
                 return False
 
     return True

@@ -16,6 +16,7 @@ from app.constants import (
 )
 from app.modules.tautulli import Tautulli
 from app.modules.radarr import DRadarr
+from app.modules.sonarr import DSonarr
 from app.modules.trakt import Trakt
 from app.modules.overseerr import Overseerr
 from app.utils import validate_units
@@ -225,6 +226,7 @@ class Config:
             self.validate_settings_for_instance(library)
             self.validate_justwatch_exclusions(library)
             self.validate_radarr_exclusions(library)
+            self.validate_sonarr_exclusions(library)
             self.validate_overseerr_exclusions(library)
 
         return True
@@ -386,6 +388,63 @@ class Config:
                     logger.warning(
                         f"Radarr profile '{profile}' does not exist in instance '{connection['name']}'"
                     )
+
+        return True
+
+    def validate_sonarr_exclusions(self, library):
+        exclude = library.get("exclude", {})
+
+        # If exclude is not set, no need to validate
+        if not exclude:
+            return True
+
+        sonarr_exclusions = exclude.get("sonarr", {})
+        if not sonarr_exclusions:
+            return True
+
+        if not library.get("sonarr"):
+            self.log_and_exit(
+                f"Sonarr exclusions set for library '{library['name']}' but no sonarr instance is set."
+            )
+
+        allowed_exclusions = ["status", "tags", "quality_profiles", "paths", "monitored"]
+        for exclusion in sonarr_exclusions:
+            if exclusion not in allowed_exclusions:
+                self.log_and_exit(
+                    f"Invalid exclusion '{exclusion}' in library '{library['name']}', supported values are {allowed_exclusions}."
+                )
+
+        # Validate status values
+        valid_statuses = ["continuing", "ended", "upcoming", "deleted"]
+        if "status" in sonarr_exclusions:
+            for status in sonarr_exclusions["status"]:
+                if status.lower() not in valid_statuses:
+                    self.log_and_exit(
+                        f"Invalid Sonarr status '{status}' in library '{library['name']}'. Supported values are {valid_statuses}."
+                    )
+
+        sonarr_settings = self.settings.get("sonarr", [])
+        # Warn if tags do not exist in sonarr
+        if "tags" in sonarr_exclusions:
+            for connection in sonarr_settings:
+                sonarr_instance = DSonarr(connection["name"], connection["url"], connection["api_key"])
+                tags = sonarr_instance.get_tags()
+                for tag in sonarr_exclusions["tags"]:
+                    if tag.lower() not in [t["label"].lower() for t in tags]:
+                        logger.warning(
+                            f"Sonarr tag '{tag}' does not exist in instance '{connection['name']}'"
+                        )
+
+        # Warn if quality profiles do not exist in sonarr
+        if "quality_profiles" in sonarr_exclusions:
+            for connection in sonarr_settings:
+                sonarr_instance = DSonarr(connection["name"], connection["url"], connection["api_key"])
+                profiles = sonarr_instance.get_quality_profiles()
+                for profile in sonarr_exclusions["quality_profiles"]:
+                    if profile not in [p["name"] for p in profiles]:
+                        logger.warning(
+                            f"Sonarr profile '{profile}' does not exist in instance '{connection['name']}'"
+                        )
 
         return True
 
