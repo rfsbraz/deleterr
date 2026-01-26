@@ -22,10 +22,10 @@ class TestSonarrStatusExclusions:
         self, docker_services, sonarr_seeder, sonarr_client: SonarrAPI
     ):
         """Test that series have a status field from Sonarr API."""
-        # Add a test series
+        # Add a test series - using unique TVDB ID to avoid conflicts with seed data
         test_series = {
             "title": "Status Test Series",
-            "tvdbId": 81189,  # Breaking Bad
+            "tvdbId": 279121,  # The Crown (different from seed data)
             "seriesType": "standard",
         }
         result = sonarr_seeder.add_series(test_series)
@@ -49,10 +49,10 @@ class TestSonarrStatusExclusions:
         self, docker_services, sonarr_seeder, sonarr_client: SonarrAPI
     ):
         """Test that ended series are correctly identified."""
-        # Breaking Bad ended in 2013
+        # Mad Men ended in 2015 - using different TVDB ID from seed data
         test_series = {
-            "title": "Breaking Bad",
-            "tvdbId": 81189,
+            "title": "Mad Men",
+            "tvdbId": 80337,
             "seriesType": "standard",
         }
         result = sonarr_seeder.add_series(test_series)
@@ -94,10 +94,10 @@ class TestSonarrTagExclusions:
         # Create a tag
         tag = sonarr_seeder.create_tag("4K-protection")
 
-        # Add a test series
+        # Add a test series - using unique TVDB ID to avoid conflicts with seed data
         test_series = {
             "title": "Tag Test Series",
-            "tvdbId": 121361,  # Game of Thrones
+            "tvdbId": 305074,  # The Witcher (different from seed data)
             "seriesType": "standard",
         }
         result = sonarr_seeder.add_series(test_series)
@@ -220,9 +220,10 @@ class TestSonarrMonitoredStatusExclusions:
     ):
         """Test that we can detect and update monitored status."""
         # Add a test series (by default, seeder sets monitored=False)
+        # Using unique TVDB ID to avoid conflicts with seed data
         test_series = {
             "title": "Monitored Test Series",
-            "tvdbId": 267440,  # The Expanse
+            "tvdbId": 349044,  # Outer Banks (different from seed data)
             "seriesType": "standard",
         }
         result = sonarr_seeder.add_series(test_series)
