@@ -28,4 +28,4 @@ jobs:
             ```
 
             > **Note:** This image is built for `linux/amd64` only. The image is pushed to GHCR (not Docker Hub) for PR testing.
-          comment_tag: docker_image_instructions
+          comment-tag: docker_image_instructions
