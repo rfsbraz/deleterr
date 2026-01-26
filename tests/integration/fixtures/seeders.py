@@ -506,6 +506,9 @@ class SonarrSeeder(ServiceSeeder):
             "applyTags": "add"
         }
 
+        print(f"Adding tags {tag_ids} to series {series_id}")
+        print(f"Payload: {payload}")
+
         resp = requests.put(
             f"{self.base_url}/api/v3/series/editor",
             headers=self.headers,
@@ -513,8 +516,9 @@ class SonarrSeeder(ServiceSeeder):
             timeout=10
         )
 
-        if resp.status_code != 202:
-            print(f"Series editor returned {resp.status_code}: {resp.text}")
+        print(f"Series editor response: {resp.status_code}")
+        if resp.text:
+            print(f"Response body: {resp.text[:500]}")
 
         # Fetch and return the updated series
         resp = requests.get(
@@ -522,7 +526,9 @@ class SonarrSeeder(ServiceSeeder):
             headers=self.headers,
             timeout=10
         )
-        return resp.json()
+        series = resp.json()
+        print(f"Series tags after update: {series.get('tags', [])}")
+        return series
 
     def update_series_monitored(self, series_id: int, monitored: bool) -> Dict:
         """Update the monitored status of a series using the series editor endpoint.
