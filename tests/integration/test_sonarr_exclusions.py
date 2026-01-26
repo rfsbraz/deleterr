@@ -215,9 +215,6 @@ class TestSonarrQualityProfileExclusions:
 class TestSonarrMonitoredStatusExclusions:
     """Test Sonarr monitored status-based exclusions."""
 
-    @pytest.mark.xfail(
-        reason="Sonarr API sometimes rejects monitored updates for newly added series"
-    )
     def test_series_monitored_status(
         self, docker_services, sonarr_seeder, sonarr_client: SonarrAPI
     ):
@@ -366,9 +363,6 @@ class TestDSonarrIntegration:
 class TestSonarrCombinedExclusions:
     """Test multiple Sonarr exclusion criteria together."""
 
-    @pytest.mark.xfail(
-        reason="Sonarr API sometimes rejects tag/monitored updates for newly added series"
-    )
     def test_series_with_multiple_exclusion_criteria(
         self, docker_services, sonarr_seeder, sonarr_client: SonarrAPI
     ):
@@ -388,7 +382,7 @@ class TestSonarrCombinedExclusions:
         series_id = result["id"]
 
         try:
-            # Add multiple tags in a single operation to avoid race conditions
+            # Add multiple tags using the series editor endpoint
             series_with_tags = sonarr_seeder.add_tags_to_series(
                 series_id, [keep_tag["id"], favorite_tag["id"]]
             )
@@ -399,10 +393,8 @@ class TestSonarrCombinedExclusions:
             assert favorite_tag["id"] in series_with_tags.get("tags", []), \
                 f"Favorite tag {favorite_tag['id']} not in series tags: {series_with_tags.get('tags')}"
 
-            # Update to monitored, passing the series to avoid race condition
-            series = sonarr_seeder.update_series_monitored(
-                series_id, True, series=series_with_tags
-            )
+            # Update to monitored using the series editor endpoint
+            series = sonarr_seeder.update_series_monitored(series_id, True)
 
             # Verify all criteria
             dsonarr = DSonarr("TestSonarr", SONARR_URL, sonarr_seeder.api_key)

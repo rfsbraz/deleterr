@@ -494,76 +494,61 @@ class SonarrSeeder(ServiceSeeder):
         return self.add_tags_to_series(series_id, [tag_id])
 
     def add_tags_to_series(self, series_id: int, tag_ids: List[int]) -> Dict:
-        """Add multiple tags to a series in a single operation.
+        """Add multiple tags to a series using the series editor endpoint.
 
-        Includes retry logic because Sonarr API may not accept updates
-        immediately after a series is added.
+        Uses the /api/v3/series/editor endpoint with applyTags: "add"
+        which is the recommended approach for tag operations.
         """
-        last_result = None
+        # Use the series editor endpoint with applyTags
+        payload = {
+            "seriesIds": [series_id],
+            "tags": tag_ids,
+            "applyTags": "add"
+        }
 
-        for attempt in range(MAX_RETRIES):
-            # Get current series data (fresh on each attempt)
-            resp = requests.get(
-                f"{self.base_url}/api/v3/series/{series_id}",
-                headers=self.headers,
-                timeout=10
-            )
-            series = resp.json()
-
-            # Add tags that aren't already present
-            current_tags = series.get("tags", [])
-            new_tags = [tid for tid in tag_ids if tid not in current_tags]
-
-            if not new_tags:
-                # All tags already present
-                return series
-
-            series["tags"] = current_tags + new_tags
-            resp = requests.put(
-                f"{self.base_url}/api/v3/series/{series_id}",
-                headers=self.headers,
-                json=series,
-                timeout=10
-            )
-            last_result = resp.json()
-
-            # Verify tags were actually added
-            result_tags = last_result.get("tags", [])
-            if all(tid in result_tags for tid in tag_ids):
-                return last_result
-
-            # Tags weren't persisted, retry after delay
-            print(f"Attempt {attempt + 1}/{MAX_RETRIES}: Tags not persisted, "
-                  f"expected {tag_ids}, got {result_tags}")
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(RETRY_DELAY)
-
-        # Return last result even if tags weren't persisted
-        print(f"Warning: Failed to persist tags after {MAX_RETRIES} attempts")
-        return last_result
-
-    def update_series_monitored(
-        self, series_id: int, monitored: bool, series: Optional[Dict] = None
-    ) -> Dict:
-        """Update the monitored status of a series.
-
-        Args:
-            series_id: The series ID to update
-            monitored: The monitored status to set
-            series: Optional existing series dict to update (avoids race conditions)
-        """
-        if series is None:
-            resp = requests.get(
-                f"{self.base_url}/api/v3/series/{series_id}",
-                headers=self.headers,
-                timeout=10
-            )
-            series = resp.json()
-        series["monitored"] = monitored
         resp = requests.put(
+            f"{self.base_url}/api/v3/series/editor",
+            headers=self.headers,
+            json=payload,
+            timeout=10
+        )
+
+        if resp.status_code != 202:
+            print(f"Series editor returned {resp.status_code}: {resp.text}")
+
+        # Fetch and return the updated series
+        resp = requests.get(
             f"{self.base_url}/api/v3/series/{series_id}",
             headers=self.headers,
-            json=series,
+            timeout=10
+        )
+        return resp.json()
+
+    def update_series_monitored(self, series_id: int, monitored: bool) -> Dict:
+        """Update the monitored status of a series using the series editor endpoint.
+
+        Uses the /api/v3/series/editor endpoint which is more reliable
+        for updating series attributes.
+        """
+        payload = {
+            "seriesIds": [series_id],
+            "monitored": monitored
+        }
+
+        resp = requests.put(
+            f"{self.base_url}/api/v3/series/editor",
+            headers=self.headers,
+            json=payload,
+            timeout=10
+        )
+
+        if resp.status_code != 202:
+            print(f"Series editor returned {resp.status_code}: {resp.text}")
+
+        # Fetch and return the updated series
+        resp = requests.get(
+            f"{self.base_url}/api/v3/series/{series_id}",
+            headers=self.headers,
             timeout=10
         )
         return resp.json()
