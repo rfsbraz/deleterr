@@ -530,19 +530,32 @@ class SonarrSeeder(ServiceSeeder):
         print(f"Series tags after update: {series.get('tags', [])}")
         return series
 
-    def update_series_monitored(self, series_id: int, monitored: bool) -> Dict:
+    def update_series_monitored(
+        self, series_id: int, monitored: bool, series: Optional[Dict] = None
+    ) -> Dict:
         """Update the monitored status of a series using direct PUT.
 
         Uses the /api/v3/series/{id} endpoint with the full series object,
         which is more reliable for persisting monitored status changes.
+
+        Args:
+            series_id: The ID of the series to update.
+            monitored: The new monitored status.
+            series: Optional series object to use. If not provided, fetches fresh.
+                    Pass this to avoid race conditions when tags were just added.
         """
-        # Get current series
-        resp = requests.get(
-            f"{self.base_url}/api/v3/series/{series_id}",
-            headers=self.headers,
-            timeout=10
-        )
-        series = resp.json()
+        if series is None:
+            # Get current series
+            resp = requests.get(
+                f"{self.base_url}/api/v3/series/{series_id}",
+                headers=self.headers,
+                timeout=10
+            )
+            series = resp.json()
+        else:
+            # Use a copy to avoid modifying the original
+            series = dict(series)
+
         print(f"Before monitored update - tags: {series.get('tags', [])}, monitored: {series.get('monitored')}")
 
         # Update monitored field

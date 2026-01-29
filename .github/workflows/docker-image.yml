@@ -12,6 +12,11 @@ on:
     branches:
       - 'main'
 
+# Cancel in-progress runs when a new run is triggered (except for tags/releases)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 env:
   IMAGE_NAME: ${{ github.repository }}
 
