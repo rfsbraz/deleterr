@@ -20,6 +20,9 @@ from typing import Generator
 from pyarr.radarr import RadarrAPI
 from pyarr.sonarr import SonarrAPI
 
+from app.modules.radarr import DRadarr
+from app.modules.sonarr import DSonarr
+
 from tests.integration.fixtures.seeders import (
     RadarrSeeder,
     SonarrSeeder,
@@ -283,6 +286,24 @@ def radarr_client(radarr_api_key) -> RadarrAPI:
 def sonarr_client(sonarr_api_key) -> SonarrAPI:
     """Provides a configured Sonarr API client."""
     return SonarrAPI(SONARR_URL, sonarr_api_key)
+
+
+@pytest.fixture(scope="session")
+def dradarr_client(radarr_api_key) -> DRadarr:
+    """Provides a configured DRadarr wrapper client.
+
+    This tests the application's wrapper class, not pyarr directly.
+    """
+    return DRadarr("TestRadarr", RADARR_URL, radarr_api_key)
+
+
+@pytest.fixture(scope="session")
+def dsonarr_client(sonarr_api_key) -> DSonarr:
+    """Provides a configured DSonarr wrapper client.
+
+    This tests the application's wrapper class, not pyarr directly.
+    """
+    return DSonarr("TestSonarr", SONARR_URL, sonarr_api_key)
 
 
 @pytest.fixture(scope="session")
