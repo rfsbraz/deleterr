@@ -556,12 +556,8 @@ class SonarrSeeder(ServiceSeeder):
             # Use a copy to avoid modifying the original
             series = dict(series)
 
-        print(f"Before monitored update - tags: {series.get('tags', [])}, monitored: {series.get('monitored')}")
-
         # Update monitored field
         series["monitored"] = monitored
-
-        print(f"Updating monitored to {monitored} via direct PUT")
 
         # PUT the full series back
         resp = requests.put(
@@ -571,10 +567,22 @@ class SonarrSeeder(ServiceSeeder):
             timeout=10
         )
 
-        print(f"Direct PUT response: {resp.status_code}")
+        # Sonarr may return 202 (Accepted) for async processing
+        # Poll until the change is confirmed or timeout
+        import time
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            resp = requests.get(
+                f"{self.base_url}/api/v3/series/{series_id}",
+                headers=self.headers,
+                timeout=10
+            )
+            result = resp.json()
+            if result.get("monitored") == monitored:
+                return result
+            time.sleep(0.5)
 
-        result = resp.json()
-        print(f"After monitored update - tags: {result.get('tags', [])}, monitored: {result.get('monitored')}")
+        # Return last result even if not matching (let test fail with clear state)
         return result
 
 
