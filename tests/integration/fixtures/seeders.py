@@ -520,14 +520,23 @@ class SonarrSeeder(ServiceSeeder):
         if resp.text:
             print(f"Response body: {resp.text[:500]}")
 
-        # Fetch and return the updated series
-        resp = requests.get(
-            f"{self.base_url}/api/v3/series/{series_id}",
-            headers=self.headers,
-            timeout=10
-        )
-        series = resp.json()
-        print(f"Series tags after update: {series.get('tags', [])}")
+        # Sonarr may return 202 (Accepted) for async processing
+        # Poll until the tags are confirmed or timeout
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            resp = requests.get(
+                f"{self.base_url}/api/v3/series/{series_id}",
+                headers=self.headers,
+                timeout=10
+            )
+            series = resp.json()
+            current_tags = set(series.get("tags", []))
+            if all(tag_id in current_tags for tag_id in tag_ids):
+                print(f"Tags confirmed after {attempt + 1} attempts: {series.get('tags', [])}")
+                return series
+            time.sleep(0.5)
+
+        print(f"Tags not confirmed after {max_attempts} attempts: {series.get('tags', [])}")
         return series
 
     def update_series_monitored(
@@ -569,7 +578,6 @@ class SonarrSeeder(ServiceSeeder):
 
         # Sonarr may return 202 (Accepted) for async processing
         # Poll until the change is confirmed or timeout
-        import time
         max_attempts = 10
         for attempt in range(max_attempts):
             resp = requests.get(
