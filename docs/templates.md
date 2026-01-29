@@ -370,6 +370,84 @@ libraries:
 
 ---
 
+## 6. Protect Unwatched Overseerr Requests
+
+Keep content that users requested but haven't watched yet.
+
+```yaml
+dry_run: true
+
+plex:
+  url: "http://localhost:32400"
+  token: "YOUR_PLEX_TOKEN"
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "YOUR_TAUTULLI_API_KEY"
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "YOUR_RADARR_API_KEY"
+
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "YOUR_SONARR_API_KEY"
+
+overseerr:
+  url: "http://localhost:5055"
+  api_key: "YOUR_OVERSEERR_API_KEY"
+
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 90
+    added_at_threshold: 180
+    max_actions_per_run: 20
+    exclude:
+      overseerr:
+        mode: "exclude"
+        include_pending: true
+        request_status: ["approved", "pending"]
+
+  - name: "TV Shows"
+    sonarr: "Sonarr"
+    series_type: "standard"
+    action_mode: "delete"
+    last_watched_threshold: 90
+    added_at_threshold: 180
+    max_actions_per_run: 20
+    exclude:
+      overseerr:
+        mode: "exclude"
+        include_pending: true
+        request_status: ["approved", "pending"]
+```
+
+**What it does**: Protects all content that was requested through Overseerr (approved or pending). Only deletes content that wasn't explicitly requested by a user. This ensures users don't lose content they asked for before they've had a chance to watch it.
+
+**Variations**:
+
+Protect requests from specific users only:
+```yaml
+exclude:
+  overseerr:
+    mode: "exclude"
+    users: ["admin", "family-member"]
+```
+
+Only protect recent requests (give users 30 days to watch):
+```yaml
+exclude:
+  overseerr:
+    mode: "exclude"
+    min_request_age_days: 30  # Requests older than 30 days can be deleted
+```
+
+---
+
 ## Common Exclusion Patterns
 
 ### Protect MCU and Major Franchises
