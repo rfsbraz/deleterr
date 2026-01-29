@@ -1169,6 +1169,11 @@ def _get_config_value(config, key, default=None):
     return config[key] if key in config else default
 
 
+class ConfigurationError(Exception):
+    """Raised when there's a configuration error that prevents processing."""
+    pass
+
+
 def library_meets_disk_space_threshold(library, dpyarr_instance):
     for item in library.get("disk_size_threshold", []):
         path = item.get("path")
@@ -1188,8 +1193,8 @@ def library_meets_disk_space_threshold(library, dpyarr_instance):
                     )
                     return False
         if not folder_found:
-            logger.error(
-                f"Could not find folder '{path}' in server instance. Skipping library '{library.get('name')}'"
+            raise ConfigurationError(
+                f"Could not find folder '{path}' in server instance for library '{library.get('name')}'. "
+                f"Check that the path matches a root folder in your Radarr/Sonarr settings."
             )
-            return False
     return True

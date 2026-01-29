@@ -8,6 +8,7 @@ from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 import app.media_cleaner
 from app.config import Config
 from app.media_cleaner import (
+    ConfigurationError,
     DEFAULT_MAX_ACTIONS_PER_RUN,
     MediaCleaner,
     check_excluded_radarr_fields,
@@ -66,7 +67,10 @@ class TestLibraryMeetsDiskSpaceThreshold(unittest.TestCase):
         self.pyarr.get_disk_space.return_value = [
             {"path": "/data/media/other", "freeSpace": 500000000000}
         ]
-        self.assertFalse(library_meets_disk_space_threshold(self.library, self.pyarr))
+        with self.assertRaises(ConfigurationError) as context:
+            library_meets_disk_space_threshold(self.library, self.pyarr)
+        self.assertIn("/data/media/local", str(context.exception))
+        self.assertIn("Test Library", str(context.exception))
 
     def test_unset_disk_size_threshold(self):
         del self.library["disk_size_threshold"]
