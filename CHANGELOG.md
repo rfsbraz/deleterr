@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1](https://github.com/rfsbraz/deleterr/compare/v0.1.0...v0.1.1) (2026-01-29)
+
+
+### Features
+
+* **sonarr:** Add Sonarr-specific exclusions ([#174](https://github.com/rfsbraz/deleterr/issues/174)) ([6339c65](https://github.com/rfsbraz/deleterr/commit/6339c65f928e1d45f9be4117ec7ce229350849ce))
+
+
+### Bug Fixes
+
+* **ci:** use correct parameter name for PR comment action ([#175](https://github.com/rfsbraz/deleterr/issues/175)) ([9065514](https://github.com/rfsbraz/deleterr/commit/9065514ced6d9913b472983b39acd54e170c2854))
+* correct pyarr method name for disk space API ([#179](https://github.com/rfsbraz/deleterr/issues/179)) ([617b47d](https://github.com/rfsbraz/deleterr/commit/617b47d8b9b914b49fe05484736f94c145c2c208))
+
 ## [0.1.0](https://github.com/rfsbraz/deleterr/compare/v0.0.20...v0.1.0) (2026-01-25)
 
 
