@@ -1,6 +1,29 @@
-from simplejustwatchapi.justwatch import search
+import httpx
+from simplejustwatchapi.query import (
+    MediaEntry,
+    prepare_search_request,
+    parse_search_response,
+)
 
 from app import logger
+
+_GRAPHQL_API_URL = "https://apis.justwatch.com/graphql"
+_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+
+def _search_justwatch(
+    title: str, country: str = "US", language: str = "en", count: int = 4, best_only: bool = True
+) -> list[MediaEntry]:
+    """Search JustWatch with proper User-Agent header to avoid rate limiting.
+
+    This wraps the simplejustwatchapi library's query building and parsing
+    but uses our own HTTP client with proper headers.
+    """
+    request = prepare_search_request(title, country, language, count, best_only)
+    headers = {"User-Agent": _USER_AGENT}
+    response = httpx.post(_GRAPHQL_API_URL, json=request, headers=headers, timeout=30.0)
+    response.raise_for_status()
+    return parse_search_response(response.json())
 
 
 class JustWatch:
@@ -28,7 +51,7 @@ class JustWatch:
             return self._search_cache[cache_key]
 
         try:
-            results = search(title, self.country, self.language, max_results, detailed)
+            results = _search_justwatch(title, self.country, self.language, max_results, detailed)
             self._search_cache[cache_key] = results
             return results
         except Exception as e:
@@ -107,14 +130,22 @@ class JustWatch:
             return True
 
         # Check for specific providers
-        # Note: In simple-justwatch-python-api v0.13, technical_name is directly
-        # on the Offer object (not nested under package as in v0.14+)
+        # Note: technical_name location varies by simplejustwatchapi version:
+        # - v0.13: offer.technical_name (directly on Offer)
+        # - v0.14+: offer.package.technical_name (nested under package)
         for offer in result.offers:
-            if hasattr(offer, "technical_name") and offer.technical_name:
+            offer_provider = None
+            # Try package.technical_name first (v0.14+)
+            if hasattr(offer, "package") and offer.package:
+                if hasattr(offer.package, "technical_name") and offer.package.technical_name:
+                    offer_provider = offer.package.technical_name.lower()
+            # Fall back to direct technical_name (v0.13)
+            if not offer_provider and hasattr(offer, "technical_name") and offer.technical_name:
                 offer_provider = offer.technical_name.lower()
-                if offer_provider in providers_lower:
-                    logger.debug(f"'{title}' is available on {offer.technical_name}")
-                    return True
+
+            if offer_provider and offer_provider in providers_lower:
+                logger.debug(f"'{title}' is available on {offer_provider}")
+                return True
 
         logger.debug(
             f"'{title}' is not available on any of the specified providers: {providers}"

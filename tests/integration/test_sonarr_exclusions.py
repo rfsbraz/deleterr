@@ -393,8 +393,11 @@ class TestSonarrCombinedExclusions:
             assert favorite_tag["id"] in series_with_tags.get("tags", []), \
                 f"Favorite tag {favorite_tag['id']} not in series tags: {series_with_tags.get('tags')}"
 
-            # Update to monitored using the series editor endpoint
-            series = sonarr_seeder.update_series_monitored(series_id, True)
+            # Update to monitored - pass existing series object to avoid race condition
+            # where a fresh GET might return stale data without the tags we just added
+            series = sonarr_seeder.update_series_monitored(
+                series_id, True, series=series_with_tags
+            )
 
             # Verify all criteria
             dsonarr = DSonarr("TestSonarr", SONARR_URL, sonarr_seeder.api_key)

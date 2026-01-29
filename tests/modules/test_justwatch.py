@@ -7,7 +7,7 @@ from app.modules.justwatch import JustWatch
 
 @pytest.mark.unit
 class TestJustWatch:
-    @patch("app.modules.justwatch.search")
+    @patch("app.modules.justwatch._search_justwatch")
     def test_search(self, mock_search):
         # Arrange
         mock_search.return_value = ["result1", "result2", "result3"]
@@ -20,7 +20,7 @@ class TestJustWatch:
         mock_search.assert_called_once_with("test_title", "US", "en", 5, False)
         assert result == ["result1", "result2", "result3"]
 
-    @patch("app.modules.justwatch.search")
+    @patch("app.modules.justwatch._search_justwatch")
     def test_search_caching(self, mock_search):
         # Arrange
         mock_search.return_value = ["result1", "result2"]
@@ -34,7 +34,7 @@ class TestJustWatch:
         mock_search.assert_called_once_with("test_title", "US", "en", 5, False)
         assert result1 == result2
 
-    @patch("app.modules.justwatch.search")
+    @patch("app.modules.justwatch._search_justwatch")
     def test_search_error_handling(self, mock_search):
         # Arrange
         mock_search.side_effect = Exception("API Error")
@@ -46,7 +46,7 @@ class TestJustWatch:
         # Assert - should return empty list on error
         assert result == []
 
-    @patch("app.modules.justwatch.search")
+    @patch("app.modules.justwatch._search_justwatch")
     def test_clear_cache(self, mock_search):
         # Arrange
         mock_search.return_value = ["result1"]
@@ -144,8 +144,10 @@ class TestJustWatch:
     @patch.object(JustWatch, "search_by_title_and_year")
     def test_available_on(self, mock_search_by_title_and_year):
         # Arrange
+        mock_package = MagicMock()
+        mock_package.technical_name = "netflix"
         mock_offer = MagicMock()
-        mock_offer.technical_name = "netflix"
+        mock_offer.package = mock_package
 
         mock_entry = MagicMock()
         mock_entry.offers = [mock_offer]
@@ -163,8 +165,10 @@ class TestJustWatch:
     @patch.object(JustWatch, "search_by_title_and_year")
     def test_available_on_case_insensitive(self, mock_search_by_title_and_year):
         # Arrange
+        mock_package = MagicMock()
+        mock_package.technical_name = "Netflix"
         mock_offer = MagicMock()
-        mock_offer.technical_name = "Netflix"
+        mock_offer.package = mock_package
 
         mock_entry = MagicMock()
         mock_entry.offers = [mock_offer]
@@ -181,8 +185,10 @@ class TestJustWatch:
     @patch.object(JustWatch, "search_by_title_and_year")
     def test_available_on_false(self, mock_search_by_title_and_year):
         # Arrange
+        mock_package = MagicMock()
+        mock_package.technical_name = "amazon"
         mock_offer = MagicMock()
-        mock_offer.technical_name = "amazon"
+        mock_offer.package = mock_package
 
         mock_entry = MagicMock()
         mock_entry.offers = [mock_offer]

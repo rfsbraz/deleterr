@@ -530,25 +530,34 @@ class SonarrSeeder(ServiceSeeder):
         print(f"Series tags after update: {series.get('tags', [])}")
         return series
 
-    def update_series_monitored(self, series_id: int, monitored: bool) -> Dict:
+    def update_series_monitored(
+        self, series_id: int, monitored: bool, series: Optional[Dict] = None
+    ) -> Dict:
         """Update the monitored status of a series using direct PUT.
 
         Uses the /api/v3/series/{id} endpoint with the full series object,
         which is more reliable for persisting monitored status changes.
+
+        Args:
+            series_id: The ID of the series to update.
+            monitored: The new monitored status.
+            series: Optional series object to use. If not provided, fetches fresh.
+                    Pass this to avoid race conditions when tags were just added.
         """
-        # Get current series
-        resp = requests.get(
-            f"{self.base_url}/api/v3/series/{series_id}",
-            headers=self.headers,
-            timeout=10
-        )
-        series = resp.json()
-        print(f"Before monitored update - tags: {series.get('tags', [])}, monitored: {series.get('monitored')}")
+        if series is None:
+            # Get current series
+            resp = requests.get(
+                f"{self.base_url}/api/v3/series/{series_id}",
+                headers=self.headers,
+                timeout=10
+            )
+            series = resp.json()
+        else:
+            # Use a copy to avoid modifying the original
+            series = dict(series)
 
         # Update monitored field
         series["monitored"] = monitored
-
-        print(f"Updating monitored to {monitored} via direct PUT")
 
         # PUT the full series back
         resp = requests.put(
@@ -558,10 +567,22 @@ class SonarrSeeder(ServiceSeeder):
             timeout=10
         )
 
-        print(f"Direct PUT response: {resp.status_code}")
+        # Sonarr may return 202 (Accepted) for async processing
+        # Poll until the change is confirmed or timeout
+        import time
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            resp = requests.get(
+                f"{self.base_url}/api/v3/series/{series_id}",
+                headers=self.headers,
+                timeout=10
+            )
+            result = resp.json()
+            if result.get("monitored") == monitored:
+                return result
+            time.sleep(0.5)
 
-        result = resp.json()
-        print(f"After monitored update - tags: {result.get('tags', [])}, monitored: {result.get('monitored')}")
+        # Return last result even if not matching (let test fail with clear state)
         return result
 
 
