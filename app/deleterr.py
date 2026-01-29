@@ -9,7 +9,7 @@ from app.modules.radarr import DRadarr
 from app.modules.sonarr import DSonarr
 
 from app import logger
-from app.config import load_config
+from app.config import hang_on_error, load_config
 from app.media_cleaner import ConfigurationError, MediaCleaner
 from app.utils import print_readable_freed_space
 
@@ -178,11 +178,10 @@ def main():
         deleterr = Deleterr(config)
 
         if deleterr.has_fatal_errors():
-            logger.error(
+            hang_on_error(
                 "All libraries failed due to configuration errors. "
                 "Please check your settings.yaml and fix the errors above."
             )
-            sys.exit(1)
 
 
 if __name__ == "__main__":

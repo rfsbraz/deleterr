@@ -14,6 +14,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app import logger
+from app.config import hang_on_error
 
 
 # Schedule presets mapping to cron expressions
@@ -133,8 +134,7 @@ class DeleterrScheduler:
         try:
             trigger = self._parse_schedule(schedule)
         except ValueError as e:
-            logger.error(f"Invalid schedule configuration: {e}")
-            sys.exit(1)
+            hang_on_error(f"Invalid schedule configuration: {e}")
 
         # Add the job
         self.scheduler.add_job(
@@ -154,11 +154,10 @@ class DeleterrScheduler:
             logger.info("run_on_startup enabled, executing initial run...")
             success = self._run_deleterr()
             if not success:
-                logger.error(
+                hang_on_error(
                     "Initial run failed due to configuration errors. "
                     "Scheduler will not start until configuration is fixed."
                 )
-                sys.exit(1)
 
         # Start the scheduler (blocks)
         try:
