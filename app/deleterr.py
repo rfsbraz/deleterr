@@ -3,13 +3,14 @@
 import argparse
 import locale
 import os
+import sys
 
 from app.modules.radarr import DRadarr
 from app.modules.sonarr import DSonarr
 
 from app import logger
 from app.config import load_config
-from app.media_cleaner import MediaCleaner
+from app.media_cleaner import ConfigurationError, MediaCleaner
 from app.utils import print_readable_freed_space
 
 
@@ -28,6 +29,9 @@ class Deleterr:
             for connection in config.settings.get("radarr", [])
         }
 
+        self.libraries_processed = 0
+        self.libraries_failed = 0
+
         self.process_radarr()
         self.process_sonarr()
 
@@ -38,9 +42,14 @@ class Deleterr:
             saved_space = 0
             for library in self.config.settings.get("libraries", []):
                 if library.get("radarr") == name:
-                    saved_space += self.media_cleaner.process_library_movies(
-                        library, radarr
-                    )
+                    try:
+                        saved_space += self.media_cleaner.process_library_movies(
+                            library, radarr
+                        )
+                        self.libraries_processed += 1
+                    except ConfigurationError as e:
+                        logger.error(str(e))
+                        self.libraries_failed += 1
 
             logger.info(
                 "Freed %s of space by deleting movies",
@@ -55,14 +64,24 @@ class Deleterr:
             saved_space = 0
             for library in self.config.settings.get("libraries", []):
                 if library.get("sonarr") == name:
-                    saved_space += self.media_cleaner.process_library(
-                        library, sonarr, unfiltered_all_show_data
-                    )
+                    try:
+                        saved_space += self.media_cleaner.process_library(
+                            library, sonarr, unfiltered_all_show_data
+                        )
+                        self.libraries_processed += 1
+                    except ConfigurationError as e:
+                        logger.error(str(e))
+                        self.libraries_failed += 1
 
             logger.info(
                 "Freed %s of space by deleting shows",
                 print_readable_freed_space(saved_space),
             )
+
+    def has_fatal_errors(self):
+        """Returns True if all libraries failed due to configuration errors."""
+        total_libraries = self.libraries_processed + self.libraries_failed
+        return total_libraries > 0 and self.libraries_failed == total_libraries
 
 
 def get_file_contents(file_path):
@@ -156,7 +175,14 @@ def main():
     else:
         # Run once and exit (for external schedulers like Ofelia or cron)
         logger.info("Running in single-run mode")
-        Deleterr(config)
+        deleterr = Deleterr(config)
+
+        if deleterr.has_fatal_errors():
+            logger.error(
+                "All libraries failed due to configuration errors. "
+                "Please check your settings.yaml and fix the errors above."
+            )
+            sys.exit(1)
 
 
 if __name__ == "__main__":

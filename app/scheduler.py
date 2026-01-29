@@ -95,7 +95,11 @@ class DeleterrScheduler:
         )
 
     def _run_deleterr(self):
-        """Execute Deleterr cleanup job."""
+        """Execute Deleterr cleanup job.
+
+        Returns:
+            bool: True if run completed successfully, False if there were fatal errors.
+        """
         from app.deleterr import Deleterr
 
         logger.info("=" * 60)
@@ -103,11 +107,19 @@ class DeleterrScheduler:
         logger.info("=" * 60)
 
         try:
-            Deleterr(self.config)
+            deleterr = Deleterr(self.config)
+            if deleterr.has_fatal_errors():
+                logger.error(
+                    "All libraries failed due to configuration errors. "
+                    "Please check your settings.yaml and fix the errors above."
+                )
+                return False
             logger.info("Scheduled run completed successfully")
+            return True
         except Exception as e:
             logger.error(f"Scheduled run failed: {e}")
-            # Don't re-raise - we want the scheduler to continue
+            # Don't re-raise - we want the scheduler to continue for transient errors
+            return True  # Not a config error, allow retries
 
     def start(self):
         """
@@ -133,19 +145,20 @@ class DeleterrScheduler:
             replace_existing=True,
         )
 
-        # Get next run time for logging
-        job = self.scheduler.get_job("deleterr_cleanup")
-        next_run = job.next_run_time if job else None
-
         logger.info("Deleterr scheduler started")
+        logger.info(f"Schedule: {schedule}")
         logger.info(f"Timezone: {self.scheduler_config.get('timezone', 'UTC')}")
-        if next_run:
-            logger.info(f"Next scheduled run: {next_run.isoformat()}")
 
         # Run immediately if configured
         if run_on_startup:
             logger.info("run_on_startup enabled, executing initial run...")
-            self._run_deleterr()
+            success = self._run_deleterr()
+            if not success:
+                logger.error(
+                    "Initial run failed due to configuration errors. "
+                    "Scheduler will not start until configuration is fixed."
+                )
+                sys.exit(1)
 
         # Start the scheduler (blocks)
         try:
