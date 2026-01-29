@@ -17,3 +17,6 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          # Use PAT to ensure tag pushes trigger downstream workflows (e.g., Docker image builds)
+          # GITHUB_TOKEN doesn't trigger workflows on tags it creates (security feature)
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
