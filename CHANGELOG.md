@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4](https://github.com/rfsbraz/deleterr/compare/v0.1.3...v0.1.4) (2026-01-29)
+
+
+### Bug Fixes
+
+* exit with non-zero code on configuration errors ([#189](https://github.com/rfsbraz/deleterr/issues/189)) ([14c1085](https://github.com/rfsbraz/deleterr/commit/14c1085f1cdf7df56f5992aa26f1a8decd67e641))
+* improve test reliability and reduce CI duplication ([#185](https://github.com/rfsbraz/deleterr/issues/185)) ([34bce7c](https://github.com/rfsbraz/deleterr/commit/34bce7c7408b4b2e02c54dc4c2fd9c3df8c55aee))
+
 ## [0.1.3](https://github.com/rfsbraz/deleterr/compare/v0.1.2...v0.1.3) (2026-01-29)
 
 
