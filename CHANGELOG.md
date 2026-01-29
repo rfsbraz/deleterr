@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3](https://github.com/rfsbraz/deleterr/compare/v0.1.2...v0.1.3) (2026-01-29)
+
+
+### Bug Fixes
+
+* use PAT for release-please to trigger downstream workflows ([#183](https://github.com/rfsbraz/deleterr/issues/183)) ([c0cc866](https://github.com/rfsbraz/deleterr/commit/c0cc866e02b375d00c6b3f174db7b0422a6e0edf))
+
 ## [0.1.2](https://github.com/rfsbraz/deleterr/compare/v0.1.1...v0.1.2) (2026-01-29)
 
 
