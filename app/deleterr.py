@@ -211,7 +211,7 @@ def main():
             )
             logger.warning("")
             logger.warning("  1. Remove Ofelia and use the built-in scheduler (recommended)")
-            logger.warning("     See: https://rfsbraz.github.io/deleterr/configuration/scheduler/")
+            logger.warning("     See: https://rfsbraz.github.io/deleterr/CONFIGURATION#scheduler")
             logger.warning("")
             logger.warning("  2. Or disable the built-in scheduler in settings.yaml:")
             logger.warning("     scheduler:")
