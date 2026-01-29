@@ -207,14 +207,15 @@ def main():
         if scheduler_enabled:
             logger.warning(
                 "The built-in scheduler is enabled by default. "
-                "If you're using an external scheduler (Ofelia, cron), "
-                "add this to your settings.yaml:"
+                "If you're using an external scheduler (Ofelia, cron), either:"
             )
             logger.warning("")
-            logger.warning("  scheduler:")
-            logger.warning("    enabled: false")
+            logger.warning("  1. Remove Ofelia and use the built-in scheduler (recommended)")
+            logger.warning("     See: https://rfsbraz.github.io/deleterr/configuration/scheduler/")
             logger.warning("")
-            logger.warning("Or use the --run-once flag in your Ofelia/cron command.")
+            logger.warning("  2. Or disable the built-in scheduler in settings.yaml:")
+            logger.warning("     scheduler:")
+            logger.warning("       enabled: false")
         else:
             logger.warning(
                 "A previous run may still be in progress. "
