@@ -124,8 +124,8 @@ class SchedulerConfig(BaseModel):
     """
 
     enabled: bool = Field(
-        default=False,
-        description="Enable built-in scheduler. When false, Deleterr runs once and exits (for external schedulers)",
+        default=True,
+        description="Enable built-in scheduler. Set to false for external schedulers (Ofelia, cron) where Deleterr should run once and exit",
     )
     schedule: str = Field(
         default="weekly",

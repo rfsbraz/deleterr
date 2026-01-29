@@ -138,7 +138,7 @@ def main():
 
     # Determine run mode
     scheduler_config = config.settings.get("scheduler", {})
-    scheduler_enabled = scheduler_config.get("enabled", False)
+    scheduler_enabled = scheduler_config.get("enabled", True)
 
     # CLI flags override config
     if args.run_once:
