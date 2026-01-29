@@ -1,5 +1,6 @@
 import os
 from io import StringIO
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -13,6 +14,20 @@ from app.constants import (
     VALID_SORT_FIELDS,
     VALID_SORT_ORDERS,
 )
+
+
+@pytest.fixture(autouse=True)
+def mock_hang_on_error():
+    """Mock hang_on_error to raise SystemExit instead of hanging forever.
+
+    This is needed because the production code hangs to prevent Docker
+    restart loops, but tests need the old exit behavior.
+    """
+    def raise_exit(msg):
+        raise SystemExit(1)
+
+    with patch("app.config.hang_on_error", side_effect=raise_exit):
+        yield
 
 
 # Test case for validate_libraries

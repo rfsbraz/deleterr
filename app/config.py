@@ -1,7 +1,9 @@
 # encoding: utf-8
 
 import os
+import signal
 import sys
+import time
 
 import requests
 import yaml
@@ -33,22 +35,35 @@ def env_constructor(loader, node):
     return env_value
 
 
+def hang_on_error(msg):
+    """Log error and hang indefinitely to prevent restart loops."""
+    logger.error(msg)
+    logger.error("Container will stay idle. Fix the configuration and restart the container.")
+    # Set up signal handler for graceful shutdown
+    def shutdown_handler(signum, frame):
+        logger.info("Received shutdown signal, exiting.")
+        sys.exit(1)
+    signal.signal(signal.SIGTERM, shutdown_handler)
+    signal.signal(signal.SIGINT, shutdown_handler)
+    # Sleep forever until manually stopped
+    while True:
+        time.sleep(3600)
+
+
 def load_config(config_file):
     try:
         full_path = os.path.abspath(config_file)
-        
+
         with open(full_path, "r", encoding="utf8") as stream:
             logger.debug("Loading configuration from %s", full_path)
             return load_yaml(stream)
-                      
+
     except FileNotFoundError:
-        logger.error(
+        hang_on_error(
             f"Configuration file {config_file} not found. Copy the example config and edit it to your needs."
         )
     except yaml.YAMLError as exc:
-        logger.error(exc)
-
-    sys.exit(1)
+        hang_on_error(f"YAML parsing error: {exc}")
 
 def load_yaml(stream):
     class CustomLoader(yaml.SafeLoader):
@@ -80,8 +95,7 @@ class Config:
 
 
     def log_and_exit(self, msg):
-        logger.error(msg)
-        sys.exit(1)
+        hang_on_error(msg)
 
     def validate_config(self):
         return (
