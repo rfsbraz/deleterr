@@ -50,7 +50,7 @@ class DSonarr:
         return series_quality_profile in quality_profile_ids
 
     def get_disk_space(self):
-        return self.instance.get_diskspace()
+        return self.instance.get_disk_space()
 
     def get_episode(self, series_id, series=False):
         return self.instance.get_episode(series_id, series=series)

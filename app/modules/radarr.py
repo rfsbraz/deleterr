@@ -50,7 +50,7 @@ class DRadarr:
         return movie_quality_profile in quality_profile_ids
 
     def get_disk_space(self):
-        return self.instance.get_diskspace()
+        return self.instance.get_disk_space()
 
     def validate_connection(self):
         try:

@@ -45,10 +45,10 @@ def test_check_movie_has_quality_profiles(dradarr):
     assert result
 
 def test_get_disk_space(dradarr):
-    dradarr.instance.get_diskspace.return_value = [{"path": "/mnt", "freeSpace": 1000000}]
+    dradarr.instance.get_disk_space.return_value = [{"path": "/mnt", "freeSpace": 1000000}]
     disk_space = dradarr.get_disk_space()
     assert disk_space == [{"path": "/mnt", "freeSpace": 1000000}]
-    dradarr.instance.get_diskspace.assert_called_once()
+    dradarr.instance.get_disk_space.assert_called_once()
 
 def test_validate_connection_success(dradarr):
     dradarr.instance.get_health.return_value = True
