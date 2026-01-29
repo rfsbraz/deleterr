@@ -193,3 +193,32 @@ class TestDRadarrWrapper:
         profiles = dradarr_client.get_quality_profiles()
         assert isinstance(profiles, list)
         assert len(profiles) > 0
+
+    def test_dradarr_del_movie(self, dradarr_client: DRadarr, radarr_seeder):
+        """Verify DRadarr.del_movie() works with real Radarr.
+
+        This test would have caught issue #180 where the wrapper was missing
+        the del_movie method entirely.
+        """
+        # Add a movie specifically for deletion
+        test_movie = {
+            "title": "Test Movie For Deletion",
+            "year": 2020,
+            "tmdbId": 438631,  # Dune (2021)
+        }
+        result = radarr_seeder.add_movie(test_movie)
+        assert "id" in result, f"Failed to add test movie: {result}"
+        movie_id = result["id"]
+
+        # Verify the movie exists
+        movies_before = dradarr_client.get_movies()
+        ids_before = [m["id"] for m in movies_before]
+        assert movie_id in ids_before
+
+        # Delete via wrapper method
+        dradarr_client.del_movie(movie_id, delete_files=True, add_exclusion=False)
+
+        # Verify deletion
+        movies_after = dradarr_client.get_movies()
+        ids_after = [m["id"] for m in movies_after]
+        assert movie_id not in ids_after

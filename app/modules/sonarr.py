@@ -12,6 +12,22 @@ class DSonarr:
 
         self.instance = SonarrAPI(sonarr_url, sonarr_api_key)
 
+    def __getattr__(self, name):
+        """Delegate unknown attributes to the underlying SonarrAPI instance.
+
+        This is a safeguard to prevent AttributeError when wrapper methods
+        are missing. It logs a warning so developers know to add an explicit
+        wrapper method.
+        """
+        if hasattr(self.instance, name):
+            logger.warning(
+                "DSonarr.%s() not explicitly defined, delegating to SonarrAPI. "
+                "Consider adding an explicit wrapper method.",
+                name
+            )
+            return getattr(self.instance, name)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
     def get_series(self):
         return self.instance.get_series()
 

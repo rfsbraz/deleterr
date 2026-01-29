@@ -12,6 +12,22 @@ class DRadarr:
 
         self.instance = RadarrAPI(radarr_url, radarr_api_key)
 
+    def __getattr__(self, name):
+        """Delegate unknown attributes to the underlying RadarrAPI instance.
+
+        This is a safeguard to prevent AttributeError when wrapper methods
+        are missing. It logs a warning so developers know to add an explicit
+        wrapper method.
+        """
+        if hasattr(self.instance, name):
+            logger.warning(
+                "DRadarr.%s() not explicitly defined, delegating to RadarrAPI. "
+                "Consider adding an explicit wrapper method.",
+                name
+            )
+            return getattr(self.instance, name)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
     def get_movies(self):
         return self.instance.get_movie()
 
@@ -51,6 +67,9 @@ class DRadarr:
 
     def get_disk_space(self):
         return self.instance.get_disk_space()
+
+    def del_movie(self, movie_id, delete_files=False, add_exclusion=False):
+        return self.instance.del_movie(movie_id, delete_files=delete_files, add_exclusion=add_exclusion)
 
     def validate_connection(self):
         try:

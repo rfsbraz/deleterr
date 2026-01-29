@@ -64,6 +64,18 @@ def test_validate_connection_failure(dradarr, monkeypatch):
     assert not result
 
 
+def test_del_movie(dradarr):
+    dradarr.instance.del_movie.return_value = None
+    dradarr.del_movie(123, delete_files=True, add_exclusion=False)
+    dradarr.instance.del_movie.assert_called_once_with(123, delete_files=True, add_exclusion=False)
+
+
+def test_del_movie_with_exclusion(dradarr):
+    dradarr.instance.del_movie.return_value = None
+    dradarr.del_movie(456, delete_files=True, add_exclusion=True)
+    dradarr.instance.del_movie.assert_called_once_with(456, delete_files=True, add_exclusion=True)
+
+
 # Edge case tests for check_movie_has_tags
 def test_check_movie_has_tags_no_match(dradarr):
     """Test when movie has tags but none match the filter."""
@@ -204,3 +216,31 @@ def test_check_movie_has_tags_case_insensitive(dradarr):
     assert dradarr.check_movie_has_tags(movie, ["4K-PROTECTION"])  # uppercase
     assert dradarr.check_movie_has_tags(movie, ["KEEP"])  # uppercase
     assert dradarr.check_movie_has_tags(movie, ["Keep"])  # mixed case
+
+
+# __getattr__ delegation tests
+def test_getattr_delegates_to_instance(dradarr):
+    """Test that __getattr__ delegates unknown methods to the pyarr instance."""
+    # Mock a method that exists on RadarrAPI but not on DRadarr
+    dradarr.instance.get_system_status = MagicMock(return_value={"version": "5.0"})
+
+    # Should delegate to instance and return result
+    result = dradarr.get_system_status()
+    assert result == {"version": "5.0"}
+    dradarr.instance.get_system_status.assert_called_once()
+
+
+def test_getattr_raises_for_nonexistent():
+    """Test that __getattr__ raises AttributeError for truly nonexistent methods.
+
+    Uses a real RadarrAPI (with invalid URL) to test that nonexistent methods
+    raise AttributeError properly. MagicMock allows any attribute by default.
+    """
+    from app.modules.radarr import DRadarr
+
+    # Create a DRadarr with a real (but invalid) RadarrAPI instance
+    dradarr = DRadarr("Test", "http://invalid:7878", "fake-key")
+
+    with pytest.raises(AttributeError) as exc_info:
+        dradarr.this_method_does_not_exist()
+    assert "this_method_does_not_exist" in str(exc_info.value)
