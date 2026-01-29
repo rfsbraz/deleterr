@@ -1,8 +1,10 @@
 # encoding: utf-8
 
 import argparse
+import atexit
 import locale
 import os
+import sys
 
 from app.modules.radarr import DRadarr
 from app.modules.sonarr import DSonarr
@@ -11,6 +13,57 @@ from app import logger
 from app.config import load_config
 from app.media_cleaner import MediaCleaner
 from app.utils import print_readable_freed_space
+
+# Lock file for single instance detection
+LOCK_FILE = "/config/.deleterr.lock"
+_lock_file_handle = None
+
+
+def acquire_instance_lock():
+    """
+    Try to acquire an exclusive lock to ensure only one instance runs.
+
+    Returns:
+        bool: True if lock acquired, False if another instance is running.
+    """
+    global _lock_file_handle
+
+    # Skip on Windows (primarily for local development)
+    if sys.platform == "win32":
+        return True
+
+    try:
+        import fcntl
+
+        _lock_file_handle = open(LOCK_FILE, "w")
+        fcntl.flock(_lock_file_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _lock_file_handle.write(str(os.getpid()))
+        _lock_file_handle.flush()
+
+        # Register cleanup on exit
+        atexit.register(release_instance_lock)
+        return True
+    except (IOError, OSError):
+        # Lock is held by another process
+        return False
+    except ImportError:
+        # fcntl not available (non-Unix)
+        return True
+
+
+def release_instance_lock():
+    """Release the instance lock."""
+    global _lock_file_handle
+
+    if _lock_file_handle:
+        try:
+            import fcntl
+            fcntl.flock(_lock_file_handle.fileno(), fcntl.LOCK_UN)
+            _lock_file_handle.close()
+            os.remove(LOCK_FILE)
+        except Exception:
+            pass
+        _lock_file_handle = None
 
 
 class Deleterr:
@@ -81,9 +134,9 @@ def main():
     initializes the application.
 
     Supports two modes:
-    1. Single run (default): Runs once and exits. Use with external schedulers (Ofelia, cron).
-    2. Scheduler mode: Runs as a long-lived process with built-in scheduling.
-       Enable via `scheduler.enabled: true` in settings.yaml.
+    1. Scheduler mode (default): Runs as a long-lived daemon with built-in scheduling.
+    2. Single run: Runs once and exits. For external schedulers (Ofelia, cron),
+       set `scheduler.enabled: false` or use the --run-once flag.
     """
 
     locale.setlocale(locale.LC_ALL, "")
@@ -145,6 +198,30 @@ def main():
         scheduler_enabled = False
     elif args.scheduler:
         scheduler_enabled = True
+
+    # Check for another running instance
+    if not acquire_instance_lock():
+        logger.warning("=" * 60)
+        logger.warning("Another deleterr instance is already running!")
+        logger.warning("=" * 60)
+        if scheduler_enabled:
+            logger.warning(
+                "The built-in scheduler is enabled by default. "
+                "If you're using an external scheduler (Ofelia, cron), "
+                "add this to your settings.yaml:"
+            )
+            logger.warning("")
+            logger.warning("  scheduler:")
+            logger.warning("    enabled: false")
+            logger.warning("")
+            logger.warning("Or use the --run-once flag in your Ofelia/cron command.")
+        else:
+            logger.warning(
+                "A previous run may still be in progress. "
+                "Wait for it to complete or check for stuck processes."
+            )
+        logger.warning("Exiting to prevent duplicate runs.")
+        sys.exit(1)
 
     if scheduler_enabled:
         # Run in scheduler mode (long-lived process)
