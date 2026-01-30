@@ -547,6 +547,10 @@ class SonarrSeeder(ServiceSeeder):
         Uses the /api/v3/series/{id} endpoint with the full series object,
         which is more reliable for persisting monitored status changes.
 
+        Note: The /api/v3/series/{id} PUT endpoint may NOT preserve tags from
+        the request body during async processing. If tags are lost, this method
+        re-applies them using the /api/v3/series/editor endpoint.
+
         Args:
             series_id: The ID of the series to update.
             monitored: The new monitored status.
@@ -580,7 +584,53 @@ class SonarrSeeder(ServiceSeeder):
         )
 
         # Sonarr may return 202 (Accepted) for async processing
-        # Poll until both monitored status AND tags are confirmed
+        # Poll until monitored status is confirmed
+        max_attempts = 10
+        result = None
+        for attempt in range(max_attempts):
+            resp = requests.get(
+                f"{self.base_url}/api/v3/series/{series_id}",
+                headers=self.headers,
+                timeout=10
+            )
+            result = resp.json()
+            if result.get("monitored") == monitored:
+                break
+            time.sleep(0.5)
+
+        # Check if tags were lost during the update
+        # The /api/v3/series/{id} PUT endpoint doesn't preserve tags reliably
+        if expected_tags:
+            result_tags = set(result.get("tags", []))
+            if not expected_tags.issubset(result_tags):
+                print(f"Tags lost during monitored update. Expected: {expected_tags}, Got: {result_tags}")
+                result = self._reapply_tags(series_id, list(expected_tags))
+
+        return result
+
+    def _reapply_tags(self, series_id: int, tag_ids: List[int]) -> Dict:
+        """Re-apply tags to a series using the series/editor endpoint.
+
+        The /api/v3/series/{id} PUT endpoint doesn't reliably preserve tags,
+        so this method uses the dedicated /api/v3/series/editor endpoint
+        which is designed for tag operations.
+        """
+        payload = {
+            "seriesIds": [series_id],
+            "tags": tag_ids,
+            "applyTags": "replace"  # Use replace to ensure exact tags
+        }
+
+        print(f"Re-applying tags {tag_ids} to series {series_id}")
+
+        resp = requests.put(
+            f"{self.base_url}/api/v3/series/editor",
+            headers=self.headers,
+            json=payload,
+            timeout=10
+        )
+
+        # Poll until tags are confirmed
         max_attempts = 10
         for attempt in range(max_attempts):
             resp = requests.get(
@@ -589,15 +639,12 @@ class SonarrSeeder(ServiceSeeder):
                 timeout=10
             )
             result = resp.json()
-            result_tags = set(result.get("tags", []))
-            monitored_ok = result.get("monitored") == monitored
-            tags_ok = expected_tags.issubset(result_tags) if expected_tags else True
-
-            if monitored_ok and tags_ok:
+            if set(tag_ids).issubset(set(result.get("tags", []))):
+                print(f"Tags re-applied successfully after {attempt + 1} attempts")
                 return result
             time.sleep(0.5)
 
-        # Return last result even if not matching (let test fail with clear state)
+        print(f"Warning: Tags may not have been re-applied. Current tags: {result.get('tags', [])}")
         return result
 
 
