@@ -51,10 +51,16 @@ class Deleterr:
                         logger.error(str(e))
                         self.libraries_failed += 1
 
-            logger.info(
-                "Freed %s of space by deleting movies",
-                print_readable_freed_space(saved_space),
-            )
+            if self.config.settings.get("dry_run"):
+                logger.info(
+                    "[DRY-RUN] Would have freed %s of space by deleting movies",
+                    print_readable_freed_space(saved_space),
+                )
+            else:
+                logger.info(
+                    "Freed %s of space by deleting movies",
+                    print_readable_freed_space(saved_space),
+                )
 
     def process_sonarr(self):
         for name, sonarr in self.sonarr.items():
@@ -73,10 +79,16 @@ class Deleterr:
                         logger.error(str(e))
                         self.libraries_failed += 1
 
-            logger.info(
-                "Freed %s of space by deleting shows",
-                print_readable_freed_space(saved_space),
-            )
+            if self.config.settings.get("dry_run"):
+                logger.info(
+                    "[DRY-RUN] Would have freed %s of space by deleting shows",
+                    print_readable_freed_space(saved_space),
+                )
+            else:
+                logger.info(
+                    "Freed %s of space by deleting shows",
+                    print_readable_freed_space(saved_space),
+                )
 
     def has_fatal_errors(self):
         """Returns True if all libraries failed due to configuration errors."""
