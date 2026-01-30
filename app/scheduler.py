@@ -115,7 +115,10 @@ class DeleterrScheduler:
                     "Please check your settings.yaml and fix the errors above."
                 )
                 return False
-            logger.info("Scheduled run completed successfully")
+            if self.config.settings.get("dry_run"):
+                logger.info("[DRY-RUN] Scheduled run completed successfully (no changes were made)")
+            else:
+                logger.info("Scheduled run completed successfully")
             return True
         except Exception as e:
             logger.error(f"Scheduled run failed: {e}")
