@@ -139,7 +139,7 @@ class TestFindWatchedData(unittest.TestCase):
 @patch.object(MediaCleaner, "get_trakt_items")
 @patch.object(MediaCleaner, "get_plex_library")
 @patch.object(MediaCleaner, "get_show_activity")
-@patch.object(MediaCleaner, "process_shows", return_value=5)
+@patch.object(MediaCleaner, "process_shows", return_value=(5, []))
 def test_process_library(
     mock_process_shows,
     mock_get_show_activity,
@@ -175,6 +175,7 @@ def test_process_library(
     mock_get_show_activity.assert_called_once_with(
         library, mock_get_plex_library.return_value
     )
+    # process_shows now receives an additional preview_next parameter
     mock_process_shows.assert_called_once_with(
         library,
         sonarr_instance,
@@ -183,8 +184,9 @@ def test_process_library(
         mock_get_show_activity.return_value,
         mock_get_trakt_items.return_value,
         mock_get_config_value.return_value,
+        mock_get_config_value.return_value,  # preview_next defaults to max_actions_per_run
     )
-    assert result == 5
+    assert result == (5, [])
 
 
 @patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=False)
@@ -211,7 +213,7 @@ def test_process_library_no_threshold(
         library, sonarr_instance
     )
     mock_process_shows.assert_not_called()
-    assert result == 0
+    assert result == (0, [])
 
 
 @patch.object(MediaCleaner, "process_library_rules", return_value=[MagicMock()])
@@ -244,7 +246,7 @@ def test_process_shows(mock_process_show, mock_process_library_rules, standard_c
         library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
     )
     mock_process_show.assert_called_once()
-    assert result == 10
+    assert result == (10, [])
 
 
 @patch.object(MediaCleaner, "process_library_rules", return_value=[MagicMock()])
@@ -282,7 +284,7 @@ def test_process_shows_with_delay(
     )
     mock_process_show.assert_called_once()
     mock_sleep.assert_called_once_with(10)
-    assert result == 10
+    assert result == (10, [])
 
 
 @patch.object(
@@ -321,7 +323,8 @@ def test_process_shows_max_actions(
         library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
     )
     assert mock_process_show.call_count == 10
-    assert result == 10 * 5
+    # Returns tuple (saved_space, preview_candidates) - preview is empty when preview_next=0 (default)
+    assert result == (10 * 5, [])
 
 
 @patch.object(MediaCleaner, "delete_show_if_allowed")
@@ -712,7 +715,7 @@ def test_get_trakt_items_with_exclusions(
 @patch("app.media_cleaner.MediaCleaner.get_trakt_items")
 @patch("app.media_cleaner.MediaCleaner.get_plex_library")
 @patch("app.media_cleaner.MediaCleaner.get_movie_activity")
-@patch("app.media_cleaner.MediaCleaner.process_movies", return_value=10)
+@patch("app.media_cleaner.MediaCleaner.process_movies", return_value=(10, []))
 @patch("app.media_cleaner._get_config_value", return_value=1)
 @patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True)
 def test_process_library_movies(
@@ -748,13 +751,13 @@ def test_process_library_movies(
         library, mock_get_plex_library.return_value
     )
     mock_process_movies.assert_called_once()
-    assert result == 10
+    assert result == (10, [])
 
 
 @patch("app.media_cleaner.MediaCleaner.get_trakt_items")
 @patch("app.media_cleaner.MediaCleaner.get_plex_library")
 @patch("app.media_cleaner.MediaCleaner.get_movie_activity")
-@patch("app.media_cleaner.MediaCleaner.process_movies", return_value=10)
+@patch("app.media_cleaner.MediaCleaner.process_movies", return_value=(10, []))
 @patch("app.media_cleaner._get_config_value", return_value=1)
 @patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=False)
 def test_process_library_movies_no_space(
@@ -787,7 +790,7 @@ def test_process_library_movies_no_space(
     mock_get_plex_library.assert_not_called()
     mock_get_movie_activity.assert_not_called()
     mock_process_movies.assert_not_called()
-    assert result == 0
+    assert result == (0, [])
 
 
 @patch("app.media_cleaner.MediaCleaner.process_library_rules")
@@ -829,7 +832,8 @@ def test_process_movies(
     )
     assert mock_process_movie.call_count == max_actions_per_run
     assert mock_sleep.call_count == max_actions_per_run
-    assert result == 200
+    # Returns tuple (saved_space, preview_candidates) - preview is empty when preview_next=0 (default)
+    assert result == (200, [])
 
 
 @patch("app.media_cleaner.MediaCleaner.delete_movie_if_allowed")
@@ -2151,3 +2155,201 @@ def test_check_exclusions_includes_radarr(mocker, standard_config):
         media_data, plex_media_item, library.get("exclude"), radarr_instance
     )
     assert result is True
+
+
+# Tests for preview_next deletion queue feature
+class TestPreviewNextFeature:
+    """Tests for preview_next deletion queue feature."""
+
+    @patch.object(MediaCleaner, "process_library_rules")
+    @patch.object(MediaCleaner, "process_show", return_value=100)
+    def test_preview_next_defaults_to_max_actions(
+        self, mock_process_show, mock_process_library_rules, standard_config
+    ):
+        """Preview count defaults to max_actions_per_run when not specified."""
+        # Setup: 20 actionable items, max_actions=5, no preview_next set
+        mock_items = [MagicMock(title=f"Show {i}") for i in range(20)]
+        for i, item in enumerate(mock_items):
+            item.__getitem__ = lambda self, key, idx=i: f"Show {idx}" if key == "title" else {}
+            item.get = lambda key, default=None, idx=i: {"sizeOnDisk": 100} if key == "statistics" else default
+        mock_process_library_rules.return_value = iter(mock_items)
+
+        library = {"name": "Test", "max_actions_per_run": 5}  # No preview_next
+        plex_library = MagicMock()
+        all_show_data = MagicMock()
+        show_activity = MagicMock()
+        trakt_items = MagicMock()
+
+        media_cleaner = MediaCleaner(standard_config)
+
+        # Act
+        saved_space, preview = media_cleaner.process_shows(
+            library,
+            MagicMock(),  # sonarr_instance
+            plex_library,
+            all_show_data,
+            show_activity,
+            trakt_items,
+            max_actions_per_run=5,
+            preview_next=5,  # Default inherited from max_actions
+        )
+
+        # Assert: 5 deleted, 5 in preview
+        assert mock_process_show.call_count == 5
+        assert len(preview) == 5
+
+    @patch.object(MediaCleaner, "process_library_rules")
+    @patch.object(MediaCleaner, "process_show", return_value=100)
+    def test_preview_next_explicit_value(
+        self, mock_process_show, mock_process_library_rules, standard_config
+    ):
+        """Preview count uses explicit preview_next value."""
+        # Setup: 20 items, max_actions=5, preview_next=10
+        mock_items = [MagicMock() for _ in range(20)]
+        for i, item in enumerate(mock_items):
+            item.__getitem__ = lambda self, key, idx=i: f"Show {idx}" if key == "title" else {}
+            item.get = lambda key, default=None: {"sizeOnDisk": 100} if key == "statistics" else default
+        mock_process_library_rules.return_value = iter(mock_items)
+
+        library = {"name": "Test", "max_actions_per_run": 5, "preview_next": 10}
+        plex_library = MagicMock()
+
+        media_cleaner = MediaCleaner(standard_config)
+
+        # Act
+        saved_space, preview = media_cleaner.process_shows(
+            library,
+            MagicMock(),
+            plex_library,
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            max_actions_per_run=5,
+            preview_next=10,
+        )
+
+        # Assert: 5 deleted, 10 in preview
+        assert mock_process_show.call_count == 5
+        assert len(preview) == 10
+
+    @patch.object(MediaCleaner, "process_library_rules")
+    @patch.object(MediaCleaner, "process_show", return_value=100)
+    def test_preview_next_zero_disables_preview(
+        self, mock_process_show, mock_process_library_rules, standard_config
+    ):
+        """Setting preview_next=0 disables preview."""
+        # Setup: 20 items, max_actions=5, preview_next=0
+        mock_items = [MagicMock() for _ in range(20)]
+        for item in mock_items:
+            item.get = lambda key, default=None: {"sizeOnDisk": 100} if key == "statistics" else default
+        mock_process_library_rules.return_value = iter(mock_items)
+
+        media_cleaner = MediaCleaner(standard_config)
+
+        # Act
+        saved_space, preview = media_cleaner.process_shows(
+            {"name": "Test"},
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            max_actions_per_run=5,
+            preview_next=0,  # Disabled
+        )
+
+        # Assert: 5 deleted, empty preview
+        assert mock_process_show.call_count == 5
+        assert len(preview) == 0
+
+    @patch.object(MediaCleaner, "process_library_rules")
+    @patch.object(MediaCleaner, "process_show", return_value=100)
+    def test_preview_next_with_fewer_remaining_items(
+        self, mock_process_show, mock_process_library_rules, standard_config
+    ):
+        """Preview returns only available items when fewer than preview_next."""
+        # Setup: 8 items, max_actions=5, preview_next=10
+        mock_items = [MagicMock() for _ in range(8)]
+        for item in mock_items:
+            item.get = lambda key, default=None: {"sizeOnDisk": 100} if key == "statistics" else default
+        mock_process_library_rules.return_value = iter(mock_items)
+
+        media_cleaner = MediaCleaner(standard_config)
+
+        # Act
+        saved_space, preview = media_cleaner.process_shows(
+            {"name": "Test"},
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            max_actions_per_run=5,
+            preview_next=10,
+        )
+
+        # Assert: 5 deleted, only 3 in preview (all remaining)
+        assert mock_process_show.call_count == 5
+        assert len(preview) == 3
+
+    @patch.object(MediaCleaner, "process_library_rules")
+    @patch.object(MediaCleaner, "process_show", return_value=100)
+    def test_preview_without_max_actions_deletes_all(
+        self, mock_process_show, mock_process_library_rules, standard_config
+    ):
+        """Without max_actions limit, all items are deleted (no preview needed)."""
+        # Setup: 5 items, no max_actions (None)
+        mock_items = [MagicMock() for _ in range(5)]
+        for item in mock_items:
+            item.get = lambda key, default=None: {"sizeOnDisk": 100} if key == "statistics" else default
+        mock_process_library_rules.return_value = iter(mock_items)
+
+        media_cleaner = MediaCleaner(standard_config)
+
+        # Act
+        saved_space, preview = media_cleaner.process_shows(
+            {"name": "Test"},
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            max_actions_per_run=None,  # No limit
+            preview_next=5,
+        )
+
+        # Assert: all 5 deleted, empty preview (no limit = no need for preview)
+        assert mock_process_show.call_count == 5
+        assert len(preview) == 0
+
+    @patch.object(MediaCleaner, "process_library_rules")
+    @patch.object(MediaCleaner, "process_movie", return_value=1000)
+    def test_preview_for_movies(
+        self, mock_process_movie, mock_process_library_rules, standard_config
+    ):
+        """Preview works for movies via process_movies()."""
+        # Setup: 10 movies, max_actions=3, preview_next=3
+        mock_movies = [MagicMock() for _ in range(10)]
+        for i, movie in enumerate(mock_movies):
+            movie.__getitem__ = lambda self, key, idx=i: f"Movie {idx}" if key == "title" else 0
+            movie.get = lambda key, default=None: 1000 if key == "sizeOnDisk" else default
+        mock_process_library_rules.return_value = iter(mock_movies)
+
+        media_cleaner = MediaCleaner(standard_config)
+        mock_radarr = MagicMock()
+        mock_radarr.get_movies.return_value = mock_movies
+
+        # Act
+        saved_space, preview = media_cleaner.process_movies(
+            {"name": "Movies"},
+            mock_radarr,
+            MagicMock(),  # movies_library
+            MagicMock(),  # movie_activity
+            MagicMock(),  # trakt_movies
+            max_actions_per_run=3,
+            preview_next=3,
+        )
+
+        # Assert: 3 deleted, 3 in preview
+        assert mock_process_movie.call_count == 3
+        assert len(preview) == 3

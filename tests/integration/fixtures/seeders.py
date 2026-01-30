@@ -565,6 +565,9 @@ class SonarrSeeder(ServiceSeeder):
             # Use a copy to avoid modifying the original
             series = dict(series)
 
+        # Capture expected tags from input series to verify they persist
+        expected_tags = set(series.get("tags", []))
+
         # Update monitored field
         series["monitored"] = monitored
 
@@ -577,7 +580,7 @@ class SonarrSeeder(ServiceSeeder):
         )
 
         # Sonarr may return 202 (Accepted) for async processing
-        # Poll until the change is confirmed or timeout
+        # Poll until both monitored status AND tags are confirmed
         max_attempts = 10
         for attempt in range(max_attempts):
             resp = requests.get(
@@ -586,7 +589,11 @@ class SonarrSeeder(ServiceSeeder):
                 timeout=10
             )
             result = resp.json()
-            if result.get("monitored") == monitored:
+            result_tags = set(result.get("tags", []))
+            monitored_ok = result.get("monitored") == monitored
+            tags_ok = expected_tags.issubset(result_tags) if expected_tags else True
+
+            if monitored_ok and tags_ok:
                 return result
             time.sleep(0.5)
 

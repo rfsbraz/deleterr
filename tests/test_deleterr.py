@@ -24,7 +24,7 @@ def test_process_radarr(radarr_mock, sonarr_mock, deleterr):
     deleterr.config.settings = {
         "libraries": [{"radarr": "Radarr1"}],
     }
-    deleterr.media_cleaner.process_library_movies = MagicMock(return_value=1000)
+    deleterr.media_cleaner.process_library_movies = MagicMock(return_value=(1000, []))
 
     # Act
     deleterr.process_radarr()
@@ -48,7 +48,7 @@ def test_process_sonarr(radarr_mock, sonarr_mock, deleterr):
     deleterr.config.settings = {
         "libraries": [{"sonarr": "Sonarr1"}],
     }
-    deleterr.media_cleaner.process_library = MagicMock(return_value=1000)
+    deleterr.media_cleaner.process_library = MagicMock(return_value=(1000, []))
 
     # Act
     deleterr.process_sonarr()

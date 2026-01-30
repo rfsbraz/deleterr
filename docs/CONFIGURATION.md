@@ -268,6 +268,7 @@ Configuration for each Plex library to manage.
 | `apply_last_watch_threshold_to_collections` | boolean | No | `false` | Apply last watched threshold to all items in the same collection |
 | `add_list_exclusion_on_delete` | boolean | No | `false` | Prevent Radarr from re-importing deleted media from lists. Radarr only |
 | `max_actions_per_run` | integer | No | `10` | Maximum deletions per run |
+| `preview_next` | integer | No | - | Number of items to preview for next run. Defaults to max_actions_per_run. Set to 0 to disable |
 | `disk_size_threshold` | array | No | `[]` | Only delete when disk space is below threshold |
 | `sort` | object | No | - | Sorting configuration for deletion order |
 

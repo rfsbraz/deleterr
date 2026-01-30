@@ -285,6 +285,40 @@ class TestJustWatchValidation:
         assert validator.validate_libraries() == True
 
 
+# Test cases for preview_next schema validation
+class TestPreviewNextSchema:
+    """Tests for preview_next configuration field."""
+
+    def test_preview_next_default_is_none(self):
+        """preview_next defaults to None (inherit from max_actions)."""
+        from app.schema import LibraryConfig
+
+        config = LibraryConfig(name="Test", action_mode="delete", radarr="test")
+        assert config.preview_next is None
+
+    def test_preview_next_accepts_positive_int(self):
+        """preview_next accepts positive integers."""
+        from app.schema import LibraryConfig
+
+        config = LibraryConfig(name="Test", action_mode="delete", radarr="test", preview_next=10)
+        assert config.preview_next == 10
+
+    def test_preview_next_accepts_zero(self):
+        """preview_next accepts 0 to disable preview."""
+        from app.schema import LibraryConfig
+
+        config = LibraryConfig(name="Test", action_mode="delete", radarr="test", preview_next=0)
+        assert config.preview_next == 0
+
+    def test_preview_next_rejects_negative(self):
+        """preview_next rejects negative values."""
+        from app.schema import LibraryConfig
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            LibraryConfig(name="Test", action_mode="delete", radarr="test", preview_next=-1)
+
+
 # Test cases for env_constructor
 def test_env_constructor_with_existing_variable():
     """Test that env_constructor returns the value when the environment variable exists."""

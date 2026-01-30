@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+* **preview_next**: New library configuration option to preview upcoming deletions. After processing the current batch, Deleterr shows what media would be deleted on the next run. Configure with `preview_next: N` (defaults to `max_actions_per_run`, set to `0` to disable).
+
 ## [0.1.5](https://github.com/rfsbraz/deleterr/compare/v0.1.4...v0.1.5) (2026-01-29)
 
 
