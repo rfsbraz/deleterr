@@ -1,0 +1,15 @@
+FROM python:3.12-alpine
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir flask httpx
+
+# Create cache directory
+RUN mkdir -p /app/cache
+
+COPY justwatch_proxy.py .
+COPY justwatch_cache/justwatch_cache.json /app/cache/justwatch_cache.json
+
+EXPOSE 8888
+
+CMD ["python", "justwatch_proxy.py"]

@@ -468,6 +468,132 @@ class LibraryConfig(BaseModel):
         return self
 
 
+class DiscordNotificationConfig(BaseModel):
+    """Discord webhook notification settings."""
+
+    webhook_url: Optional[str] = Field(
+        default=None,
+        description="Discord webhook URL. Create one in Server Settings → Integrations → Webhooks",
+        json_schema_extra={"example": "https://discord.com/api/webhooks/..."},
+    )
+    username: str = Field(
+        default="Deleterr",
+        description="Bot username displayed in Discord",
+    )
+    avatar_url: Optional[str] = Field(
+        default=None,
+        description="URL to avatar image for the bot",
+    )
+
+
+class SlackNotificationConfig(BaseModel):
+    """Slack webhook notification settings."""
+
+    webhook_url: Optional[str] = Field(
+        default=None,
+        description="Slack Incoming Webhook URL. Create one at api.slack.com/apps",
+        json_schema_extra={"example": "https://hooks.slack.com/services/..."},
+    )
+    channel: Optional[str] = Field(
+        default=None,
+        description="Override the default channel for this webhook",
+        json_schema_extra={"example": "#media-cleanup"},
+    )
+    username: str = Field(
+        default="Deleterr",
+        description="Bot username displayed in Slack",
+    )
+    icon_emoji: str = Field(
+        default=":wastebasket:",
+        description="Emoji icon for the bot",
+    )
+
+
+class TelegramNotificationConfig(BaseModel):
+    """Telegram Bot API notification settings."""
+
+    bot_token: Optional[str] = Field(
+        default=None,
+        description="Telegram bot token from @BotFather",
+        json_schema_extra={"example": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"},
+    )
+    chat_id: Optional[str] = Field(
+        default=None,
+        description="Telegram chat ID (user, group, or channel). Use @userinfobot to find your ID",
+        json_schema_extra={"example": "-1001234567890"},
+    )
+    parse_mode: str = Field(
+        default="MarkdownV2",
+        description="Message parsing mode: MarkdownV2, HTML, or Markdown",
+    )
+
+
+class WebhookNotificationConfig(BaseModel):
+    """Generic webhook notification settings."""
+
+    url: Optional[str] = Field(
+        default=None,
+        description="Webhook URL to receive JSON payloads",
+        json_schema_extra={"example": "https://example.com/webhook"},
+    )
+    method: str = Field(
+        default="POST",
+        description="HTTP method: POST or PUT",
+    )
+    headers: Optional[dict[str, str]] = Field(
+        default=None,
+        description="Custom HTTP headers to include with requests",
+        json_schema_extra={"example": {"Authorization": "Bearer token"}},
+    )
+    timeout: int = Field(
+        default=30,
+        description="Request timeout in seconds",
+    )
+
+
+class NotificationConfig(BaseModel):
+    """
+    Notification settings for alerting about deletions.
+
+    Configure one or more notification providers to receive alerts when
+    Deleterr deletes media or has items scheduled for deletion.
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable/disable all notifications",
+    )
+    notify_on_dry_run: bool = Field(
+        default=True,
+        description="Send notifications even in dry-run mode",
+    )
+    include_preview: bool = Field(
+        default=True,
+        description="Include next scheduled deletions in notifications",
+    )
+    min_deletions_to_notify: int = Field(
+        default=0,
+        ge=0,
+        description="Minimum number of deletions required to send a notification. Set to 0 to always notify",
+    )
+    discord: Optional[DiscordNotificationConfig] = Field(
+        default=None,
+        description="Discord webhook notification settings",
+    )
+    slack: Optional[SlackNotificationConfig] = Field(
+        default=None,
+        description="Slack webhook notification settings",
+    )
+    telegram: Optional[TelegramNotificationConfig] = Field(
+        default=None,
+        description="Telegram Bot API notification settings",
+    )
+    webhook: Optional[WebhookNotificationConfig] = Field(
+        default=None,
+        description="Generic webhook notification settings",
+    )
+
+
 class DeleterrConfig(BaseModel):
     """
     Root configuration for Deleterr.
@@ -532,6 +658,12 @@ class DeleterrConfig(BaseModel):
     scheduler: Optional[SchedulerConfig] = Field(
         default=None,
         description="Built-in scheduler configuration. Alternative to external schedulers like Ofelia",
+    )
+
+    # Notifications
+    notifications: Optional[NotificationConfig] = Field(
+        default=None,
+        description="Notification settings for alerting about deletions via Discord, Slack, Telegram, or webhooks",
     )
 
     # Libraries

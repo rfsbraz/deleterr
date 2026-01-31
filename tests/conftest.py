@@ -6,7 +6,13 @@ This module provides:
 - Common fixtures shared across all test types
 """
 
+import os
+
 import pytest
+
+
+# JustWatch proxy URL for integration tests
+JUSTWATCH_PROXY_URL = os.getenv("JUSTWATCH_PROXY_URL", "http://localhost:8888")
 
 
 def pytest_configure(config):
@@ -38,3 +44,18 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "integration" in item.keywords:
                 item.add_marker(skip_integration)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_justwatch_proxy_for_integration(request):
+    """
+    Auto-use fixture that sets up the JustWatch proxy URL for integration tests.
+
+    This ensures the JustWatch module uses the caching proxy instead of
+    hitting the real API during integration tests.
+    """
+    # Only set up proxy if running integration tests
+    markexpr = request.config.getoption("-m", default="")
+    if "integration" in markexpr:
+        os.environ["JUSTWATCH_API_URL"] = f"{JUSTWATCH_PROXY_URL}/graphql"
+        print(f"\nJustWatch proxy enabled: {JUSTWATCH_PROXY_URL}/graphql")

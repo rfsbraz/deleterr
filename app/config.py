@@ -103,6 +103,7 @@ class Config:
                 and self.validate_sonarr_and_radarr_instances()
                 and self.validate_tautulli()
                 and self.validate_overseerr()
+                and self.validate_notifications()
                 and self.validate_libraries()
         )
 
@@ -120,6 +121,46 @@ class Config:
             logger.error("Failed to connect to Trakt, check your configuration.")
             logger.debug(f"Error: {err}")
             return False
+
+    def validate_notifications(self):
+        """Validate notification configuration if present."""
+        notification_config = self.settings.get("notifications")
+        if not notification_config:
+            return True
+
+        # Validate min_deletions_to_notify is non-negative
+        min_deletions = notification_config.get("min_deletions_to_notify", 0)
+        if not isinstance(min_deletions, int) or min_deletions < 0:
+            self.log_and_exit(
+                "notifications.min_deletions_to_notify must be a non-negative integer"
+            )
+
+        # Validate webhook method if configured
+        webhook_config = notification_config.get("webhook", {})
+        if webhook_config:
+            method = webhook_config.get("method", "POST")
+            if method not in ["POST", "PUT"]:
+                self.log_and_exit(
+                    f"Invalid webhook method '{method}'. Supported values are POST and PUT."
+                )
+
+        # Log configured providers
+        providers = []
+        if notification_config.get("discord", {}).get("webhook_url"):
+            providers.append("discord")
+        if notification_config.get("slack", {}).get("webhook_url"):
+            providers.append("slack")
+        if notification_config.get("telegram", {}).get("bot_token") and notification_config.get("telegram", {}).get("chat_id"):
+            providers.append("telegram")
+        if notification_config.get("webhook", {}).get("url"):
+            providers.append("webhook")
+
+        if providers:
+            logger.info(f"Notification providers configured: {', '.join(providers)}")
+        elif notification_config.get("enabled", True):
+            logger.warning("Notifications enabled but no providers configured")
+
+        return True
 
     def validate_overseerr(self):
         """Validate Overseerr connection if configured."""

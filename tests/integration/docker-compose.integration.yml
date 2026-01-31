@@ -8,7 +8,8 @@ services:
       - TZ=UTC
     volumes:
       - radarr-config:/config
-      - movies-data:/movies
+    tmpfs:
+      - /movies:uid=1000,gid=1000
     ports:
       - "7878:7878"
     healthcheck:
@@ -27,7 +28,8 @@ services:
       - TZ=UTC
     volumes:
       - sonarr-config:/config
-      - tv-data:/tv
+    tmpfs:
+      - /tv:uid=1000,gid=1000
     ports:
       - "8989:8989"
     healthcheck:
@@ -69,11 +71,40 @@ services:
       retries: 10
       start_period: 5s
 
+  webhook-receiver:
+    build:
+      context: ./fixtures
+      dockerfile: Dockerfile.webhook-receiver
+    container_name: deleterr-test-webhook-receiver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  justwatch-proxy:
+    build:
+      context: ./fixtures
+      dockerfile: Dockerfile.justwatch-proxy
+    container_name: deleterr-test-justwatch-proxy
+    ports:
+      - "8888:8888"
+    environment:
+      - JUSTWATCH_VALIDATE_ON_STARTUP=true
+      - JUSTWATCH_ALLOW_REAL_REQUESTS=false
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8888/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
 volumes:
   radarr-config:
   sonarr-config:
-  movies-data:
-  tv-data:
 
 networks:
   default:

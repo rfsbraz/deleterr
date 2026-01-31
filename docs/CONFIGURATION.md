@@ -251,6 +251,118 @@ scheduler:
 
 ---
 
+## Notifications
+
+Optional. Configure notification providers to receive alerts when Deleterr deletes media.
+
+### General Settings
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `enabled` | boolean | No | `true` | Enable/disable all notifications |
+| `notify_on_dry_run` | boolean | No | `true` | Send notifications even in dry-run mode |
+| `include_preview` | boolean | No | `true` | Include next scheduled deletions in notifications |
+| `min_deletions_to_notify` | integer | No | `0` | Minimum number of deletions required to send a notification. Set to 0 to always notify |
+
+### Discord
+
+Send notifications to Discord via webhooks with rich embeds.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `webhook_url` | string | No | - | Discord webhook URL. Create one in Server Settings → Integrations → Webhooks |
+| `username` | string | No | `"Deleterr"` | Bot username displayed in Discord |
+| `avatar_url` | string | No | - | URL to avatar image for the bot |
+
+```yaml
+notifications:
+  enabled: true
+  notify_on_dry_run: true
+  include_preview: true
+  discord:
+    webhook_url: "https://discord.com/api/webhooks/..."
+    username: "Deleterr"
+    avatar_url: "https://example.com/deleterr-avatar.png"
+```
+
+### Slack
+
+Send notifications to Slack via Incoming Webhooks.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `webhook_url` | string | No | - | Slack Incoming Webhook URL. Create one at api.slack.com/apps |
+| `channel` | string | No | - | Override the default channel for this webhook |
+| `username` | string | No | `"Deleterr"` | Bot username displayed in Slack |
+| `icon_emoji` | string | No | `":wastebasket:"` | Emoji icon for the bot |
+
+```yaml
+notifications:
+  slack:
+    webhook_url: "https://hooks.slack.com/services/..."
+    channel: "#media-cleanup"
+    username: "Deleterr"
+    icon_emoji: ":wastebasket:"
+```
+
+### Telegram
+
+Send notifications via Telegram Bot API.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `bot_token` | string | No | - | Telegram bot token from @BotFather |
+| `chat_id` | string | No | - | Telegram chat ID (user, group, or channel). Use @userinfobot to find your ID |
+| `parse_mode` | string | No | `"MarkdownV2"` | Message parsing mode: MarkdownV2, HTML, or Markdown |
+
+```yaml
+notifications:
+  telegram:
+    bot_token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+    chat_id: "-1001234567890"
+    parse_mode: "MarkdownV2"
+```
+
+### Webhook (Generic)
+
+Send JSON payloads to any HTTP endpoint for custom integrations.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `url` | string | No | - | Webhook URL to receive JSON payloads |
+| `method` | string | No | `"POST"` | HTTP method: POST or PUT |
+| `headers` | dict[str, str] | No | - | Custom HTTP headers to include with requests |
+| `timeout` | integer | No | `30` | Request timeout in seconds |
+
+```yaml
+notifications:
+  webhook:
+    url: "https://example.com/webhook"
+    method: "POST"
+    headers:
+      Authorization: "Bearer your-token"
+      Content-Type: "application/json"
+    timeout: 30
+```
+
+### Multiple Providers
+
+You can configure multiple notification providers simultaneously:
+
+```yaml
+notifications:
+  enabled: true
+  notify_on_dry_run: false
+  min_deletions_to_notify: 1
+  discord:
+    webhook_url: !env DISCORD_WEBHOOK_URL
+  telegram:
+    bot_token: !env TELEGRAM_BOT_TOKEN
+    chat_id: !env TELEGRAM_CHAT_ID
+```
+
+---
+
 ## Libraries
 
 Configuration for each Plex library to manage.
@@ -487,6 +599,16 @@ scheduler:
   enabled: true
   schedule: "weekly"
   timezone: "UTC"
+
+# Discord notifications for deletion alerts
+notifications:
+  enabled: true
+  notify_on_dry_run: true
+  include_preview: true
+  min_deletions_to_notify: 1
+  discord:
+    webhook_url: !env DISCORD_WEBHOOK_URL
+    username: "Deleterr"
 
 plex:
   url: "http://localhost:32400"

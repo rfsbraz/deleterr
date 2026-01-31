@@ -1,3 +1,5 @@
+import os
+
 import httpx
 from simplejustwatchapi.query import (
     MediaEntry,
@@ -7,8 +9,18 @@ from simplejustwatchapi.query import (
 
 from app import logger
 
-_GRAPHQL_API_URL = "https://apis.justwatch.com/graphql"
+# Default API URL - can be overridden via JUSTWATCH_API_URL env var for testing
+_DEFAULT_GRAPHQL_API_URL = "https://apis.justwatch.com/graphql"
 _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+
+def _get_graphql_url() -> str:
+    """Get the JustWatch API URL, reading from environment at call time.
+
+    This allows the JUSTWATCH_API_URL environment variable to be set after
+    module import (e.g., by test fixtures) and still take effect.
+    """
+    return os.environ.get("JUSTWATCH_API_URL", _DEFAULT_GRAPHQL_API_URL)
 
 
 def _search_justwatch(
@@ -21,7 +33,8 @@ def _search_justwatch(
     """
     request = prepare_search_request(title, country, language, count, best_only)
     headers = {"User-Agent": _USER_AGENT}
-    response = httpx.post(_GRAPHQL_API_URL, json=request, headers=headers, timeout=30.0)
+    url = _get_graphql_url()
+    response = httpx.post(url, json=request, headers=headers, timeout=30.0)
     response.raise_for_status()
     return parse_search_response(response.json())
 

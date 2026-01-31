@@ -139,7 +139,7 @@ class TestFindWatchedData(unittest.TestCase):
 @patch.object(MediaCleaner, "get_trakt_items")
 @patch.object(MediaCleaner, "get_plex_library")
 @patch.object(MediaCleaner, "get_show_activity")
-@patch.object(MediaCleaner, "process_shows", return_value=(5, []))
+@patch.object(MediaCleaner, "process_shows", return_value=(5, [{"title": "Show"}], []))
 def test_process_library(
     mock_process_shows,
     mock_get_show_activity,
@@ -186,7 +186,7 @@ def test_process_library(
         mock_get_config_value.return_value,
         mock_get_config_value.return_value,  # preview_next defaults to max_actions_per_run
     )
-    assert result == (5, [])
+    assert result == (5, [{"title": "Show"}], [])
 
 
 @patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=False)
@@ -213,10 +213,10 @@ def test_process_library_no_threshold(
         library, sonarr_instance
     )
     mock_process_shows.assert_not_called()
-    assert result == (0, [])
+    assert result == (0, [], [])
 
 
-@patch.object(MediaCleaner, "process_library_rules", return_value=[MagicMock()])
+@patch.object(MediaCleaner, "process_library_rules", return_value=[{"title": "Show", "statistics": {"sizeOnDisk": 10}}])
 @patch.object(MediaCleaner, "process_show", return_value=10)
 def test_process_shows(mock_process_show, mock_process_library_rules, standard_config):
     # Arrange
@@ -246,10 +246,13 @@ def test_process_shows(mock_process_show, mock_process_library_rules, standard_c
         library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
     )
     mock_process_show.assert_called_once()
-    assert result == (10, [])
+    saved_space, deleted_items, preview_candidates = result
+    assert saved_space == 10
+    assert len(deleted_items) == 1
+    assert len(preview_candidates) == 0
 
 
-@patch.object(MediaCleaner, "process_library_rules", return_value=[MagicMock()])
+@patch.object(MediaCleaner, "process_library_rules", return_value=[{"title": "Show", "statistics": {"sizeOnDisk": 10}}])
 @patch.object(MediaCleaner, "process_show", return_value=10)
 @patch("time.sleep")
 def test_process_shows_with_delay(
@@ -284,13 +287,16 @@ def test_process_shows_with_delay(
     )
     mock_process_show.assert_called_once()
     mock_sleep.assert_called_once_with(10)
-    assert result == (10, [])
+    saved_space, deleted_items, preview_candidates = result
+    assert saved_space == 10
+    assert len(deleted_items) == 1
+    assert len(preview_candidates) == 0
 
 
 @patch.object(
     MediaCleaner,
     "process_library_rules",
-    return_value=[MagicMock() for _ in range(100)],
+    return_value=[{"title": f"Show{i}", "statistics": {"sizeOnDisk": 5}} for i in range(100)],
 )
 @patch.object(MediaCleaner, "process_show", return_value=5)
 def test_process_shows_max_actions(
@@ -323,8 +329,11 @@ def test_process_shows_max_actions(
         library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
     )
     assert mock_process_show.call_count == 10
-    # Returns tuple (saved_space, preview_candidates) - preview is empty when preview_next=0 (default)
-    assert result == (10 * 5, [])
+    # Returns 3-tuple (saved_space, deleted_items, preview_candidates) - preview is empty when preview_next=0 (default)
+    saved_space, deleted_items, preview_candidates = result
+    assert saved_space == 10 * 5
+    assert len(deleted_items) == 10
+    assert len(preview_candidates) == 0
 
 
 @patch.object(MediaCleaner, "delete_show_if_allowed")
@@ -715,7 +724,7 @@ def test_get_trakt_items_with_exclusions(
 @patch("app.media_cleaner.MediaCleaner.get_trakt_items")
 @patch("app.media_cleaner.MediaCleaner.get_plex_library")
 @patch("app.media_cleaner.MediaCleaner.get_movie_activity")
-@patch("app.media_cleaner.MediaCleaner.process_movies", return_value=(10, []))
+@patch("app.media_cleaner.MediaCleaner.process_movies", return_value=(10, [{"title": "Movie"}], []))
 @patch("app.media_cleaner._get_config_value", return_value=1)
 @patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True)
 def test_process_library_movies(
@@ -751,13 +760,13 @@ def test_process_library_movies(
         library, mock_get_plex_library.return_value
     )
     mock_process_movies.assert_called_once()
-    assert result == (10, [])
+    assert result == (10, [{"title": "Movie"}], [])
 
 
 @patch("app.media_cleaner.MediaCleaner.get_trakt_items")
 @patch("app.media_cleaner.MediaCleaner.get_plex_library")
 @patch("app.media_cleaner.MediaCleaner.get_movie_activity")
-@patch("app.media_cleaner.MediaCleaner.process_movies", return_value=(10, []))
+@patch("app.media_cleaner.MediaCleaner.process_movies", return_value=(10, [{"title": "Movie"}], []))
 @patch("app.media_cleaner._get_config_value", return_value=1)
 @patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=False)
 def test_process_library_movies_no_space(
@@ -790,7 +799,7 @@ def test_process_library_movies_no_space(
     mock_get_plex_library.assert_not_called()
     mock_get_movie_activity.assert_not_called()
     mock_process_movies.assert_not_called()
-    assert result == (0, [])
+    assert result == (0, [], [])
 
 
 @patch("app.media_cleaner.MediaCleaner.process_library_rules")
@@ -810,7 +819,11 @@ def test_process_movies(
     trakt_movies = MagicMock()
     max_actions_per_run = 2
 
-    mock_process_library_rules.return_value = [MagicMock(), MagicMock(), MagicMock()]
+    mock_process_library_rules.return_value = [
+        {"title": "Movie1", "sizeOnDisk": 100},
+        {"title": "Movie2", "sizeOnDisk": 100},
+        {"title": "Movie3", "sizeOnDisk": 100},
+    ]
     mock_process_movie.return_value = 100
 
     media_cleaner_instance = MediaCleaner(standard_config)
@@ -832,8 +845,11 @@ def test_process_movies(
     )
     assert mock_process_movie.call_count == max_actions_per_run
     assert mock_sleep.call_count == max_actions_per_run
-    # Returns tuple (saved_space, preview_candidates) - preview is empty when preview_next=0 (default)
-    assert result == (200, [])
+    # Returns 3-tuple (saved_space, deleted_items, preview_candidates) - preview is empty when preview_next=0 (default)
+    saved_space, deleted_items, preview_candidates = result
+    assert saved_space == 200
+    assert len(deleted_items) == 2
+    assert len(preview_candidates) == 0
 
 
 @patch("app.media_cleaner.MediaCleaner.delete_movie_if_allowed")
@@ -2183,7 +2199,7 @@ class TestPreviewNextFeature:
         media_cleaner = MediaCleaner(standard_config)
 
         # Act
-        saved_space, preview = media_cleaner.process_shows(
+        saved_space, deleted_items, preview = media_cleaner.process_shows(
             library,
             MagicMock(),  # sonarr_instance
             plex_library,
@@ -2196,6 +2212,7 @@ class TestPreviewNextFeature:
 
         # Assert: 5 deleted, 5 in preview
         assert mock_process_show.call_count == 5
+        assert len(deleted_items) == 5
         assert len(preview) == 5
 
     @patch.object(MediaCleaner, "process_library_rules")
@@ -2217,7 +2234,7 @@ class TestPreviewNextFeature:
         media_cleaner = MediaCleaner(standard_config)
 
         # Act
-        saved_space, preview = media_cleaner.process_shows(
+        saved_space, deleted_items, preview = media_cleaner.process_shows(
             library,
             MagicMock(),
             plex_library,
@@ -2230,6 +2247,7 @@ class TestPreviewNextFeature:
 
         # Assert: 5 deleted, 10 in preview
         assert mock_process_show.call_count == 5
+        assert len(deleted_items) == 5
         assert len(preview) == 10
 
     @patch.object(MediaCleaner, "process_library_rules")
@@ -2247,7 +2265,7 @@ class TestPreviewNextFeature:
         media_cleaner = MediaCleaner(standard_config)
 
         # Act
-        saved_space, preview = media_cleaner.process_shows(
+        saved_space, deleted_items, preview = media_cleaner.process_shows(
             {"name": "Test"},
             MagicMock(),
             MagicMock(),
@@ -2260,6 +2278,7 @@ class TestPreviewNextFeature:
 
         # Assert: 5 deleted, empty preview
         assert mock_process_show.call_count == 5
+        assert len(deleted_items) == 5
         assert len(preview) == 0
 
     @patch.object(MediaCleaner, "process_library_rules")
@@ -2277,7 +2296,7 @@ class TestPreviewNextFeature:
         media_cleaner = MediaCleaner(standard_config)
 
         # Act
-        saved_space, preview = media_cleaner.process_shows(
+        saved_space, deleted_items, preview = media_cleaner.process_shows(
             {"name": "Test"},
             MagicMock(),
             MagicMock(),
@@ -2290,6 +2309,7 @@ class TestPreviewNextFeature:
 
         # Assert: 5 deleted, only 3 in preview (all remaining)
         assert mock_process_show.call_count == 5
+        assert len(deleted_items) == 5
         assert len(preview) == 3
 
     @patch.object(MediaCleaner, "process_library_rules")
@@ -2307,7 +2327,7 @@ class TestPreviewNextFeature:
         media_cleaner = MediaCleaner(standard_config)
 
         # Act
-        saved_space, preview = media_cleaner.process_shows(
+        saved_space, deleted_items, preview = media_cleaner.process_shows(
             {"name": "Test"},
             MagicMock(),
             MagicMock(),
@@ -2320,6 +2340,7 @@ class TestPreviewNextFeature:
 
         # Assert: all 5 deleted, empty preview (no limit = no need for preview)
         assert mock_process_show.call_count == 5
+        assert len(deleted_items) == 5
         assert len(preview) == 0
 
     @patch.object(MediaCleaner, "process_library_rules")
@@ -2340,7 +2361,7 @@ class TestPreviewNextFeature:
         mock_radarr.get_movies.return_value = mock_movies
 
         # Act
-        saved_space, preview = media_cleaner.process_movies(
+        saved_space, deleted_items, preview = media_cleaner.process_movies(
             {"name": "Movies"},
             mock_radarr,
             MagicMock(),  # movies_library
@@ -2352,4 +2373,5 @@ class TestPreviewNextFeature:
 
         # Assert: 3 deleted, 3 in preview
         assert mock_process_movie.call_count == 3
+        assert len(deleted_items) == 3
         assert len(preview) == 3

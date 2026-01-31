@@ -93,7 +93,7 @@ class TestPreviewNextIntegration:
             cleaner.get_plex_item = MagicMock(side_effect=lambda *args, **kwargs: mock_plex_items[0][1])
 
             # Run process_movies
-            saved_space, preview = cleaner.process_movies(
+            saved_space, deleted_items, preview = cleaner.process_movies(
                 library,
                 mock_radarr,
                 mock_plex_library,
@@ -156,7 +156,7 @@ class TestPreviewNextIntegration:
 
             # Run 1: first 10 movies
             mock_radarr.get_movies.return_value = all_movies
-            _, preview_run1 = cleaner.process_movies(
+            _, _, preview_run1 = cleaner.process_movies(
                 library, mock_radarr, mock_plex_library, {}, {},
                 max_actions_per_run=3, preview_next=3,
             )
@@ -169,7 +169,7 @@ class TestPreviewNextIntegration:
             mock_radarr.get_movies.return_value = remaining_movies
 
             # Run 2: the preview items from run 1 should now be processed
-            saved_space_run2, preview_run2 = cleaner.process_movies(
+            saved_space_run2, _, preview_run2 = cleaner.process_movies(
                 library, mock_radarr, mock_plex_library, {}, {},
                 max_actions_per_run=3, preview_next=3,
             )
@@ -225,7 +225,7 @@ class TestPreviewNextIntegration:
             cleaner.is_movie_actionable = MagicMock(return_value=True)
             cleaner.get_plex_item = MagicMock(side_effect=lambda *args, **kwargs: mock_plex_items[0][1])
 
-            _, preview = cleaner.process_movies(
+            _, _, preview = cleaner.process_movies(
                 library, mock_radarr, mock_plex_library, {}, {},
                 max_actions_per_run=3, preview_next=0,
             )

@@ -1066,6 +1066,7 @@ class TestE2EJustWatchExclusions:
                 pass
 
 
+@pytest.mark.integration
 @pytest.mark.slow
 class TestE2EJustWatchRealAPI:
     """
