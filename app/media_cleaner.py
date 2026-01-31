@@ -111,18 +111,23 @@ class MediaCleaner:
 
     def process_library(self, library, sonarr_instance, unfiltered_all_show_data):
         if not library_meets_disk_space_threshold(library, sonarr_instance):
-            return 0
+            return 0, []
 
         all_show_data = self.filter_shows(library, unfiltered_all_show_data)
         logger.info("Instance has %s items to process of type '%s'", len(all_show_data),
                     library.get("series_type", DEFAULT_SONARR_SERIES_TYPE))
 
         if not all_show_data:
-            return 0
+            return 0, []
 
         max_actions_per_run = _get_config_value(
             library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN
         )
+
+        # Determine preview limit: explicit value, or default to max_actions_per_run
+        preview_next = library.get("preview_next")
+        if preview_next is None:
+            preview_next = max_actions_per_run or 0
 
         logger.info("Processing library '%s'", library.get("name"))
 
@@ -143,6 +148,7 @@ class MediaCleaner:
             show_activity,
             trakt_items,
             max_actions_per_run,
+            preview_next,
         )
 
     def process_shows(
@@ -154,13 +160,23 @@ class MediaCleaner:
             show_activity,
             trakt_items,
             max_actions_per_run,
+            preview_next=0,
     ):
         saved_space = 0
         actions_performed = 0
+        preview_candidates = []
+
         for sonarr_show in self.process_library_rules(
                 library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
         ):
             if max_actions_per_run and actions_performed >= max_actions_per_run:
+                # Continue collecting preview candidates after hitting the limit
+                if preview_next > 0 and len(preview_candidates) < preview_next:
+                    preview_candidates.append(sonarr_show)
+                    continue
+                # Stop once we have enough preview candidates (or preview is disabled)
+                if len(preview_candidates) >= preview_next:
+                    break
                 logger.info(
                     f"Reached max actions per run ({max_actions_per_run}), stopping"
                 )
@@ -179,7 +195,7 @@ class MediaCleaner:
                 # sleep in seconds
                 time.sleep(self.config.settings.get("action_delay"))
 
-        return saved_space
+        return saved_space, preview_candidates
 
     def process_show(
             self,
@@ -241,11 +257,16 @@ class MediaCleaner:
 
     def process_library_movies(self, library, radarr_instance):
         if not library_meets_disk_space_threshold(library, radarr_instance):
-            return 0
+            return 0, []
 
         max_actions_per_run = _get_config_value(
             library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN
         )
+
+        # Determine preview limit: explicit value, or default to max_actions_per_run
+        preview_next = library.get("preview_next")
+        if preview_next is None:
+            preview_next = max_actions_per_run or 0
 
         logger.info("Processing library '%s'", library.get("name"))
 
@@ -260,6 +281,7 @@ class MediaCleaner:
             movie_activity,
             trakt_movies,
             max_actions_per_run,
+            preview_next,
         )
 
     def process_movies(
@@ -270,9 +292,11 @@ class MediaCleaner:
             movie_activity,
             trakt_movies,
             max_actions_per_run,
+            preview_next=0,
     ):
         saved_space = 0
         actions_performed = 0
+        preview_candidates = []
 
         all_movie_data = radarr_instance.get_movies()
 
@@ -280,6 +304,13 @@ class MediaCleaner:
                 library, movies_library, all_movie_data, movie_activity, trakt_movies, radarr_instance=radarr_instance
         ):
             if max_actions_per_run and actions_performed >= max_actions_per_run:
+                # Continue collecting preview candidates after hitting the limit
+                if preview_next > 0 and len(preview_candidates) < preview_next:
+                    preview_candidates.append(radarr_movie)
+                    continue
+                # Stop once we have enough preview candidates (or preview is disabled)
+                if len(preview_candidates) >= preview_next:
+                    break
                 logger.info(
                     f"Reached max actions per run ({max_actions_per_run}), stopping"
                 )
@@ -298,7 +329,7 @@ class MediaCleaner:
                 # sleep in seconds
                 time.sleep(self.config.settings.get("action_delay"))
 
-        return saved_space
+        return saved_space, preview_candidates
 
     def process_movie(
             self,

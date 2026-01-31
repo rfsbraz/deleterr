@@ -441,6 +441,11 @@ class LibraryConfig(BaseModel):
         default=10,
         description="Maximum deletions per run",
     )
+    preview_next: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Number of items to preview for next run. Defaults to max_actions_per_run. Set to 0 to disable",
+    )
     disk_size_threshold: list[DiskSizeThreshold] = Field(
         default_factory=list,
         description="Only delete when disk space is below threshold",

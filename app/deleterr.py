@@ -40,12 +40,15 @@ class Deleterr:
             logger.info("Processing radarr instance: '%s'", name)
 
             saved_space = 0
+            all_preview = []
             for library in self.config.settings.get("libraries", []):
                 if library.get("radarr") == name:
                     try:
-                        saved_space += self.media_cleaner.process_library_movies(
+                        space, preview = self.media_cleaner.process_library_movies(
                             library, radarr
                         )
+                        saved_space += space
+                        all_preview.extend(preview)
                         self.libraries_processed += 1
                     except ConfigurationError as e:
                         logger.error(str(e))
@@ -62,18 +65,24 @@ class Deleterr:
                     print_readable_freed_space(saved_space),
                 )
 
+            # Log preview of next scheduled deletions
+            self._log_preview(all_preview, "movie")
+
     def process_sonarr(self):
         for name, sonarr in self.sonarr.items():
             logger.info("Processing sonarr instance: '%s'", name)
             unfiltered_all_show_data = sonarr.get_series()
 
             saved_space = 0
+            all_preview = []
             for library in self.config.settings.get("libraries", []):
                 if library.get("sonarr") == name:
                     try:
-                        saved_space += self.media_cleaner.process_library(
+                        space, preview = self.media_cleaner.process_library(
                             library, sonarr, unfiltered_all_show_data
                         )
+                        saved_space += space
+                        all_preview.extend(preview)
                         self.libraries_processed += 1
                     except ConfigurationError as e:
                         logger.error(str(e))
@@ -89,6 +98,55 @@ class Deleterr:
                     "Freed %s of space by deleting shows",
                     print_readable_freed_space(saved_space),
                 )
+
+            # Log preview of next scheduled deletions
+            self._log_preview(all_preview, "show")
+
+    def _log_preview(self, preview_items, media_type):
+        """
+        Log preview of items that would be deleted on the next run.
+
+        Args:
+            preview_items: List of media items from Radarr/Sonarr
+            media_type: 'movie' or 'show' for appropriate size extraction
+        """
+        if not preview_items:
+            return
+
+        # Calculate total preview size
+        total_size = 0
+        for item in preview_items:
+            if media_type == "movie":
+                total_size += item.get("sizeOnDisk", 0)
+            else:  # show
+                total_size += item.get("statistics", {}).get("sizeOnDisk", 0)
+
+        # Determine log prefix for dry-run mode
+        prefix = "[DRY-RUN] " if self.config.settings.get("dry_run") else ""
+        action_word = "Would be deleted" if self.config.settings.get("dry_run") else "Next scheduled deletions"
+
+        logger.info(
+            "%s%s (%d items, %s):",
+            prefix,
+            action_word,
+            len(preview_items),
+            print_readable_freed_space(total_size),
+        )
+
+        # Log each preview item
+        for i, item in enumerate(preview_items, 1):
+            if media_type == "movie":
+                size = item.get("sizeOnDisk", 0)
+            else:  # show
+                size = item.get("statistics", {}).get("sizeOnDisk", 0)
+
+            logger.info(
+                "%s  %d. %s (%s)",
+                prefix,
+                i,
+                item["title"],
+                print_readable_freed_space(size),
+            )
 
     def has_fatal_errors(self):
         """Returns True if all libraries failed due to configuration errors."""

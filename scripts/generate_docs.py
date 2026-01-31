@@ -660,7 +660,7 @@ libraries:
     # Generate library table without nested objects
     library_fields = ["name", "radarr", "sonarr", "series_type", "action_mode", "watch_status",
                       "last_watched_threshold", "added_at_threshold", "apply_last_watch_threshold_to_collections",
-                      "add_list_exclusion_on_delete", "max_actions_per_run", "disk_size_threshold", "sort"]
+                      "add_list_exclusion_on_delete", "max_actions_per_run", "preview_next", "disk_size_threshold", "sort"]
     library_lines = ["| Property | Type | Required | Default | Description |"]
     library_lines.append("|----------|------|----------|---------|-------------|")
     for name in library_fields:
