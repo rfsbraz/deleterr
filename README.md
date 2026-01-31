@@ -1,4 +1,12 @@
-# Deleterr [![GitHub version](https://badge.fury.io/gh/rfsbraz%2Fdeleterr.svg)](https://badge.fury.io/gh/rfsbraz%2Fdeleterr) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=rfsbraz_deleterr&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=rfsbraz_deleterr) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=rfsbraz_deleterr&metric=coverage)](https://sonarcloud.io/summary/new_code?id=rfsbraz_deleterr)
+# Deleterr
+
+[![CI](https://github.com/rfsbraz/deleterr/actions/workflows/ci.yml/badge.svg)](https://github.com/rfsbraz/deleterr/actions/workflows/ci.yml)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker Pulls](https://img.shields.io/docker/pulls/rfsbraz/deleterr)](https://hub.docker.com/r/rfsbraz/deleterr)
+[![GitHub Release](https://img.shields.io/github/v/release/rfsbraz/deleterr)](https://github.com/rfsbraz/deleterr/releases)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=rfsbraz_deleterr&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=rfsbraz_deleterr)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=rfsbraz_deleterr&metric=coverage)](https://sonarcloud.io/summary/new_code?id=rfsbraz_deleterr)
 
 
 Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files based on user-specified criteria. Deleterr is customizable, allowing you to specify metadata based rules for different libraries and sonarr/radarr instances.
