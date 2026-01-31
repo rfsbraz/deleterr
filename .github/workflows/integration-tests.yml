@@ -87,6 +87,7 @@ jobs:
         if: failure()
         run: |
           cd tests/integration
+          echo "=== JustWatch Proxy logs ===" && docker compose -f docker-compose.integration.yml logs justwatch-proxy || true
           echo "=== Radarr logs ===" && docker compose -f docker-compose.integration.yml logs radarr || true
           echo "=== Sonarr logs ===" && docker compose -f docker-compose.integration.yml logs sonarr || true
           echo "=== Tautulli logs ===" && docker compose -f docker-compose.integration.yml logs tautulli || true
