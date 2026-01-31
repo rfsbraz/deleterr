@@ -115,6 +115,7 @@ class EmailProvider(BaseNotificationProvider):
         password = self.config.get("smtp_password")
 
         context = ssl.create_default_context()
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
 
         if use_ssl:
             # Implicit SSL (typically port 465)
