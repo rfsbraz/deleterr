@@ -7,6 +7,7 @@ import sys
 
 from app.modules.radarr import DRadarr
 from app.modules.sonarr import DSonarr
+from app.modules.plex import PlexMediaServer
 
 from app import logger
 from app.config import hang_on_error, load_config
@@ -19,7 +20,15 @@ class Deleterr:
     def __init__(self, config):
         self.config = config
 
-        self.media_cleaner = MediaCleaner(config)
+        # Initialize media server for leaving_soon feature
+        ssl_verify = config.settings.get("ssl_verify", False)
+        self.media_server = PlexMediaServer(
+            config.settings.get("plex").get("url"),
+            config.settings.get("plex").get("token"),
+            ssl_verify=ssl_verify,
+        )
+
+        self.media_cleaner = MediaCleaner(config, media_server=self.media_server)
         self.notifications = NotificationManager(config)
         self.run_result = RunResult(is_dry_run=config.settings.get("dry_run", True))
 
@@ -63,6 +72,11 @@ class Deleterr:
                             self.run_result.add_deleted(
                                 DeletedItem.from_radarr(item, library_name, name)
                             )
+
+                        # Process leaving_soon feature
+                        self._process_library_leaving_soon(
+                            library, deleted, preview, "movie"
+                        )
                     except ConfigurationError as e:
                         logger.error(str(e))
                         self.libraries_failed += 1
@@ -104,6 +118,11 @@ class Deleterr:
                             self.run_result.add_deleted(
                                 DeletedItem.from_sonarr(item, library_name, name)
                             )
+
+                        # Process leaving_soon feature
+                        self._process_library_leaving_soon(
+                            library, deleted, preview, "show"
+                        )
                     except ConfigurationError as e:
                         logger.error(str(e))
                         self.libraries_failed += 1
@@ -121,6 +140,64 @@ class Deleterr:
 
             # Log preview of next scheduled deletions
             self._log_preview(all_preview, "show")
+
+    def _process_library_leaving_soon(self, library, deleted, preview, media_type):
+        """
+        Process leaving_soon feature for a library.
+
+        Determines which items to tag based on mode:
+        - tagging_only mode: tag deleted items (what WOULD be deleted)
+        - normal mode: tag preview items (what will be deleted next run)
+
+        Args:
+            library: Library configuration dict
+            deleted: List of items that were deleted this run
+            preview: List of items that would be deleted next run
+            media_type: 'movie' or 'show'
+        """
+        leaving_soon_config = library.get("leaving_soon", {})
+        if not leaving_soon_config.get("enabled", False):
+            return
+
+        is_dry_run = self.config.settings.get("dry_run", True)
+        tagging_only = leaving_soon_config.get("tagging_only", False)
+
+        # In dry_run mode without tagging_only, skip tagging
+        # (unless tagging_only is explicitly enabled)
+        if is_dry_run and not tagging_only:
+            logger.debug(
+                "Skipping leaving_soon processing in dry-run mode "
+                "(enable tagging_only to update collection/labels in dry-run)"
+            )
+            return
+
+        # Determine which items to tag
+        if tagging_only:
+            # In tagging_only mode, tag what WOULD be deleted (the deleted list
+            # contains items that were evaluated but not actually deleted)
+            items_to_tag = deleted
+            logger.info(
+                f"[TAGGING-ONLY] Processing {len(items_to_tag)} items for leaving_soon"
+            )
+        else:
+            # Normal mode: tag preview items (next run's deletions)
+            items_to_tag = preview
+
+        if not items_to_tag:
+            logger.debug("No items to process for leaving_soon")
+            return
+
+        # Get the Plex library
+        try:
+            plex_library = self.media_server.get_library(library.get("name"))
+        except Exception as e:
+            logger.error(f"Failed to get Plex library '{library.get('name')}': {e}")
+            return
+
+        # Process leaving_soon
+        self.media_cleaner.process_leaving_soon(
+            library, plex_library, items_to_tag, media_type
+        )
 
     def _log_preview(self, preview_items, media_type):
         """

@@ -171,6 +171,68 @@ class SortConfig(BaseModel):
     )
 
 
+class LeavingSoonCollectionConfig(BaseModel):
+    """Configuration for Leaving Soon collection in Plex."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable creating/updating a collection with items scheduled for deletion",
+    )
+    name: str = Field(
+        default="Leaving Soon",
+        description="Name of the collection to create in Plex",
+    )
+    clear_on_run: bool = Field(
+        default=True,
+        description="Remove items from collection that are no longer scheduled for deletion",
+    )
+
+
+class LeavingSoonLabelConfig(BaseModel):
+    """Configuration for Leaving Soon labels in Plex."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable adding labels to items scheduled for deletion",
+    )
+    name: str = Field(
+        default="leaving-soon",
+        description="Label/tag to add to items scheduled for deletion",
+    )
+    clear_on_run: bool = Field(
+        default=True,
+        description="Remove label from items that are no longer scheduled for deletion",
+    )
+
+
+class LeavingSoonConfig(BaseModel):
+    """
+    Configuration for marking media that is scheduled for deletion.
+
+    Creates a collection and/or adds labels to items that will be deleted
+    on the next run, allowing users to see what's "Leaving Soon" in their
+    Plex library.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable the Leaving Soon feature",
+    )
+    tagging_only: bool = Field(
+        default=False,
+        description="If true, only update collection/labels without deleting any media. "
+                    "Useful for populating the Leaving Soon collection without performing deletions",
+    )
+    collection: Optional[LeavingSoonCollectionConfig] = Field(
+        default=None,
+        description="Configuration for the Leaving Soon collection",
+    )
+    labels: Optional[LeavingSoonLabelConfig] = Field(
+        default=None,
+        description="Configuration for the Leaving Soon labels",
+    )
+
+
 class TraktExclusions(BaseModel):
     """Trakt list exclusions."""
 
@@ -457,6 +519,11 @@ class LibraryConfig(BaseModel):
     exclude: Optional[Exclusions] = Field(
         default=None,
         description="Exclusion rules to protect media",
+    )
+    leaving_soon: Optional[LeavingSoonConfig] = Field(
+        default=None,
+        description="Configuration for marking media scheduled for deletion. "
+                    "Creates a 'Leaving Soon' collection and/or adds labels to items",
     )
 
     @model_validator(mode="after")

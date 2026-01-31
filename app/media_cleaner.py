@@ -17,8 +17,9 @@ DEFAULT_SONARR_SERIES_TYPE = "standard"
 
 
 class MediaCleaner:
-    def __init__(self, config):
+    def __init__(self, config, media_server=None):
         self.config = config
+        self.media_server = media_server
 
         self.watched_collections = set()
         self._justwatch_instances = {}  # Cache for JustWatch instances per country
@@ -225,17 +226,11 @@ class MediaCleaner:
         disk_size = sonarr_show.get("statistics", {}).get("sizeOnDisk", 0)
         total_episodes = sonarr_show.get("statistics", {}).get("episodeFileCount", 0)
 
-        if not self.config.settings.get("dry_run"):
-            self.delete_show_if_allowed(
-                library,
-                sonarr_instance,
-                sonarr_show,
-                actions_performed,
-                max_actions_per_run,
-                disk_size,
-                total_episodes,
-            )
-        else:
+        # Check if we should skip deletion (dry_run or tagging_only mode)
+        is_dry_run = self.config.settings.get("dry_run")
+        tagging_only = library.get("leaving_soon", {}).get("tagging_only", False)
+
+        if is_dry_run:
             logger.info(
                 "[DRY-RUN] [%s/%s] Would have deleted show '%s' from sonarr instance '%s'  (%s - %s episodes) ",
                 actions_performed,
@@ -243,6 +238,26 @@ class MediaCleaner:
                 sonarr_show["title"],
                 library.get("name"),
                 print_readable_freed_space(disk_size),
+                total_episodes,
+            )
+        elif tagging_only:
+            logger.info(
+                "[TAGGING-ONLY] [%s/%s] Skipping deletion of show '%s' from sonarr instance '%s'  (%s - %s episodes) ",
+                actions_performed,
+                max_actions_per_run,
+                sonarr_show["title"],
+                library.get("name"),
+                print_readable_freed_space(disk_size),
+                total_episodes,
+            )
+        else:
+            self.delete_show_if_allowed(
+                library,
+                sonarr_instance,
+                sonarr_show,
+                actions_performed,
+                max_actions_per_run,
+                disk_size,
                 total_episodes,
             )
 
@@ -375,16 +390,11 @@ class MediaCleaner:
     ):
         disk_size = radarr_movie.get("sizeOnDisk", 0)
 
-        if not self.config.settings.get("dry_run"):
-            self.delete_movie_if_allowed(
-                library,
-                radarr_instance,
-                radarr_movie,
-                actions_performed,
-                max_actions_per_run,
-                disk_size,
-            )
-        else:
+        # Check if we should skip deletion (dry_run or tagging_only mode)
+        is_dry_run = self.config.settings.get("dry_run")
+        tagging_only = library.get("leaving_soon", {}).get("tagging_only", False)
+
+        if is_dry_run:
             logger.info(
                 "[DRY-RUN] [%s/%s] Would have deleted movie '%s' from radarr instance '%s' (%s)",
                 actions_performed,
@@ -392,6 +402,24 @@ class MediaCleaner:
                 radarr_movie["title"],
                 library.get("name"),
                 print_readable_freed_space(disk_size),
+            )
+        elif tagging_only:
+            logger.info(
+                "[TAGGING-ONLY] [%s/%s] Skipping deletion of movie '%s' from radarr instance '%s' (%s)",
+                actions_performed,
+                max_actions_per_run,
+                radarr_movie["title"],
+                library.get("name"),
+                print_readable_freed_space(disk_size),
+            )
+        else:
+            self.delete_movie_if_allowed(
+                library,
+                radarr_instance,
+                radarr_movie,
+                actions_performed,
+                max_actions_per_run,
+                disk_size,
             )
 
         return disk_size
@@ -490,6 +518,119 @@ class MediaCleaner:
             logger.warning(
                 f"Error updating Overseerr status for '{media_data.get('title')}': {e}"
             )
+
+    def process_leaving_soon(self, library_config, plex_library, items_to_tag, media_type):
+        """
+        Update leaving soon collection and labels for preview items.
+
+        Args:
+            library_config: Library configuration dict
+            plex_library: Plex library section
+            items_to_tag: List of media items from Radarr/Sonarr to tag
+            media_type: 'movie' or 'show'
+        """
+        leaving_soon_config = library_config.get("leaving_soon", {})
+        if not leaving_soon_config.get("enabled", False):
+            return
+
+        if not self.media_server:
+            logger.warning("Media server not configured, cannot process leaving_soon")
+            return
+
+        library_name = library_config.get("name", "Unknown")
+
+        # Find Plex items for the preview candidates
+        plex_items = []
+        for item in items_to_tag:
+            plex_item = self.media_server.find_item(
+                plex_library,
+                tmdb_id=item.get("tmdbId"),
+                tvdb_id=item.get("tvdbId"),
+                imdb_id=item.get("imdbId"),
+                title=item.get("title"),
+                year=item.get("year"),
+            )
+            if plex_item:
+                plex_items.append(plex_item)
+            else:
+                logger.debug(
+                    f"Could not find '{item.get('title')}' ({item.get('year')}) in Plex for leaving_soon"
+                )
+
+        logger.info(
+            f"Processing leaving_soon for library '{library_name}': {len(plex_items)} items"
+        )
+
+        # Update collection
+        collection_config = leaving_soon_config.get("collection", {})
+        if collection_config.get("enabled", False):
+            self._update_leaving_soon_collection(
+                plex_library, plex_items, collection_config
+            )
+
+        # Update labels
+        labels_config = leaving_soon_config.get("labels", {})
+        if labels_config.get("enabled", False):
+            self._update_leaving_soon_labels(
+                plex_library, plex_items, labels_config
+            )
+
+    def _update_leaving_soon_collection(self, plex_library, plex_items, collection_config):
+        """
+        Update the leaving soon collection with the given items.
+
+        Args:
+            plex_library: Plex library section
+            plex_items: List of Plex media items to add to collection
+            collection_config: Collection configuration dict
+        """
+        collection_name = collection_config.get("name", "Leaving Soon")
+
+        try:
+            collection = self.media_server.get_or_create_collection(
+                plex_library, collection_name
+            )
+            self.media_server.set_collection_items(collection, plex_items)
+            logger.info(
+                f"Updated collection '{collection_name}' with {len(plex_items)} items"
+            )
+        except Exception as e:
+            logger.error(f"Error updating collection '{collection_name}': {e}")
+
+    def _update_leaving_soon_labels(self, plex_library, plex_items, labels_config):
+        """
+        Update leaving soon labels on media items.
+
+        Args:
+            plex_library: Plex library section
+            plex_items: List of Plex media items to label
+            labels_config: Labels configuration dict
+        """
+        label_name = labels_config.get("name", "leaving-soon")
+        clear_on_run = labels_config.get("clear_on_run", True)
+
+        # Build set of item keys for quick lookup
+        current_item_keys = {item.ratingKey for item in plex_items}
+
+        # Clear old labels if configured
+        if clear_on_run:
+            existing_labeled = self.media_server.get_items_with_label(
+                plex_library, label_name
+            )
+            for item in existing_labeled:
+                if item.ratingKey not in current_item_keys:
+                    self.media_server.remove_label(item, label_name)
+                    logger.debug(f"Removed label '{label_name}' from '{item.title}'")
+
+        # Add labels to current preview items
+        for item in plex_items:
+            # Check if item already has the label
+            existing_labels = [l.tag.lower() for l in item.labels]
+            if label_name.lower() not in existing_labels:
+                self.media_server.add_label(item, label_name)
+                logger.debug(f"Added label '{label_name}' to '{item.title}'")
+
+        logger.info(f"Updated labels: {len(plex_items)} items now have '{label_name}'")
 
     def get_library_config(self, config, show):
         return next(

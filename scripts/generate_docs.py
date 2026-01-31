@@ -43,6 +43,9 @@ from app.schema import (
     SlackNotificationConfig,
     TelegramNotificationConfig,
     WebhookNotificationConfig,
+    LeavingSoonConfig,
+    LeavingSoonCollectionConfig,
+    LeavingSoonLabelConfig,
 )
 
 
@@ -495,6 +498,54 @@ Configuration for each Plex library to manage.
 
 {sort_table}
 
+### Leaving Soon
+
+Mark media scheduled for deletion with a Plex collection and/or labels.
+This allows users to see what's "Leaving Soon" in their library (e.g., via Tautulli newsletters).
+
+{leaving_soon_table}
+
+**Collection Settings:**
+
+{leaving_soon_collection_table}
+
+**Label Settings:**
+
+{leaving_soon_labels_table}
+
+**Normal mode - tag items scheduled for next run:**
+```yaml
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 20
+    preview_next: 10
+    leaving_soon:
+      enabled: true
+      collection:
+        enabled: true
+        name: "Leaving Soon"
+      labels:
+        enabled: true
+        name: "leaving-soon"
+```
+
+**Tagging-only mode - no deletions, just maintain the collection:**
+```yaml
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 20
+    leaving_soon:
+      enabled: true
+      tagging_only: true  # Skip deletions, just update collection/labels
+      collection:
+        enabled: true
+        name: "Leaving Soon"
+```
+
 ```yaml
 libraries:
   - name: "Movies"
@@ -764,7 +815,8 @@ libraries:
     # Generate library table without nested objects
     library_fields = ["name", "radarr", "sonarr", "series_type", "action_mode", "watch_status",
                       "last_watched_threshold", "added_at_threshold", "apply_last_watch_threshold_to_collections",
-                      "add_list_exclusion_on_delete", "max_actions_per_run", "preview_next", "disk_size_threshold", "sort"]
+                      "add_list_exclusion_on_delete", "max_actions_per_run", "preview_next", "disk_size_threshold", "sort",
+                      "leaving_soon"]
     library_lines = ["| Property | Type | Required | Default | Description |"]
     library_lines.append("|----------|------|----------|---------|-------------|")
     for name in library_fields:
@@ -774,6 +826,8 @@ libraries:
         if "DiskSizeThreshold" in type_str:
             type_str = "array"
         if "SortConfig" in type_str:
+            type_str = "object"
+        if "LeavingSoonConfig" in type_str:
             type_str = "object"
         required = is_required(field_info)
         default = get_default_str(field_info)
@@ -827,6 +881,9 @@ libraries:
         library_table=library_table,
         disk_table=generate_table(DiskSizeThreshold),
         sort_table=generate_table(SortConfig),
+        leaving_soon_table=generate_table(LeavingSoonConfig, "leaving_soon."),
+        leaving_soon_collection_table=generate_table(LeavingSoonCollectionConfig, "leaving_soon.collection."),
+        leaving_soon_labels_table=generate_table(LeavingSoonLabelConfig, "leaving_soon.labels."),
         exclusions_table=exclusions_table,
         trakt_exclusions_table=generate_table(TraktExclusions, "trakt."),
         justwatch_exclusions_table=generate_table(JustWatchExclusions, "justwatch."),

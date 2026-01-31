@@ -383,6 +383,7 @@ Configuration for each Plex library to manage.
 | `preview_next` | integer | No | - | Number of items to preview for next run. Defaults to max_actions_per_run. Set to 0 to disable |
 | `disk_size_threshold` | array | No | `[]` | Only delete when disk space is below threshold |
 | `sort` | object | No | - | Sorting configuration for deletion order |
+| `leaving_soon` | object | No | - | Configuration for marking media scheduled for deletion. Creates a 'Leaving Soon' collection and/or adds labels to items |
 
 *One of `radarr` or `sonarr` is required per library.
 
@@ -399,6 +400,67 @@ Configuration for each Plex library to manage.
 |----------|------|----------|---------|-------------|
 | `field` | string (`title`, `size`, `release_year`, `runtime`, `added_date`, `rating`, `seasons`, `episodes`) | No | `"title"` | Field to sort by: title, size, release_year, runtime, added_date, rating, seasons, episodes |
 | `order` | string (`asc`, `desc`) | No | `"asc"` | Sort order: asc (ascending), desc (descending) |
+
+### Leaving Soon
+
+Mark media scheduled for deletion with a Plex collection and/or labels.
+This allows users to see what's "Leaving Soon" in their library (e.g., via Tautulli newsletters).
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `leaving_soon.enabled` | boolean | No | `false` | Enable the Leaving Soon feature |
+| `leaving_soon.tagging_only` | boolean | No | `false` | If true, only update collection/labels without deleting any media. Useful for populating the Leaving Soon collection without performing deletions |
+| `leaving_soon.collection` | LeavingSoonCollectionConfig | No | - | Configuration for the Leaving Soon collection |
+| `leaving_soon.labels` | LeavingSoonLabelConfig | No | - | Configuration for the Leaving Soon labels |
+
+**Collection Settings:**
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `leaving_soon.collection.enabled` | boolean | No | `false` | Enable creating/updating a collection with items scheduled for deletion |
+| `leaving_soon.collection.name` | string | No | `"Leaving Soon"` | Name of the collection to create in Plex |
+| `leaving_soon.collection.clear_on_run` | boolean | No | `true` | Remove items from collection that are no longer scheduled for deletion |
+
+**Label Settings:**
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `leaving_soon.labels.enabled` | boolean | No | `false` | Enable adding labels to items scheduled for deletion |
+| `leaving_soon.labels.name` | string | No | `"leaving-soon"` | Label/tag to add to items scheduled for deletion |
+| `leaving_soon.labels.clear_on_run` | boolean | No | `true` | Remove label from items that are no longer scheduled for deletion |
+
+**Normal mode - tag items scheduled for next run:**
+```yaml
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 20
+    preview_next: 10
+    leaving_soon:
+      enabled: true
+      collection:
+        enabled: true
+        name: "Leaving Soon"
+      labels:
+        enabled: true
+        name: "leaving-soon"
+```
+
+**Tagging-only mode - no deletions, just maintain the collection:**
+```yaml
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 20
+    leaving_soon:
+      enabled: true
+      tagging_only: true  # Skip deletions, just update collection/labels
+      collection:
+        enabled: true
+        name: "Leaving Soon"
+```
 
 ```yaml
 libraries:
