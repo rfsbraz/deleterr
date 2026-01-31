@@ -38,6 +38,11 @@ from app.schema import (
     RadarrExclusions,
     SonarrExclusions,
     OverseerrExclusions,
+    NotificationConfig,
+    DiscordNotificationConfig,
+    SlackNotificationConfig,
+    TelegramNotificationConfig,
+    WebhookNotificationConfig,
 )
 
 
@@ -385,6 +390,95 @@ scheduler:
 
 ---
 
+## Notifications
+
+Optional. Configure notification providers to receive alerts when Deleterr deletes media.
+
+### General Settings
+
+{notifications_table}
+
+### Discord
+
+Send notifications to Discord via webhooks with rich embeds.
+
+{discord_table}
+
+```yaml
+notifications:
+  enabled: true
+  notify_on_dry_run: true
+  include_preview: true
+  discord:
+    webhook_url: "https://discord.com/api/webhooks/..."
+    username: "Deleterr"
+    avatar_url: "https://example.com/deleterr-avatar.png"
+```
+
+### Slack
+
+Send notifications to Slack via Incoming Webhooks.
+
+{slack_table}
+
+```yaml
+notifications:
+  slack:
+    webhook_url: "https://hooks.slack.com/services/..."
+    channel: "#media-cleanup"
+    username: "Deleterr"
+    icon_emoji: ":wastebasket:"
+```
+
+### Telegram
+
+Send notifications via Telegram Bot API.
+
+{telegram_table}
+
+```yaml
+notifications:
+  telegram:
+    bot_token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+    chat_id: "-1001234567890"
+    parse_mode: "MarkdownV2"
+```
+
+### Webhook (Generic)
+
+Send JSON payloads to any HTTP endpoint for custom integrations.
+
+{webhook_table}
+
+```yaml
+notifications:
+  webhook:
+    url: "https://example.com/webhook"
+    method: "POST"
+    headers:
+      Authorization: "Bearer your-token"
+      Content-Type: "application/json"
+    timeout: 30
+```
+
+### Multiple Providers
+
+You can configure multiple notification providers simultaneously:
+
+```yaml
+notifications:
+  enabled: true
+  notify_on_dry_run: false
+  min_deletions_to_notify: 1
+  discord:
+    webhook_url: !env DISCORD_WEBHOOK_URL
+  telegram:
+    bot_token: !env TELEGRAM_BOT_TOKEN
+    chat_id: !env TELEGRAM_CHAT_ID
+```
+
+---
+
 ## Libraries
 
 Configuration for each Plex library to manage.
@@ -564,6 +658,16 @@ scheduler:
   schedule: "weekly"
   timezone: "UTC"
 
+# Discord notifications for deletion alerts
+notifications:
+  enabled: true
+  notify_on_dry_run: true
+  include_preview: true
+  min_deletions_to_notify: 1
+  discord:
+    webhook_url: !env DISCORD_WEBHOOK_URL
+    username: "Deleterr"
+
 plex:
   url: "http://localhost:32400"
   token: "YOUR_PLEX_TOKEN"
@@ -691,6 +795,19 @@ libraries:
         exclusion_lines.append(f"| `{name}` | {type_str} | {required} | {default} | {desc} |")
     exclusions_table = "\n".join(exclusion_lines)
 
+    # Generate notifications table (general settings only)
+    notifications_fields = ["enabled", "notify_on_dry_run", "include_preview", "min_deletions_to_notify"]
+    notifications_lines = ["| Property | Type | Required | Default | Description |"]
+    notifications_lines.append("|----------|------|----------|---------|-------------|")
+    for name in notifications_fields:
+        field_info = NotificationConfig.model_fields[name]
+        type_str = get_type_str(field_info.annotation)
+        required = is_required(field_info)
+        default = get_default_str(field_info)
+        desc = field_info.description or ""
+        notifications_lines.append(f"| `{name}` | {type_str} | {required} | {default} | {desc} |")
+    notifications_table = "\n".join(notifications_lines)
+
     # Format the document
     doc = doc.format(
         general_table=general_table,
@@ -702,6 +819,11 @@ libraries:
         justwatch_table=generate_table(JustWatchGlobalConfig),
         overseerr_table=generate_table(OverseerrConfig),
         scheduler_table=generate_table(SchedulerConfig),
+        notifications_table=notifications_table,
+        discord_table=generate_table(DiscordNotificationConfig),
+        slack_table=generate_table(SlackNotificationConfig),
+        telegram_table=generate_table(TelegramNotificationConfig),
+        webhook_table=generate_table(WebhookNotificationConfig),
         library_table=library_table,
         disk_table=generate_table(DiskSizeThreshold),
         sort_table=generate_table(SortConfig),
