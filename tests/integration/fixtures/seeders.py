@@ -604,24 +604,30 @@ class SonarrSeeder(ServiceSeeder):
             result_tags = set(result.get("tags", []))
             if not expected_tags.issubset(result_tags):
                 print(f"Tags lost during monitored update. Expected: {expected_tags}, Got: {result_tags}")
-                result = self._reapply_tags(series_id, list(expected_tags))
+                # Re-apply tags AND monitored together to avoid another race condition
+                result = self._reapply_tags_and_monitored(
+                    series_id, list(expected_tags), monitored
+                )
 
         return result
 
-    def _reapply_tags(self, series_id: int, tag_ids: List[int]) -> Dict:
-        """Re-apply tags to a series using the series/editor endpoint.
+    def _reapply_tags_and_monitored(
+        self, series_id: int, tag_ids: List[int], monitored: bool
+    ) -> Dict:
+        """Re-apply tags and monitored status using the series/editor endpoint.
 
         The /api/v3/series/{id} PUT endpoint doesn't reliably preserve tags,
         so this method uses the dedicated /api/v3/series/editor endpoint
-        which is designed for tag operations.
+        which supports both tags and monitored in a single atomic operation.
         """
         payload = {
             "seriesIds": [series_id],
             "tags": tag_ids,
-            "applyTags": "replace"  # Use replace to ensure exact tags
+            "applyTags": "replace",  # Use replace to ensure exact tags
+            "monitored": monitored,
         }
 
-        print(f"Re-applying tags {tag_ids} to series {series_id}")
+        print(f"Re-applying tags {tag_ids} and monitored={monitored} to series {series_id}")
 
         resp = requests.put(
             f"{self.base_url}/api/v3/series/editor",
@@ -630,7 +636,7 @@ class SonarrSeeder(ServiceSeeder):
             timeout=10
         )
 
-        # Poll until tags are confirmed
+        # Poll until both tags and monitored are confirmed
         max_attempts = 10
         for attempt in range(max_attempts):
             resp = requests.get(
@@ -639,12 +645,14 @@ class SonarrSeeder(ServiceSeeder):
                 timeout=10
             )
             result = resp.json()
-            if set(tag_ids).issubset(set(result.get("tags", []))):
-                print(f"Tags re-applied successfully after {attempt + 1} attempts")
+            tags_ok = set(tag_ids).issubset(set(result.get("tags", [])))
+            monitored_ok = result.get("monitored") == monitored
+            if tags_ok and monitored_ok:
+                print(f"Tags and monitored re-applied successfully after {attempt + 1} attempts")
                 return result
             time.sleep(0.5)
 
-        print(f"Warning: Tags may not have been re-applied. Current tags: {result.get('tags', [])}")
+        print(f"Warning: State may not be correct. Tags: {result.get('tags', [])}, Monitored: {result.get('monitored')}")
         return result
 
 
