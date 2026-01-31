@@ -1,3 +1,5 @@
+import os
+
 import httpx
 from simplejustwatchapi.query import (
     MediaEntry,
@@ -7,7 +9,10 @@ from simplejustwatchapi.query import (
 
 from app import logger
 
-_GRAPHQL_API_URL = "https://apis.justwatch.com/graphql"
+# Allow overriding the API URL for testing (e.g., to use a caching proxy)
+_GRAPHQL_API_URL = os.environ.get(
+    "JUSTWATCH_API_URL", "https://apis.justwatch.com/graphql"
+)
 _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 

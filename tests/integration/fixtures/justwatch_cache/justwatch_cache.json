@@ -1,0 +1,422 @@
+{
+  "612c6a744979d6d0": {
+    "response": {
+      "data": {
+        "popularTitles": {
+          "edges": [
+            {
+              "node": {
+                "id": "tm603",
+                "objectId": 603,
+                "objectType": "MOVIE",
+                "content": {
+                  "title": "The Matrix",
+                  "fullPath": "/us/movie/the-matrix",
+                  "originalReleaseYear": 1999,
+                  "originalReleaseDate": "1999-03-31",
+                  "runtime": 136,
+                  "shortDescription": "A computer hacker learns about the true nature of reality.",
+                  "genres": [
+                    {"shortName": "act", "__typename": "Genre"},
+                    {"shortName": "scf", "__typename": "Genre"}
+                  ],
+                  "externalIds": {
+                    "imdbId": "tt0133093",
+                    "__typename": "ExternalIds"
+                  },
+                  "posterUrl": "/poster/8673372/s718/the-matrix.jpg",
+                  "backdrops": [
+                    {"backdropUrl": "/backdrop/8673372/s1920/the-matrix.jpg", "__typename": "Backdrop"}
+                  ],
+                  "__typename": "MovieContent"
+                },
+                "offers": [
+                  {
+                    "id": "b2Z8dG02MDM6VVM6bWF4OmZsYXRyYXRlOmhk",
+                    "monetizationType": "FLATRATE",
+                    "presentationType": "HD",
+                    "retailPrice": null,
+                    "retailPriceValue": null,
+                    "currency": "USD",
+                    "lastChangeRetailPriceValue": null,
+                    "type": "AGGREGATED",
+                    "package": {
+                      "id": "cGF8Mzg0",
+                      "packageId": 384,
+                      "clearName": "Max",
+                      "technicalName": "hbomax",
+                      "icon": "/icon/305458112/s100/max.png",
+                      "__typename": "Package"
+                    },
+                    "standardWebURL": "https://www.max.com/movies/the-matrix",
+                    "elementCount": 1,
+                    "availableTo": null,
+                    "deeplinkRoku": null,
+                    "subtitleLanguages": ["en"],
+                    "videoTechnology": [],
+                    "audioTechnology": [],
+                    "audioLanguages": ["en"],
+                    "__typename": "Offer"
+                  }
+                ],
+                "__typename": "Movie"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "cached_at": "2025-01-31T00:00:00+00:00",
+    "request_hash": "612c6a744979d6d0",
+    "seeded": true
+  },
+  "b94dc1fa0ef1d058": {
+    "response": {
+      "data": {
+        "popularTitles": {
+          "edges": [
+            {
+              "node": {
+                "id": "ts81189",
+                "objectId": 81189,
+                "objectType": "SHOW",
+                "content": {
+                  "title": "Breaking Bad",
+                  "fullPath": "/us/tv-show/breaking-bad",
+                  "originalReleaseYear": 2008,
+                  "originalReleaseDate": "2008-01-20",
+                  "runtime": 45,
+                  "shortDescription": "A high school chemistry teacher turned methamphetamine manufacturer.",
+                  "genres": [
+                    {"shortName": "crm", "__typename": "Genre"},
+                    {"shortName": "drm", "__typename": "Genre"}
+                  ],
+                  "externalIds": {
+                    "imdbId": "tt0903747",
+                    "__typename": "ExternalIds"
+                  },
+                  "posterUrl": "/poster/8600583/s718/breaking-bad.jpg",
+                  "backdrops": [
+                    {"backdropUrl": "/backdrop/8600583/s1920/breaking-bad.jpg", "__typename": "Backdrop"}
+                  ],
+                  "__typename": "ShowContent"
+                },
+                "offers": [
+                  {
+                    "id": "b2Z8dHM4MTE4OTpVUzpuZng6ZmxhdHJhdGU6aGQ=",
+                    "monetizationType": "FLATRATE",
+                    "presentationType": "HD",
+                    "retailPrice": null,
+                    "retailPriceValue": null,
+                    "currency": "USD",
+                    "lastChangeRetailPriceValue": null,
+                    "type": "AGGREGATED",
+                    "package": {
+                      "id": "cGF8OA==",
+                      "packageId": 8,
+                      "clearName": "Netflix",
+                      "technicalName": "netflix",
+                      "icon": "/icon/207360008/s100/netflix.png",
+                      "__typename": "Package"
+                    },
+                    "standardWebURL": "https://www.netflix.com/title/70143836",
+                    "elementCount": 5,
+                    "availableTo": null,
+                    "deeplinkRoku": null,
+                    "subtitleLanguages": ["en"],
+                    "videoTechnology": [],
+                    "audioTechnology": [],
+                    "audioLanguages": ["en"],
+                    "__typename": "Offer"
+                  }
+                ],
+                "__typename": "Show"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "cached_at": "2025-01-31T00:00:00+00:00",
+    "request_hash": "b94dc1fa0ef1d058",
+    "seeded": true
+  },
+  "bd7478d7df40819a": {
+    "response": {
+      "data": {
+        "popularTitles": {
+          "edges": [
+            {
+              "node": {
+                "id": "tm490",
+                "objectId": 490,
+                "objectType": "MOVIE",
+                "content": {
+                  "title": "The Seventh Seal",
+                  "fullPath": "/us/movie/the-seventh-seal",
+                  "originalReleaseYear": 1957,
+                  "originalReleaseDate": "1957-02-16",
+                  "runtime": 96,
+                  "shortDescription": "A knight plays chess with Death during the Black Plague.",
+                  "genres": [
+                    {"shortName": "drm", "__typename": "Genre"},
+                    {"shortName": "fnt", "__typename": "Genre"}
+                  ],
+                  "externalIds": {
+                    "imdbId": "tt0050976",
+                    "__typename": "ExternalIds"
+                  },
+                  "posterUrl": "/poster/8613821/s718/the-seventh-seal.jpg",
+                  "backdrops": [
+                    {"backdropUrl": "/backdrop/8613821/s1920/the-seventh-seal.jpg", "__typename": "Backdrop"}
+                  ],
+                  "__typename": "MovieContent"
+                },
+                "offers": [
+                  {
+                    "id": "b2Z8dG00OTA6VVM6Y3JpdGVyaW9uOmZsYXRyYXRlOmhk",
+                    "monetizationType": "FLATRATE",
+                    "presentationType": "HD",
+                    "retailPrice": null,
+                    "retailPriceValue": null,
+                    "currency": "USD",
+                    "lastChangeRetailPriceValue": null,
+                    "type": "AGGREGATED",
+                    "package": {
+                      "id": "cGF8MjU4",
+                      "packageId": 258,
+                      "clearName": "Criterion Channel",
+                      "technicalName": "criterionchannel",
+                      "icon": "/icon/207360258/s100/criterion-channel.png",
+                      "__typename": "Package"
+                    },
+                    "standardWebURL": "https://www.criterionchannel.com/the-seventh-seal",
+                    "elementCount": 1,
+                    "availableTo": null,
+                    "deeplinkRoku": null,
+                    "subtitleLanguages": ["en"],
+                    "videoTechnology": [],
+                    "audioTechnology": [],
+                    "audioLanguages": ["en"],
+                    "__typename": "Offer"
+                  }
+                ],
+                "__typename": "Movie"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "cached_at": "2025-01-31T00:00:00+00:00",
+    "request_hash": "bd7478d7df40819a",
+    "seeded": true
+  },
+  "1b0759be788e2f6c": {
+    "response": {
+      "data": {
+        "popularTitles": {
+          "edges": [
+            {
+              "node": {
+                "id": "ts8",
+                "objectId": 8,
+                "objectType": "SHOW",
+                "content": {
+                  "title": "Better Call Saul",
+                  "fullPath": "/us/tv-show/better-call-saul",
+                  "originalReleaseYear": 2015,
+                  "originalReleaseDate": "2015-02-08",
+                  "runtime": 50,
+                  "shortDescription": "Six years before Saul Goodman meets Walter White.",
+                  "genres": [
+                    {"shortName": "crm", "__typename": "Genre"},
+                    {"shortName": "drm", "__typename": "Genre"}
+                  ],
+                  "externalIds": {
+                    "imdbId": "tt3032476",
+                    "__typename": "ExternalIds"
+                  },
+                  "posterUrl": "/poster/302899484/s718/better-call-saul.jpg",
+                  "backdrops": [
+                    {"backdropUrl": "/backdrop/302946702/s1920/better-call-saul.jpg", "__typename": "Backdrop"}
+                  ],
+                  "__typename": "ShowContent"
+                },
+                "offers": [
+                  {
+                    "id": "b2Z8dHM4OlVTOm5meDpmbGF0cmF0ZTpoZA==",
+                    "monetizationType": "FLATRATE",
+                    "presentationType": "HD",
+                    "retailPrice": null,
+                    "retailPriceValue": null,
+                    "currency": "USD",
+                    "lastChangeRetailPriceValue": null,
+                    "type": "AGGREGATED",
+                    "package": {
+                      "id": "cGF8OA==",
+                      "packageId": 8,
+                      "clearName": "Netflix",
+                      "technicalName": "netflix",
+                      "icon": "/icon/207360008/s100/netflix.png",
+                      "__typename": "Package"
+                    },
+                    "standardWebURL": "https://www.netflix.com/title/80021955",
+                    "elementCount": 6,
+                    "availableTo": null,
+                    "deeplinkRoku": null,
+                    "subtitleLanguages": ["en"],
+                    "videoTechnology": [],
+                    "audioTechnology": [],
+                    "audioLanguages": ["en"],
+                    "__typename": "Offer"
+                  },
+                  {
+                    "id": "b2Z8dHM4OlVTOmFtYzpmbGF0cmF0ZTpoZA==",
+                    "monetizationType": "FLATRATE",
+                    "presentationType": "HD",
+                    "retailPrice": null,
+                    "retailPriceValue": null,
+                    "currency": "USD",
+                    "lastChangeRetailPriceValue": null,
+                    "type": "AGGREGATED",
+                    "package": {
+                      "id": "cGF8NDQ0",
+                      "packageId": 444,
+                      "clearName": "AMC+",
+                      "technicalName": "amcplus",
+                      "icon": "/icon/304517803/s100/amcplus.png",
+                      "__typename": "Package"
+                    },
+                    "standardWebURL": "https://www.amcplus.com/shows/better-call-saul",
+                    "elementCount": 6,
+                    "availableTo": null,
+                    "deeplinkRoku": null,
+                    "subtitleLanguages": ["en"],
+                    "videoTechnology": [],
+                    "audioTechnology": [],
+                    "audioLanguages": ["en"],
+                    "__typename": "Offer"
+                  }
+                ],
+                "__typename": "Show"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "cached_at": "2025-01-31T00:00:00+00:00",
+    "request_hash": "1b0759be788e2f6c",
+    "seeded": true
+  },
+  "8c5b29a13afa5701": {
+    "response": {
+      "data": {
+        "popularTitles": {
+          "edges": [
+            {
+              "node": {
+                "id": "tm438631",
+                "objectId": 438631,
+                "objectType": "MOVIE",
+                "content": {
+                  "title": "Dune",
+                  "fullPath": "/us/movie/dune-2021",
+                  "originalReleaseYear": 2021,
+                  "originalReleaseDate": "2021-09-15",
+                  "runtime": 155,
+                  "shortDescription": "Paul Atreides, a brilliant and gifted young man born into a great destiny.",
+                  "genres": [
+                    {"shortName": "scf", "__typename": "Genre"},
+                    {"shortName": "drm", "__typename": "Genre"}
+                  ],
+                  "externalIds": {
+                    "imdbId": "tt1160419",
+                    "__typename": "ExternalIds"
+                  },
+                  "posterUrl": "/poster/257270959/s718/dune.jpg",
+                  "backdrops": [
+                    {"backdropUrl": "/backdrop/257270961/s1920/dune.jpg", "__typename": "Backdrop"}
+                  ],
+                  "__typename": "MovieContent"
+                },
+                "offers": [
+                  {
+                    "id": "b2Z8dG00Mzg2MzE6VVM6aGJvbWF4OmZsYXRyYXRlOmhk",
+                    "monetizationType": "FLATRATE",
+                    "presentationType": "HD",
+                    "retailPrice": null,
+                    "retailPriceValue": null,
+                    "currency": "USD",
+                    "lastChangeRetailPriceValue": null,
+                    "type": "AGGREGATED",
+                    "package": {
+                      "id": "cGF8Mzg0",
+                      "packageId": 384,
+                      "clearName": "Max",
+                      "technicalName": "hbomax",
+                      "icon": "/icon/305458112/s100/max.png",
+                      "__typename": "Package"
+                    },
+                    "standardWebURL": "https://www.max.com/movies/dune/4b4e7ef3-f289-4a60-8e1e-9b8a1e8c5f27",
+                    "elementCount": 1,
+                    "availableTo": null,
+                    "deeplinkRoku": null,
+                    "subtitleLanguages": ["en"],
+                    "videoTechnology": [],
+                    "audioTechnology": [],
+                    "audioLanguages": ["en"],
+                    "__typename": "Offer"
+                  }
+                ],
+                "__typename": "Movie"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "cached_at": "2025-01-31T00:00:00+00:00",
+    "request_hash": "8c5b29a13afa5701",
+    "seeded": true
+  },
+  "0365d66240d6a718": {
+    "response": {
+      "data": {
+        "popularTitles": {
+          "edges": [
+            {
+              "node": {
+                "id": "tm999999",
+                "objectId": 999999,
+                "objectType": "MOVIE",
+                "content": {
+                  "title": "Test Movie",
+                  "fullPath": "/us/movie/test-movie",
+                  "originalReleaseYear": 2020,
+                  "originalReleaseDate": "2020-01-01",
+                  "runtime": 120,
+                  "shortDescription": "A test movie for validation.",
+                  "genres": [],
+                  "externalIds": {
+                    "imdbId": "tt9999999",
+                    "__typename": "ExternalIds"
+                  },
+                  "posterUrl": "/poster/test/s718/test-movie.jpg",
+                  "backdrops": [],
+                  "__typename": "MovieContent"
+                },
+                "offers": [],
+                "__typename": "Movie"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "cached_at": "2025-01-31T00:00:00+00:00",
+    "request_hash": "0365d66240d6a718",
+    "seeded": true
+  }
+}

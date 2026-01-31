@@ -307,6 +307,46 @@ class SonarrSeeder(ServiceSeeder):
             time.sleep(2)
         return False
 
+    def wait_for_series_refresh(self, series_id: int, timeout: int = 30) -> bool:
+        """Wait for the RefreshSeries command to complete for a given series.
+
+        When a series is added, Sonarr triggers a background RefreshSeries command.
+        Updates to the series (tags, monitored, etc.) may not work reliably until
+        this command completes.
+        """
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                resp = requests.get(
+                    f"{self.base_url}/api/v3/command",
+                    headers=self.headers,
+                    timeout=10
+                )
+                commands = resp.json()
+
+                # Look for RefreshSeries command for this series
+                found_pending = False
+                for cmd in commands:
+                    if cmd.get("commandName") == "Refresh Series":
+                        body = cmd.get("body", {})
+                        if series_id in body.get("seriesIds", []):
+                            if cmd.get("status") == "completed":
+                                return True
+                            elif cmd.get("status") in ["queued", "started"]:
+                                found_pending = True
+                                break
+
+                if not found_pending:
+                    # No pending command found - assume complete
+                    return True
+
+            except requests.RequestException:
+                pass
+
+            time.sleep(0.3)
+
+        return False
+
     def setup_root_folder(self, path: str = "/tv") -> Dict:
         """Create root folder for TV shows."""
         # Check if root folder exists
@@ -397,6 +437,11 @@ class SonarrSeeder(ServiceSeeder):
 
                 if resp.status_code in (200, 201):
                     print(f"Successfully added series: {series_data['title']}")
+                    # Wait for background RefreshSeries command to complete
+                    # This is required for subsequent updates (tags, monitored) to work
+                    series_id = result.get("id")
+                    if series_id:
+                        self.wait_for_series_refresh(series_id)
                     return result
 
                 # Check if series already exists
@@ -497,17 +542,30 @@ class SonarrSeeder(ServiceSeeder):
         """Add multiple tags to a series using the series editor endpoint.
 
         Uses the /api/v3/series/editor endpoint with applyTags: "add"
-        which is the recommended approach for tag operations.
+        which is the most reliable approach for tag operations in Sonarr.
         """
-        # Use the series editor endpoint with applyTags
-        payload = {
-            "seriesIds": [series_id],
-            "tags": tag_ids,
-            "applyTags": "add"
-        }
+        # Get current series to check existing tags
+        resp = requests.get(
+            f"{self.base_url}/api/v3/series/{series_id}",
+            headers=self.headers,
+            timeout=10
+        )
+        series = resp.json()
+
+        # Calculate which tags need to be added
+        current_tags = set(series.get("tags", []))
+        tags_to_add = set(tag_ids)
+        all_tags = list(current_tags | tags_to_add)
 
         print(f"Adding tags {tag_ids} to series {series_id}")
-        print(f"Payload: {payload}")
+        print(f"Current tags: {list(current_tags)}, Target tags: {all_tags}")
+
+        # Use series/editor endpoint with "replace" to set exact tags
+        payload = {
+            "seriesIds": [series_id],
+            "tags": all_tags,
+            "applyTags": "replace"
+        }
 
         resp = requests.put(
             f"{self.base_url}/api/v3/series/editor",
@@ -517,76 +575,75 @@ class SonarrSeeder(ServiceSeeder):
         )
 
         print(f"Series editor response: {resp.status_code}")
-        if resp.text:
-            print(f"Response body: {resp.text[:500]}")
 
-        # Sonarr may return 202 (Accepted) for async processing
         # Poll until the tags are confirmed or timeout
-        max_attempts = 10
+        max_attempts = 15
         for attempt in range(max_attempts):
             resp = requests.get(
                 f"{self.base_url}/api/v3/series/{series_id}",
                 headers=self.headers,
                 timeout=10
             )
-            series = resp.json()
-            current_tags = set(series.get("tags", []))
-            if all(tag_id in current_tags for tag_id in tag_ids):
-                print(f"Tags confirmed after {attempt + 1} attempts: {series.get('tags', [])}")
-                return series
+            result = resp.json()
+            result_tags = set(result.get("tags", []))
+            if tags_to_add.issubset(result_tags):
+                print(f"Tags confirmed after {attempt + 1} attempts: {result.get('tags', [])}")
+                return result
             time.sleep(0.5)
 
-        print(f"Tags not confirmed after {max_attempts} attempts: {series.get('tags', [])}")
-        return series
+        print(f"Tags not confirmed after {max_attempts} attempts: {result.get('tags', [])}")
+        return result
 
     def update_series_monitored(
         self, series_id: int, monitored: bool, series: Optional[Dict] = None
     ) -> Dict:
-        """Update the monitored status of a series using direct PUT.
+        """Update the monitored status of a series using the series/editor endpoint.
 
-        Uses the /api/v3/series/{id} endpoint with the full series object,
-        which is more reliable for persisting monitored status changes.
-
-        Note: The /api/v3/series/{id} PUT endpoint may NOT preserve tags from
-        the request body during async processing. If tags are lost, this method
-        re-applies them using the /api/v3/series/editor endpoint.
+        Uses the /api/v3/series/editor endpoint which is more reliable
+        for updating monitored status than the direct PUT endpoint.
 
         Args:
             series_id: The ID of the series to update.
             monitored: The new monitored status.
-            series: Optional series object to use. If not provided, fetches fresh.
-                    Pass this to avoid race conditions when tags were just added.
+            series: Optional series object to use (for preserving tags).
+                    If not provided, fetches fresh.
         """
         if series is None:
-            # Get current series
+            # Get current series to capture tags
             resp = requests.get(
                 f"{self.base_url}/api/v3/series/{series_id}",
                 headers=self.headers,
                 timeout=10
             )
             series = resp.json()
-        else:
-            # Use a copy to avoid modifying the original
-            series = dict(series)
 
-        # Capture expected tags from input series to verify they persist
-        expected_tags = set(series.get("tags", []))
+        # Capture current tags to preserve them
+        current_tags = list(series.get("tags", []))
 
-        # Update monitored field
-        series["monitored"] = monitored
+        # Use series/editor endpoint which is more reliable
+        payload = {
+            "seriesIds": [series_id],
+            "monitored": monitored,
+        }
 
-        # PUT the full series back
+        # Only include tags if there are any to preserve
+        if current_tags:
+            payload["tags"] = current_tags
+            payload["applyTags"] = "replace"
+
+        print(f"Updating series {series_id} monitored={monitored}")
+
         resp = requests.put(
-            f"{self.base_url}/api/v3/series/{series_id}",
+            f"{self.base_url}/api/v3/series/editor",
             headers=self.headers,
-            json=series,
+            json=payload,
             timeout=10
         )
 
-        # Sonarr may return 202 (Accepted) for async processing
+        print(f"Series editor response: {resp.status_code}")
+
         # Poll until monitored status is confirmed
-        max_attempts = 10
-        result = None
+        max_attempts = 15
         for attempt in range(max_attempts):
             resp = requests.get(
                 f"{self.base_url}/api/v3/series/{series_id}",
@@ -595,20 +652,11 @@ class SonarrSeeder(ServiceSeeder):
             )
             result = resp.json()
             if result.get("monitored") == monitored:
-                break
+                print(f"Monitored status confirmed after {attempt + 1} attempts")
+                return result
             time.sleep(0.5)
 
-        # Check if tags were lost during the update
-        # The /api/v3/series/{id} PUT endpoint doesn't preserve tags reliably
-        if expected_tags:
-            result_tags = set(result.get("tags", []))
-            if not expected_tags.issubset(result_tags):
-                print(f"Tags lost during monitored update. Expected: {expected_tags}, Got: {result_tags}")
-                # Re-apply tags AND monitored together to avoid another race condition
-                result = self._reapply_tags_and_monitored(
-                    series_id, list(expected_tags), monitored
-                )
-
+        print(f"Monitored status not confirmed after {max_attempts} attempts: {result.get('monitored')}")
         return result
 
     def _reapply_tags_and_monitored(

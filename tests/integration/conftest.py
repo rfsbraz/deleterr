@@ -40,6 +40,7 @@ SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989")
 TAUTULLI_URL = os.getenv("TAUTULLI_URL", "http://localhost:8181")
 PLEX_MOCK_URL = os.getenv("PLEX_MOCK_URL", "http://localhost:32400")
 WEBHOOK_RECEIVER_URL = os.getenv("WEBHOOK_RECEIVER_URL", "http://localhost:8080")
+JUSTWATCH_PROXY_URL = os.getenv("JUSTWATCH_PROXY_URL", "http://localhost:8888")
 
 # API Keys - these will be extracted from the containers after startup
 # or can be pre-set via environment variables
@@ -237,6 +238,22 @@ def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
     if not webhook_ready:
         raise RuntimeError("Webhook receiver did not start in time")
 
+    # Wait for JustWatch proxy
+    justwatch_ready = False
+    while time.time() - start < timeout and not justwatch_ready:
+        try:
+            resp = requests.get(f"{JUSTWATCH_PROXY_URL}/health", timeout=5)
+            if resp.status_code == 200:
+                justwatch_ready = True
+        except requests.RequestException:
+            # Service may not be ready yet; retry loop continues
+            pass
+        if not justwatch_ready:
+            time.sleep(2)
+
+    if not justwatch_ready:
+        raise RuntimeError("JustWatch proxy did not start in time")
+
     return api_keys
 
 
@@ -248,6 +265,9 @@ def docker_services() -> Generator[dict, None, None]:
     Starts containers before tests, extracts API keys, tears down after.
     Returns dict with API keys.
     """
+    # Set JustWatch API URL to use the proxy
+    os.environ["JUSTWATCH_API_URL"] = f"{JUSTWATCH_PROXY_URL}/graphql"
+
     # Check if we should use external services (already running)
     if os.getenv("USE_EXTERNAL_SERVICES", "false").lower() == "true":
         yield {
@@ -266,6 +286,7 @@ def docker_services() -> Generator[dict, None, None]:
         print("Waiting for services to be ready...")
         api_keys = wait_for_services()
         print(f"Services ready. API keys extracted.")
+        print(f"JustWatch proxy URL: {JUSTWATCH_PROXY_URL}")
 
         yield api_keys
 
