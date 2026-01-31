@@ -41,9 +41,9 @@ class TestPlexLibraryContent:
         movies = plex_test_helper.get_all_movies()
         assert len(movies) > 0, "No movies found in library"
 
-        # Check for expected movies from bootstrap
+        # Check for expected movies from bootstrap (matching JustWatch cache)
         movie_titles = [m.title for m in movies]
-        assert "Old Unwatched Movie" in movie_titles or len(movies) >= 3
+        assert "The Matrix" in movie_titles or "Dune" in movie_titles or len(movies) >= 3
 
     def test_tvshows_are_seeded(self, plex_test_helper):
         """Verify TV shows were seeded during bootstrap."""
@@ -237,3 +237,31 @@ class TestPlexLeavingSoonPattern:
             movie.reload()
             if helper.has_label(movie, "leaving-soon"):
                 helper.remove_label(movie, "leaving-soon")
+
+
+class TestJustWatchCacheAlignment:
+    """Verify Plex seed data aligns with JustWatch cache for integration tests."""
+
+    def test_movies_match_justwatch_cache(self, plex_test_helper):
+        """Verify seeded movies have matching JustWatch cache entries."""
+        movies = plex_test_helper.get_all_movies()
+        movie_titles = [m.title for m in movies]
+
+        # These movies have cached JustWatch responses
+        cached_movies = ["The Matrix", "Dune", "The Seventh Seal", "Test Movie"]
+
+        # At least some cached movies should be present
+        matching = [t for t in cached_movies if t in movie_titles]
+        assert len(matching) >= 2, f"Expected cached movies in library. Found: {movie_titles}"
+
+    def test_shows_match_justwatch_cache(self, plex_test_helper):
+        """Verify seeded shows have matching JustWatch cache entries."""
+        shows = plex_test_helper.get_all_shows()
+        show_titles = [s.title for s in shows]
+
+        # These shows have cached JustWatch responses
+        cached_shows = ["Breaking Bad", "Better Call Saul"]
+
+        # At least one cached show should be present
+        matching = [t for t in cached_shows if t in show_titles]
+        assert len(matching) >= 1, f"Expected cached shows in library. Found: {show_titles}"
