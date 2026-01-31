@@ -110,15 +110,24 @@ class MediaCleaner:
         ]
 
     def process_library(self, library, sonarr_instance, unfiltered_all_show_data):
+        """
+        Process a Sonarr library.
+
+        Returns:
+            tuple: (saved_space, deleted_items, preview_candidates) where:
+                - saved_space: bytes freed by deletions
+                - deleted_items: list of show data that was deleted
+                - preview_candidates: list of shows that would be deleted next
+        """
         if not library_meets_disk_space_threshold(library, sonarr_instance):
-            return 0, []
+            return 0, [], []
 
         all_show_data = self.filter_shows(library, unfiltered_all_show_data)
         logger.info("Instance has %s items to process of type '%s'", len(all_show_data),
                     library.get("series_type", DEFAULT_SONARR_SERIES_TYPE))
 
         if not all_show_data:
-            return 0, []
+            return 0, [], []
 
         max_actions_per_run = _get_config_value(
             library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN
@@ -162,8 +171,15 @@ class MediaCleaner:
             max_actions_per_run,
             preview_next=0,
     ):
+        """
+        Process shows for deletion.
+
+        Returns:
+            tuple: (saved_space, deleted_items, preview_candidates)
+        """
         saved_space = 0
         actions_performed = 0
+        deleted_items = []
         preview_candidates = []
 
         for sonarr_show in self.process_library_rules(
@@ -189,13 +205,14 @@ class MediaCleaner:
                 actions_performed,
                 max_actions_per_run,
             )
+            deleted_items.append(sonarr_show)
             actions_performed += 1
 
             if self.config.settings.get("action_delay"):
                 # sleep in seconds
                 time.sleep(self.config.settings.get("action_delay"))
 
-        return saved_space, preview_candidates
+        return saved_space, deleted_items, preview_candidates
 
     def process_show(
             self,
@@ -256,8 +273,17 @@ class MediaCleaner:
         self._update_overseerr_status(library, sonarr_show, "tv")
 
     def process_library_movies(self, library, radarr_instance):
+        """
+        Process a Radarr library.
+
+        Returns:
+            tuple: (saved_space, deleted_items, preview_candidates) where:
+                - saved_space: bytes freed by deletions
+                - deleted_items: list of movie data that was deleted
+                - preview_candidates: list of movies that would be deleted next
+        """
         if not library_meets_disk_space_threshold(library, radarr_instance):
-            return 0, []
+            return 0, [], []
 
         max_actions_per_run = _get_config_value(
             library, "max_actions_per_run", DEFAULT_MAX_ACTIONS_PER_RUN
@@ -294,8 +320,15 @@ class MediaCleaner:
             max_actions_per_run,
             preview_next=0,
     ):
+        """
+        Process movies for deletion.
+
+        Returns:
+            tuple: (saved_space, deleted_items, preview_candidates)
+        """
         saved_space = 0
         actions_performed = 0
+        deleted_items = []
         preview_candidates = []
 
         all_movie_data = radarr_instance.get_movies()
@@ -323,13 +356,14 @@ class MediaCleaner:
                 actions_performed,
                 max_actions_per_run,
             )
+            deleted_items.append(radarr_movie)
             actions_performed += 1
 
             if self.config.settings.get("action_delay"):
                 # sleep in seconds
                 time.sleep(self.config.settings.get("action_delay"))
 
-        return saved_space, preview_candidates
+        return saved_space, deleted_items, preview_candidates
 
     def process_movie(
             self,

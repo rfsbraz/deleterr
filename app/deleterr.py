@@ -11,6 +11,7 @@ from app.modules.sonarr import DSonarr
 from app import logger
 from app.config import hang_on_error, load_config
 from app.media_cleaner import ConfigurationError, MediaCleaner
+from app.modules.notifications import NotificationManager, RunResult, DeletedItem
 from app.utils import print_readable_freed_space
 
 
@@ -19,6 +20,8 @@ class Deleterr:
         self.config = config
 
         self.media_cleaner = MediaCleaner(config)
+        self.notifications = NotificationManager(config)
+        self.run_result = RunResult(is_dry_run=config.settings.get("dry_run", True))
 
         self.sonarr = {
             connection["name"]: DSonarr(connection["name"], connection["url"], connection["api_key"])
@@ -35,6 +38,9 @@ class Deleterr:
         self.process_radarr()
         self.process_sonarr()
 
+        # Send notification after all processing
+        self._send_notification()
+
     def process_radarr(self):
         for name, radarr in self.radarr.items():
             logger.info("Processing radarr instance: '%s'", name)
@@ -44,12 +50,19 @@ class Deleterr:
             for library in self.config.settings.get("libraries", []):
                 if library.get("radarr") == name:
                     try:
-                        space, preview = self.media_cleaner.process_library_movies(
+                        space, deleted, preview = self.media_cleaner.process_library_movies(
                             library, radarr
                         )
                         saved_space += space
                         all_preview.extend(preview)
                         self.libraries_processed += 1
+
+                        # Track deleted items for notifications
+                        library_name = library.get("name", "Unknown")
+                        for item in deleted:
+                            self.run_result.add_deleted(
+                                DeletedItem.from_radarr(item, library_name, name)
+                            )
                     except ConfigurationError as e:
                         logger.error(str(e))
                         self.libraries_failed += 1
@@ -78,12 +91,19 @@ class Deleterr:
             for library in self.config.settings.get("libraries", []):
                 if library.get("sonarr") == name:
                     try:
-                        space, preview = self.media_cleaner.process_library(
+                        space, deleted, preview = self.media_cleaner.process_library(
                             library, sonarr, unfiltered_all_show_data
                         )
                         saved_space += space
                         all_preview.extend(preview)
                         self.libraries_processed += 1
+
+                        # Track deleted items for notifications
+                        library_name = library.get("name", "Unknown")
+                        for item in deleted:
+                            self.run_result.add_deleted(
+                                DeletedItem.from_sonarr(item, library_name, name)
+                            )
                     except ConfigurationError as e:
                         logger.error(str(e))
                         self.libraries_failed += 1
@@ -147,6 +167,14 @@ class Deleterr:
                 item["title"],
                 print_readable_freed_space(size),
             )
+
+    def _send_notification(self):
+        """Send notification with run results."""
+        if self.notifications.is_enabled():
+            try:
+                self.notifications.send_run_summary(self.run_result)
+            except Exception as e:
+                logger.error(f"Failed to send notification: {e}")
 
     def has_fatal_errors(self):
         """Returns True if all libraries failed due to configuration errors."""
