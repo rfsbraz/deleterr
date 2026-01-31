@@ -39,6 +39,7 @@ RADARR_URL = os.getenv("RADARR_URL", "http://localhost:7878")
 SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989")
 TAUTULLI_URL = os.getenv("TAUTULLI_URL", "http://localhost:8181")
 PLEX_MOCK_URL = os.getenv("PLEX_MOCK_URL", "http://localhost:32400")
+WEBHOOK_RECEIVER_URL = os.getenv("WEBHOOK_RECEIVER_URL", "http://localhost:8080")
 
 # API Keys - these will be extracted from the containers after startup
 # or can be pre-set via environment variables
@@ -219,6 +220,22 @@ def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
 
     if not tautulli_ready:
         raise RuntimeError("Tautulli did not start in time")
+
+    # Wait for Webhook receiver (fastest startup)
+    webhook_ready = False
+    while time.time() - start < timeout and not webhook_ready:
+        try:
+            resp = requests.get(f"{WEBHOOK_RECEIVER_URL}/health", timeout=5)
+            if resp.status_code == 200:
+                webhook_ready = True
+        except requests.RequestException:
+            # Service may not be ready yet; retry loop continues
+            pass
+        if not webhook_ready:
+            time.sleep(2)
+
+    if not webhook_ready:
+        raise RuntimeError("Webhook receiver did not start in time")
 
     return api_keys
 
@@ -460,3 +477,82 @@ def integration_config(docker_services):
             }
         ]
     }
+
+
+# Webhook receiver fixtures
+
+
+@pytest.fixture(scope="session")
+def webhook_receiver_url(docker_services) -> str:
+    """URL for the webhook receiver service."""
+    return WEBHOOK_RECEIVER_URL
+
+
+@pytest.fixture
+def clean_webhook_receiver(webhook_receiver_url):
+    """
+    Reset webhook receiver before each test for isolation.
+
+    Clears captured webhooks before and after each test.
+    """
+    requests.post(f"{webhook_receiver_url}/api/reset", timeout=5)
+    yield webhook_receiver_url
+    requests.post(f"{webhook_receiver_url}/api/reset", timeout=5)
+
+
+@pytest.fixture
+def webhook_helper(clean_webhook_receiver):
+    """
+    Helper class for webhook verification in tests.
+
+    Provides methods to retrieve and verify captured webhooks.
+    """
+    class WebhookHelper:
+        def __init__(self, base_url: str):
+            self.base_url = base_url
+
+        def get_all_webhooks(self) -> list:
+            """Get all captured webhooks."""
+            resp = requests.get(f"{self.base_url}/api/webhooks", timeout=5)
+            resp.raise_for_status()
+            return resp.json().get("webhooks", [])
+
+        def get_latest_webhook(self) -> dict:
+            """Get the most recently captured webhook."""
+            resp = requests.get(f"{self.base_url}/api/webhooks/latest", timeout=5)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.json()
+
+        def get_webhook_count(self) -> int:
+            """Get count of captured webhooks."""
+            resp = requests.get(f"{self.base_url}/api/webhooks/count", timeout=5)
+            resp.raise_for_status()
+            return resp.json().get("count", 0)
+
+        def get_webhooks_by_path(self, path: str) -> list:
+            """Get all webhooks captured at a specific path."""
+            resp = requests.get(
+                f"{self.base_url}/api/webhooks/by-path/{path.lstrip('/')}",
+                timeout=5
+            )
+            resp.raise_for_status()
+            return resp.json().get("webhooks", [])
+
+        def wait_for_webhook(self, timeout: float = 5.0, poll_interval: float = 0.1) -> dict:
+            """Wait for a webhook to be received."""
+            import time
+            start = time.time()
+            while time.time() - start < timeout:
+                webhook = self.get_latest_webhook()
+                if webhook:
+                    return webhook
+                time.sleep(poll_interval)
+            return None
+
+        def reset(self) -> None:
+            """Reset all captured webhooks."""
+            requests.post(f"{self.base_url}/api/reset", timeout=5)
+
+    return WebhookHelper(clean_webhook_receiver)

@@ -69,6 +69,20 @@ services:
       retries: 10
       start_period: 5s
 
+  webhook-receiver:
+    build:
+      context: ./fixtures
+      dockerfile: Dockerfile.webhook-receiver
+    container_name: deleterr-test-webhook-receiver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
 volumes:
   radarr-config:
   sonarr-config:
