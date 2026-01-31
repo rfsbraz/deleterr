@@ -174,34 +174,18 @@ class SortConfig(BaseModel):
 class LeavingSoonCollectionConfig(BaseModel):
     """Configuration for Leaving Soon collection in Plex."""
 
-    enabled: bool = Field(
-        default=False,
-        description="Enable creating/updating a collection with items scheduled for deletion",
-    )
     name: str = Field(
         default="Leaving Soon",
         description="Name of the collection to create in Plex",
-    )
-    clear_on_run: bool = Field(
-        default=True,
-        description="Remove items from collection that are no longer scheduled for deletion",
     )
 
 
 class LeavingSoonLabelConfig(BaseModel):
     """Configuration for Leaving Soon labels in Plex."""
 
-    enabled: bool = Field(
-        default=False,
-        description="Enable adding labels to items scheduled for deletion",
-    )
     name: str = Field(
         default="leaving-soon",
         description="Label/tag to add to items scheduled for deletion",
-    )
-    clear_on_run: bool = Field(
-        default=True,
-        description="Remove label from items that are no longer scheduled for deletion",
     )
 
 
@@ -209,20 +193,13 @@ class LeavingSoonConfig(BaseModel):
     """
     Configuration for marking media that is scheduled for deletion.
 
-    Creates a collection and/or adds labels to items that will be deleted
-    on the next run, allowing users to see what's "Leaving Soon" in their
-    Plex library.
+    Implements a "death row" pattern: items are first tagged to the collection/label,
+    then deleted on the next run. This gives users a warning period before deletion.
+
+    First run: Tag preview candidates, no deletions
+    Subsequent runs: Delete previously tagged items, then tag new candidates
     """
 
-    enabled: bool = Field(
-        default=False,
-        description="Enable the Leaving Soon feature",
-    )
-    tagging_only: bool = Field(
-        default=False,
-        description="If true, only update collection/labels without deleting any media. "
-                    "Useful for populating the Leaving Soon collection without performing deletions",
-    )
     collection: Optional[LeavingSoonCollectionConfig] = Field(
         default=None,
         description="Configuration for the Leaving Soon collection",
@@ -522,8 +499,9 @@ class LibraryConfig(BaseModel):
     )
     leaving_soon: Optional[LeavingSoonConfig] = Field(
         default=None,
-        description="Configuration for marking media scheduled for deletion. "
-                    "Creates a 'Leaving Soon' collection and/or adds labels to items",
+        description="Configuration for 'death row' deletion pattern. Items are first "
+                    "tagged to collection/label, then deleted on the next run. "
+                    "Presence of this config enables the feature (no 'enabled' field needed)",
     )
 
     @model_validator(mode="after")
@@ -532,6 +510,15 @@ class LibraryConfig(BaseModel):
             raise ValueError("Either radarr or sonarr must be set")
         if self.radarr and self.sonarr:
             raise ValueError("Only one of radarr or sonarr can be set")
+        return self
+
+    @model_validator(mode="after")
+    def check_leaving_soon_requires_preview(self):
+        if self.leaving_soon is not None:
+            if self.preview_next is not None and self.preview_next == 0:
+                raise ValueError(
+                    "leaving_soon requires preview_next > 0 (cannot be explicitly set to 0)"
+                )
         return self
 
 
@@ -618,6 +605,94 @@ class WebhookNotificationConfig(BaseModel):
     )
 
 
+class EmailNotificationConfig(BaseModel):
+    """Email notification settings via SMTP."""
+
+    smtp_server: Optional[str] = Field(
+        default=None,
+        description="SMTP server hostname",
+        json_schema_extra={"example": "smtp.gmail.com"},
+    )
+    smtp_port: int = Field(
+        default=587,
+        description="SMTP port (587 for TLS, 465 for SSL)",
+    )
+    smtp_username: Optional[str] = Field(
+        default=None,
+        description="SMTP username for authentication",
+    )
+    smtp_password: Optional[str] = Field(
+        default=None,
+        description="SMTP password for authentication",
+    )
+    use_tls: bool = Field(
+        default=True,
+        description="Use TLS encryption (STARTTLS on port 587)",
+    )
+    use_ssl: bool = Field(
+        default=False,
+        description="Use SSL encryption (implicit SSL on port 465)",
+    )
+    from_address: Optional[str] = Field(
+        default=None,
+        description="Sender email address",
+        json_schema_extra={"example": "deleterr@yourdomain.com"},
+    )
+    to_addresses: list[str] = Field(
+        default_factory=list,
+        description="Recipient email addresses",
+        json_schema_extra={"example": ["user1@example.com", "user2@example.com"]},
+    )
+    subject: str = Field(
+        default="Deleterr Run Complete",
+        description="Email subject line",
+    )
+
+
+class LeavingSoonNotificationConfig(BaseModel):
+    """
+    Dedicated notifications for leaving soon items (user-facing).
+
+    These notifications inform users about content scheduled for deletion,
+    giving them a chance to watch before items are removed.
+
+    Note: Presence of this config = enabled (no explicit 'enabled' field).
+    Providers must be explicitly configured here - they do NOT inherit
+    from the main notification config.
+    """
+
+    template: Optional[str] = Field(
+        default=None,
+        description="Path to custom HTML template for emails. Uses built-in template if not specified",
+        json_schema_extra={"example": "/config/my-custom-template.html"},
+    )
+    subject: str = Field(
+        default="Leaving Soon - Content scheduled for removal",
+        description="Email subject for leaving soon notifications",
+    )
+    # Provider configs - EXPLICIT ONLY, no inheritance from parent
+    email: Optional[EmailNotificationConfig] = Field(
+        default=None,
+        description="Email notification settings for leaving soon alerts",
+    )
+    discord: Optional[DiscordNotificationConfig] = Field(
+        default=None,
+        description="Discord webhook settings for leaving soon alerts",
+    )
+    slack: Optional[SlackNotificationConfig] = Field(
+        default=None,
+        description="Slack webhook settings for leaving soon alerts",
+    )
+    telegram: Optional[TelegramNotificationConfig] = Field(
+        default=None,
+        description="Telegram settings for leaving soon alerts",
+    )
+    webhook: Optional[WebhookNotificationConfig] = Field(
+        default=None,
+        description="Generic webhook settings for leaving soon alerts",
+    )
+
+
 class NotificationConfig(BaseModel):
     """
     Notification settings for alerting about deletions.
@@ -658,6 +733,15 @@ class NotificationConfig(BaseModel):
     webhook: Optional[WebhookNotificationConfig] = Field(
         default=None,
         description="Generic webhook notification settings",
+    )
+    email: Optional[EmailNotificationConfig] = Field(
+        default=None,
+        description="Email notification settings via SMTP",
+    )
+    leaving_soon: Optional[LeavingSoonNotificationConfig] = Field(
+        default=None,
+        description="User-facing notifications for items scheduled for deletion. "
+                    "Presence of this config enables the feature (no 'enabled' field needed)",
     )
 
 

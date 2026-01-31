@@ -64,6 +64,21 @@ class PlexMediaServer(BaseMediaServer):
             logger.debug(f"Creating new collection '{name}' in library '{library.title}'")
             return library.createCollection(title=name, smart=False, items=[])
 
+    def get_collection(self, library: Any, name: str) -> Optional[Any]:
+        """Get collection by name if it exists.
+
+        Args:
+            library: The Plex library section.
+            name: The name of the collection.
+
+        Returns:
+            The collection object if found, None otherwise.
+        """
+        try:
+            return library.collection(name)
+        except NotFound:
+            return None
+
     def set_collection_items(self, collection: Any, items: list) -> None:
         """Replace collection contents with given items.
 
@@ -196,3 +211,27 @@ class PlexMediaServer(BaseMediaServer):
                 logger.debug(f"Error searching for '{title}' ({year}): {e}")
 
         return None
+
+    def get_guids(self, item: Any) -> dict:
+        """Extract GUIDs from a Plex media item.
+
+        Args:
+            item: The Plex media item.
+
+        Returns:
+            Dictionary with tmdb_id, tvdb_id, imdb_id keys (values may be None).
+        """
+        guids = {"tmdb_id": None, "tvdb_id": None, "imdb_id": None}
+
+        try:
+            for guid in item.guids:
+                if guid.id.startswith("tmdb://"):
+                    guids["tmdb_id"] = int(guid.id.replace("tmdb://", ""))
+                elif guid.id.startswith("tvdb://"):
+                    guids["tvdb_id"] = int(guid.id.replace("tvdb://", ""))
+                elif guid.id.startswith("imdb://"):
+                    guids["imdb_id"] = guid.id.replace("imdb://", "")
+        except Exception as e:
+            logger.debug(f"Error extracting GUIDs from '{item.title}': {e}")
+
+        return guids

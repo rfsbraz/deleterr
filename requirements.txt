@@ -8,3 +8,4 @@ trakt.py==4.4.0
 pytest-mock==3.15.1
 simple-justwatch-python-api==0.13
 APScheduler>=3.10.0
+Jinja2>=3.0.0

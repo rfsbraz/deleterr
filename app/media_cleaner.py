@@ -226,23 +226,11 @@ class MediaCleaner:
         disk_size = sonarr_show.get("statistics", {}).get("sizeOnDisk", 0)
         total_episodes = sonarr_show.get("statistics", {}).get("episodeFileCount", 0)
 
-        # Check if we should skip deletion (dry_run or tagging_only mode)
         is_dry_run = self.config.settings.get("dry_run")
-        tagging_only = library.get("leaving_soon", {}).get("tagging_only", False)
 
         if is_dry_run:
             logger.info(
                 "[DRY-RUN] [%s/%s] Would have deleted show '%s' from sonarr instance '%s'  (%s - %s episodes) ",
-                actions_performed,
-                max_actions_per_run,
-                sonarr_show["title"],
-                library.get("name"),
-                print_readable_freed_space(disk_size),
-                total_episodes,
-            )
-        elif tagging_only:
-            logger.info(
-                "[TAGGING-ONLY] [%s/%s] Skipping deletion of show '%s' from sonarr instance '%s'  (%s - %s episodes) ",
                 actions_performed,
                 max_actions_per_run,
                 sonarr_show["title"],
@@ -390,22 +378,11 @@ class MediaCleaner:
     ):
         disk_size = radarr_movie.get("sizeOnDisk", 0)
 
-        # Check if we should skip deletion (dry_run or tagging_only mode)
         is_dry_run = self.config.settings.get("dry_run")
-        tagging_only = library.get("leaving_soon", {}).get("tagging_only", False)
 
         if is_dry_run:
             logger.info(
                 "[DRY-RUN] [%s/%s] Would have deleted movie '%s' from radarr instance '%s' (%s)",
-                actions_performed,
-                max_actions_per_run,
-                radarr_movie["title"],
-                library.get("name"),
-                print_readable_freed_space(disk_size),
-            )
-        elif tagging_only:
-            logger.info(
-                "[TAGGING-ONLY] [%s/%s] Skipping deletion of movie '%s' from radarr instance '%s' (%s)",
                 actions_performed,
                 max_actions_per_run,
                 radarr_movie["title"],
@@ -519,9 +496,58 @@ class MediaCleaner:
                 f"Error updating Overseerr status for '{media_data.get('title')}': {e}"
             )
 
+    def get_death_row_items(self, library_config, plex_library):
+        """
+        Get items that were tagged for deletion on previous run ("death row" items).
+
+        These items were in the leaving_soon collection/had the label from the previous run,
+        meaning they've had their warning period and should now be deleted.
+
+        Args:
+            library_config: Library configuration dict
+            plex_library: Plex library section
+
+        Returns:
+            List of Plex media items that should be deleted
+        """
+        leaving_soon_config = library_config.get("leaving_soon")
+        if not leaving_soon_config or not self.media_server:
+            return []
+
+        items_to_delete = []
+        seen_keys = set()
+
+        # Get items from collection (presence of config = enabled)
+        collection_config = leaving_soon_config.get("collection")
+        if collection_config:
+            collection_name = collection_config.get("name", "Leaving Soon")
+            try:
+                collection = plex_library.collection(collection_name)
+                for item in collection.items():
+                    if item.ratingKey not in seen_keys:
+                        items_to_delete.append(item)
+                        seen_keys.add(item.ratingKey)
+            except Exception:
+                # Collection doesn't exist (first run) - this is expected
+                pass
+
+        # Get items with label (presence of config = enabled)
+        labels_config = leaving_soon_config.get("labels")
+        if labels_config:
+            label_name = labels_config.get("name", "leaving-soon")
+            labeled_items = self.media_server.get_items_with_label(plex_library, label_name)
+            for item in labeled_items:
+                if item.ratingKey not in seen_keys:
+                    items_to_delete.append(item)
+                    seen_keys.add(item.ratingKey)
+
+        return items_to_delete
+
     def process_leaving_soon(self, library_config, plex_library, items_to_tag, media_type):
         """
         Update leaving soon collection and labels for preview items.
+
+        This is called AFTER deletions to tag new preview candidates for the next run.
 
         Args:
             library_config: Library configuration dict
@@ -529,8 +555,8 @@ class MediaCleaner:
             items_to_tag: List of media items from Radarr/Sonarr to tag
             media_type: 'movie' or 'show'
         """
-        leaving_soon_config = library_config.get("leaving_soon", {})
-        if not leaving_soon_config.get("enabled", False):
+        leaving_soon_config = library_config.get("leaving_soon")
+        if not leaving_soon_config:
             return
 
         if not self.media_server:
@@ -558,19 +584,19 @@ class MediaCleaner:
                 )
 
         logger.info(
-            f"Processing leaving_soon for library '{library_name}': {len(plex_items)} items"
+            f"Processing leaving_soon for library '{library_name}': {len(plex_items)} items to tag"
         )
 
-        # Update collection
-        collection_config = leaving_soon_config.get("collection", {})
-        if collection_config.get("enabled", False):
+        # Update collection (presence of config = enabled)
+        collection_config = leaving_soon_config.get("collection")
+        if collection_config is not None:
             self._update_leaving_soon_collection(
                 plex_library, plex_items, collection_config
             )
 
-        # Update labels
-        labels_config = leaving_soon_config.get("labels", {})
-        if labels_config.get("enabled", False):
+        # Update labels (presence of config = enabled)
+        labels_config = leaving_soon_config.get("labels")
+        if labels_config is not None:
             self._update_leaving_soon_labels(
                 plex_library, plex_items, labels_config
             )
@@ -601,26 +627,27 @@ class MediaCleaner:
         """
         Update leaving soon labels on media items.
 
+        Clears all existing labels and adds them to the new preview items.
+        This is part of the death row pattern where items are tagged, then deleted next run.
+
         Args:
             plex_library: Plex library section
             plex_items: List of Plex media items to label
             labels_config: Labels configuration dict
         """
         label_name = labels_config.get("name", "leaving-soon")
-        clear_on_run = labels_config.get("clear_on_run", True)
 
         # Build set of item keys for quick lookup
         current_item_keys = {item.ratingKey for item in plex_items}
 
-        # Clear old labels if configured
-        if clear_on_run:
-            existing_labeled = self.media_server.get_items_with_label(
-                plex_library, label_name
-            )
-            for item in existing_labeled:
-                if item.ratingKey not in current_item_keys:
-                    self.media_server.remove_label(item, label_name)
-                    logger.debug(f"Removed label '{label_name}' from '{item.title}'")
+        # Clear all existing labels first (items that had the label were already deleted)
+        existing_labeled = self.media_server.get_items_with_label(
+            plex_library, label_name
+        )
+        for item in existing_labeled:
+            if item.ratingKey not in current_item_keys:
+                self.media_server.remove_label(item, label_name)
+                logger.debug(f"Removed label '{label_name}' from '{item.title}'")
 
         # Add labels to current preview items
         for item in plex_items:

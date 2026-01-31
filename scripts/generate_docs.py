@@ -43,6 +43,8 @@ from app.schema import (
     SlackNotificationConfig,
     TelegramNotificationConfig,
     WebhookNotificationConfig,
+    EmailNotificationConfig,
+    LeavingSoonNotificationConfig,
     LeavingSoonConfig,
     LeavingSoonCollectionConfig,
     LeavingSoonLabelConfig,
@@ -464,6 +466,93 @@ notifications:
     timeout: 30
 ```
 
+### Email
+
+Send notifications via SMTP email with HTML formatting.
+
+{email_table}
+
+```yaml
+notifications:
+  email:
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    smtp_username: !env SMTP_USERNAME
+    smtp_password: !env SMTP_PASSWORD
+    use_tls: true
+    from_address: "deleterr@yourdomain.com"
+    to_addresses:
+      - "admin@yourdomain.com"
+    subject: "Deleterr Run Complete"
+```
+
+**Gmail Setup:**
+1. Enable [2-Step Verification](https://myaccount.google.com/signinoptions/two-step-verification) on your Google account
+2. Create an [App Password](https://myaccount.google.com/apppasswords) for Deleterr
+3. Use the app password as `smtp_password`
+
+### Leaving Soon Notifications
+
+User-facing notifications specifically for items scheduled for deletion. These are **separate** from the admin deletion notifications above - they're designed to alert your users about content they should watch before it's removed.
+
+> **Note:** Providers configured under `leaving_soon` do NOT inherit from the parent notification config. You must explicitly configure each provider you want to use.
+
+{leaving_soon_notification_table}
+
+**Basic example (email only):**
+```yaml
+notifications:
+  # Admin notifications (what was deleted)
+  discord:
+    webhook_url: !env DISCORD_ADMIN_WEBHOOK
+
+  # User-facing leaving soon notifications
+  leaving_soon:
+    subject: "🎬 Content leaving your Plex server soon!"
+    email:
+      smtp_server: "smtp.gmail.com"
+      smtp_port: 587
+      smtp_username: !env SMTP_USERNAME
+      smtp_password: !env SMTP_PASSWORD
+      use_tls: true
+      from_address: "plex@yourdomain.com"
+      to_addresses:
+        - "user1@example.com"
+        - "user2@example.com"
+        - "family@example.com"
+```
+
+**With custom template:**
+```yaml
+notifications:
+  leaving_soon:
+    template: "/config/my-custom-template.html"
+    subject: "Watch Before It's Gone!"
+    email:
+      smtp_server: "smtp.gmail.com"
+      # ... email settings
+```
+
+**Multiple providers for leaving soon:**
+```yaml
+notifications:
+  leaving_soon:
+    email:
+      # Email for detailed notifications
+      smtp_server: "smtp.gmail.com"
+      # ... email settings
+    discord:
+      # Discord for quick alerts
+      webhook_url: !env DISCORD_USERS_WEBHOOK
+```
+
+The built-in template includes:
+- Warning explaining items will be removed
+- Tip box explaining how watching keeps items
+- Grouped sections for Movies and TV Shows
+- Links to Plex (if configured)
+- Links to Overseerr for re-requesting (if configured)
+
 ### Multiple Providers
 
 You can configure multiple notification providers simultaneously:
@@ -479,6 +568,33 @@ notifications:
     bot_token: !env TELEGRAM_BOT_TOKEN
     chat_id: !env TELEGRAM_CHAT_ID
 ```
+
+### Testing Notifications
+
+Test your notification configuration with sample data before relying on it:
+
+```bash
+# Test leaving_soon notifications (default)
+docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications
+
+# Test run summary notifications
+docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications --type run_summary
+
+# Test a specific provider only
+docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications --provider email
+
+# Preview without sending (dry run)
+docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications --dry-run
+
+# Show configuration status
+docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications --status
+```
+
+The test script sends notifications with sample movie and TV show data so you can verify:
+- Email formatting and delivery
+- Discord/Slack/Telegram message appearance
+- Webhook payload structure
+- Template rendering (for leaving_soon)
 
 ---
 
@@ -501,7 +617,7 @@ Configuration for each Plex library to manage.
 ### Leaving Soon
 
 Mark media scheduled for deletion with a Plex collection and/or labels.
-This allows users to see what's "Leaving Soon" in their library (e.g., via Tautulli newsletters).
+This implements a "death row" pattern where items are tagged on one run, then deleted on the next run.
 
 {leaving_soon_table}
 
@@ -513,7 +629,12 @@ This allows users to see what's "Leaving Soon" in their library (e.g., via Tautu
 
 {leaving_soon_labels_table}
 
-**Normal mode - tag items scheduled for next run:**
+**How it works:**
+1. **First run:** Items matching deletion criteria are tagged (added to collection/labeled), but NOT deleted
+2. **Subsequent runs:** Previously tagged items are deleted, new candidates are tagged
+3. This gives users a "warning period" to watch items before they're deleted
+
+**Basic configuration with collection only:**
 ```yaml
 libraries:
   - name: "Movies"
@@ -522,29 +643,26 @@ libraries:
     max_actions_per_run: 20
     preview_next: 10
     leaving_soon:
-      enabled: true
       collection:
-        enabled: true
         name: "Leaving Soon"
-      labels:
-        enabled: true
-        name: "leaving-soon"
 ```
 
-**Tagging-only mode - no deletions, just maintain the collection:**
+**With both collection and labels:**
 ```yaml
 libraries:
   - name: "Movies"
     radarr: "Radarr"
     action_mode: "delete"
     max_actions_per_run: 20
+    preview_next: 10
     leaving_soon:
-      enabled: true
-      tagging_only: true  # Skip deletions, just update collection/labels
       collection:
-        enabled: true
         name: "Leaving Soon"
+      labels:
+        name: "leaving-soon"
 ```
+
+> **Note:** `preview_next` cannot be set to `0` when `leaving_soon` is configured, as the feature needs to tag upcoming deletions.
 
 ```yaml
 libraries:
@@ -878,6 +996,8 @@ libraries:
         slack_table=generate_table(SlackNotificationConfig),
         telegram_table=generate_table(TelegramNotificationConfig),
         webhook_table=generate_table(WebhookNotificationConfig),
+        email_table=generate_table(EmailNotificationConfig),
+        leaving_soon_notification_table=generate_table(LeavingSoonNotificationConfig, "leaving_soon."),
         library_table=library_table,
         disk_table=generate_table(DiskSizeThreshold),
         sort_table=generate_table(SortConfig),
