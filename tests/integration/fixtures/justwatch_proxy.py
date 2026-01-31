@@ -36,8 +36,26 @@ _stats = {
 
 
 def _hash_request(body: Dict) -> str:
-    """Create a deterministic hash of the request body."""
-    normalized = json.dumps(body, sort_keys=True)
+    """Create a deterministic hash of the request body.
+
+    Uses only the search query, country, and language from the variables
+    to ensure cache hits regardless of library version differences in
+    query formatting.
+    """
+    # Extract the key search parameters for a stable hash
+    variables = body.get("variables", {})
+    search_filter = variables.get("searchTitlesFilter", {})
+    search_query = search_filter.get("searchQuery", "")
+    country = variables.get("country", "US")
+    language = variables.get("language", "en")
+
+    # Create a stable key from search parameters only
+    cache_key_data = {
+        "query": search_query.lower().strip(),
+        "country": country,
+        "language": language,
+    }
+    normalized = json.dumps(cache_key_data, sort_keys=True)
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 
