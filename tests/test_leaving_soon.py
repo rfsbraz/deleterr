@@ -1,0 +1,926 @@
+# encoding: utf-8
+"""Unit tests for leaving_soon feature in MediaCleaner and notifications."""
+
+import pytest
+from unittest.mock import MagicMock, patch, call
+
+from app.media_cleaner import MediaCleaner
+from app.modules.notifications.models import DeletedItem
+
+
+@pytest.fixture
+def standard_config():
+    """Create a standard test configuration."""
+    return MagicMock(
+        settings={
+            "dry_run": False,
+            "sonarr": {"api_key": "test_api_key", "url": "http://localhost:8989"},
+            "plex": {"url": "http://localhost:32400", "token": "test_token"},
+            "tautulli": {"url": "http://localhost:8181", "api_key": "test_api_key"},
+        }
+    )
+
+
+@pytest.fixture
+def mock_media_server():
+    """Create a mock media server."""
+    return MagicMock()
+
+
+@pytest.fixture(autouse=True)
+def mock_plex_server():
+    """Mock PlexServer to avoid real connections."""
+    with patch("app.media_cleaner.PlexServer", return_value=MagicMock()):
+        yield
+
+
+@pytest.fixture
+def media_cleaner(standard_config, mock_media_server):
+    """Create MediaCleaner with mocked dependencies."""
+    return MediaCleaner(standard_config, media_server=mock_media_server)
+
+
+class TestProcessLeavingSoon:
+    """Tests for process_leaving_soon method."""
+
+    def test_skips_when_no_config(self, media_cleaner, mock_media_server):
+        """Test that processing is skipped when leaving_soon config is missing."""
+        library_config = {"name": "Movies"}
+        plex_library = MagicMock()
+        items_to_tag = [{"title": "Movie 1"}]
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, items_to_tag, "movie")
+
+        mock_media_server.find_item.assert_not_called()
+
+    def test_skips_when_no_media_server(self, standard_config):
+        """Test that processing is skipped when media_server is not configured."""
+        cleaner = MediaCleaner(standard_config, media_server=None)
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+            },
+        }
+
+        # Should not raise, just log warning
+        cleaner.process_leaving_soon(library_config, MagicMock(), [], "movie")
+
+    def test_finds_plex_items_for_movies(self, media_cleaner, mock_media_server):
+        """Test that Plex items are found for movie candidates."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+            },
+        }
+        plex_library = MagicMock()
+        mock_plex_item = MagicMock()
+        mock_media_server.find_item.return_value = mock_plex_item
+        mock_media_server.get_or_create_collection.return_value = MagicMock()
+
+        items_to_tag = [
+            {"title": "Movie 1", "year": 2020, "tmdbId": 550, "imdbId": "tt0137523"},
+        ]
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, items_to_tag, "movie")
+
+        mock_media_server.find_item.assert_called_once_with(
+            plex_library,
+            tmdb_id=550,
+            tvdb_id=None,
+            imdb_id="tt0137523",
+            title="Movie 1",
+            year=2020,
+        )
+
+    def test_finds_plex_items_for_shows(self, media_cleaner, mock_media_server):
+        """Test that Plex items are found for show candidates."""
+        library_config = {
+            "name": "TV Shows",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+            },
+        }
+        plex_library = MagicMock()
+        mock_plex_item = MagicMock()
+        mock_media_server.find_item.return_value = mock_plex_item
+        mock_media_server.get_or_create_collection.return_value = MagicMock()
+
+        items_to_tag = [
+            {"title": "Show 1", "year": 2018, "tvdbId": 81189, "imdbId": "tt1234567"},
+        ]
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, items_to_tag, "show")
+
+        mock_media_server.find_item.assert_called_once_with(
+            plex_library,
+            tmdb_id=None,
+            tvdb_id=81189,
+            imdb_id="tt1234567",
+            title="Show 1",
+            year=2018,
+        )
+
+    def test_updates_collection_when_configured(self, media_cleaner, mock_media_server):
+        """Test that collection is updated when collection config is present."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+            },
+        }
+        plex_library = MagicMock()
+        mock_plex_item = MagicMock()
+        mock_collection = MagicMock()
+        mock_media_server.find_item.return_value = mock_plex_item
+        mock_media_server.get_or_create_collection.return_value = mock_collection
+
+        items_to_tag = [{"title": "Movie 1", "year": 2020}]
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, items_to_tag, "movie")
+
+        mock_media_server.get_or_create_collection.assert_called_once_with(
+            plex_library, "Leaving Soon"
+        )
+        mock_media_server.set_collection_items.assert_called_once_with(
+            mock_collection, [mock_plex_item]
+        )
+
+    def test_updates_labels_when_configured(self, media_cleaner, mock_media_server):
+        """Test that labels are updated when labels config is present."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "labels": {"name": "leaving-soon"},
+            },
+        }
+        plex_library = MagicMock()
+        mock_plex_item = MagicMock()
+        mock_plex_item.ratingKey = "1001"
+        mock_plex_item.labels = []
+        mock_media_server.find_item.return_value = mock_plex_item
+        mock_media_server.get_items_with_label.return_value = []
+
+        items_to_tag = [{"title": "Movie 1", "year": 2020}]
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, items_to_tag, "movie")
+
+        mock_media_server.add_label.assert_called_once_with(mock_plex_item, "leaving-soon")
+
+    def test_clears_old_labels(self, media_cleaner, mock_media_server):
+        """Test that old labels are removed when items are no longer in preview."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "labels": {"name": "leaving-soon"},
+            },
+        }
+        plex_library = MagicMock()
+
+        # Current item to tag
+        mock_plex_item = MagicMock()
+        mock_plex_item.ratingKey = "1001"
+        mock_plex_item.labels = []
+
+        # Old item that had the label but is no longer in the list
+        old_labeled_item = MagicMock()
+        old_labeled_item.ratingKey = "9999"
+
+        mock_media_server.find_item.return_value = mock_plex_item
+        mock_media_server.get_items_with_label.return_value = [old_labeled_item]
+
+        items_to_tag = [{"title": "Movie 1", "year": 2020}]
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, items_to_tag, "movie")
+
+        # Should remove label from old item
+        mock_media_server.remove_label.assert_called_once_with(old_labeled_item, "leaving-soon")
+        # Should add label to new item
+        mock_media_server.add_label.assert_called_once_with(mock_plex_item, "leaving-soon")
+
+    def test_handles_missing_plex_items(self, media_cleaner, mock_media_server):
+        """Test that missing Plex items are handled gracefully."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+            },
+        }
+        plex_library = MagicMock()
+        mock_media_server.find_item.return_value = None
+        mock_media_server.get_or_create_collection.return_value = MagicMock()
+
+        items_to_tag = [{"title": "Missing Movie", "year": 2020}]
+
+        # Should not raise
+        media_cleaner.process_leaving_soon(library_config, plex_library, items_to_tag, "movie")
+
+        # Collection should be updated with empty list
+        mock_media_server.set_collection_items.assert_called_once()
+
+    def test_does_not_skip_label_if_already_present(self, media_cleaner, mock_media_server):
+        """Test that labels are not re-added if already present."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "labels": {"name": "leaving-soon"},
+            },
+        }
+        plex_library = MagicMock()
+
+        mock_label = MagicMock()
+        mock_label.tag = "leaving-soon"
+        mock_plex_item = MagicMock()
+        mock_plex_item.ratingKey = "1001"
+        mock_plex_item.labels = [mock_label]
+
+        mock_media_server.find_item.return_value = mock_plex_item
+        mock_media_server.get_items_with_label.return_value = []
+
+        items_to_tag = [{"title": "Movie 1", "year": 2020}]
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, items_to_tag, "movie")
+
+        # Should not add label since it's already present
+        mock_media_server.add_label.assert_not_called()
+
+    def test_uses_default_collection_name(self, media_cleaner, mock_media_server):
+        """Test that default collection name is used when not specified."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                # Collection config present but name not specified - uses default
+                "collection": {},
+            },
+        }
+        plex_library = MagicMock()
+        mock_media_server.find_item.return_value = None
+        mock_media_server.get_or_create_collection.return_value = MagicMock()
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, [], "movie")
+
+        mock_media_server.get_or_create_collection.assert_called_once_with(
+            plex_library, "Leaving Soon"
+        )
+
+    def test_uses_default_label_name(self, media_cleaner, mock_media_server):
+        """Test that default label name is used when not specified."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                # Labels config present but name not specified - uses default
+                "labels": {},
+            },
+        }
+        plex_library = MagicMock()
+        mock_plex_item = MagicMock()
+        mock_plex_item.ratingKey = "1001"
+        mock_plex_item.labels = []
+        mock_media_server.find_item.return_value = mock_plex_item
+        mock_media_server.get_items_with_label.return_value = []
+
+        items_to_tag = [{"title": "Movie 1", "year": 2020}]
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, items_to_tag, "movie")
+
+        mock_media_server.add_label.assert_called_once_with(mock_plex_item, "leaving-soon")
+
+
+class TestDeathRowPattern:
+    """Tests for death row pattern in media cleaner."""
+
+    @pytest.fixture
+    def media_cleaner_with_server(self, standard_config, mock_media_server):
+        """Create MediaCleaner with mocked media server."""
+        return MediaCleaner(standard_config, media_server=mock_media_server)
+
+    def test_process_multiple_items(self, media_cleaner_with_server, mock_media_server):
+        """Test processing multiple preview items."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+            },
+        }
+        plex_library = MagicMock()
+
+        # Create multiple mock items
+        mock_items = []
+        for i in range(3):
+            item = MagicMock()
+            item.ratingKey = str(1000 + i)
+            mock_items.append(item)
+
+        mock_media_server.find_item.side_effect = mock_items
+        mock_collection = MagicMock()
+        mock_media_server.get_or_create_collection.return_value = mock_collection
+
+        items_to_tag = [
+            {"title": f"Movie {i}", "year": 2020 + i, "tmdbId": 550 + i}
+            for i in range(3)
+        ]
+
+        media_cleaner_with_server.process_leaving_soon(
+            library_config, plex_library, items_to_tag, "movie"
+        )
+
+        # Should find all items
+        assert mock_media_server.find_item.call_count == 3
+        # Should update collection with all items
+        mock_media_server.set_collection_items.assert_called_once_with(
+            mock_collection, mock_items
+        )
+
+    def test_empty_items_clears_collection(self, media_cleaner_with_server, mock_media_server):
+        """Test that empty items list clears the collection."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+            },
+        }
+        plex_library = MagicMock()
+        mock_collection = MagicMock()
+        mock_media_server.get_or_create_collection.return_value = mock_collection
+
+        media_cleaner_with_server.process_leaving_soon(
+            library_config, plex_library, [], "movie"
+        )
+
+        # Should update collection with empty list
+        mock_media_server.set_collection_items.assert_called_once_with(
+            mock_collection, []
+        )
+
+    def test_both_collection_and_labels(self, media_cleaner_with_server, mock_media_server):
+        """Test that both collection and labels are updated when configured."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+                "labels": {"name": "leaving-soon"},
+            },
+        }
+        plex_library = MagicMock()
+        mock_plex_item = MagicMock()
+        mock_plex_item.ratingKey = "1001"
+        mock_plex_item.labels = []
+
+        mock_media_server.find_item.return_value = mock_plex_item
+        mock_media_server.get_or_create_collection.return_value = MagicMock()
+        mock_media_server.get_items_with_label.return_value = []
+
+        items_to_tag = [{"title": "Movie 1", "year": 2020}]
+
+        media_cleaner_with_server.process_leaving_soon(
+            library_config, plex_library, items_to_tag, "movie"
+        )
+
+        # Both should be called
+        mock_media_server.get_or_create_collection.assert_called_once()
+        mock_media_server.add_label.assert_called_once()
+
+
+class TestMovieAndShowDeletion:
+    """Tests for movie and show deletion (no tagging_only mode anymore)."""
+
+    @pytest.fixture
+    def media_cleaner_non_dry_run(self, mock_media_server):
+        """Create MediaCleaner with dry_run=False."""
+        config = MagicMock(
+            settings={
+                "dry_run": False,
+                "action_delay": 0,
+                "plex": {"url": "http://localhost:32400", "token": "test"},
+                "tautulli": {"url": "http://localhost:8181", "api_key": "test"},
+            }
+        )
+        return MediaCleaner(config, media_server=mock_media_server)
+
+    def test_process_movie_deletes(self, media_cleaner_non_dry_run):
+        """Test that movies are deleted when not in dry_run mode."""
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        radarr_instance = MagicMock()
+        radarr_movie = {"id": 1, "title": "Test Movie", "sizeOnDisk": 1000000000}
+
+        media_cleaner_non_dry_run.process_movie(
+            library, radarr_instance, radarr_movie, 0, 10
+        )
+
+        # Should call delete
+        radarr_instance.del_movie.assert_called_once()
+
+    def test_process_movie_without_leaving_soon_deletes(self, media_cleaner_non_dry_run):
+        """Test that movies are deleted when leaving_soon is not configured."""
+        library = {"name": "Movies"}
+        radarr_instance = MagicMock()
+        radarr_movie = {"id": 1, "title": "Test Movie", "sizeOnDisk": 1000000000}
+
+        media_cleaner_non_dry_run.process_movie(
+            library, radarr_instance, radarr_movie, 0, 10
+        )
+
+        # Should call delete
+        radarr_instance.del_movie.assert_called_once()
+
+    def test_process_movie_dry_run_does_not_delete(self, mock_media_server):
+        """Test that movies are not deleted in dry_run mode."""
+        config = MagicMock(
+            settings={
+                "dry_run": True,
+                "action_delay": 0,
+                "plex": {"url": "http://localhost:32400", "token": "test"},
+                "tautulli": {"url": "http://localhost:8181", "api_key": "test"},
+            }
+        )
+        cleaner = MediaCleaner(config, media_server=mock_media_server)
+
+        library = {"name": "Movies"}
+        radarr_instance = MagicMock()
+        radarr_movie = {"id": 1, "title": "Test Movie", "sizeOnDisk": 1000000000}
+
+        cleaner.process_movie(library, radarr_instance, radarr_movie, 0, 10)
+
+        # Should NOT call delete
+        radarr_instance.del_movie.assert_not_called()
+
+
+class TestDeathRowIntersectionLogic:
+    """Tests for the intersection logic in Deleterr death row processing.
+
+    The critical behavior is:
+    - Items in death row that STILL match deletion rules → DELETE
+    - Items in death row that NO LONGER match rules (user watched them) → DON'T DELETE
+    - Items NOT in death row but match rules → DON'T DELETE (add to preview for next run)
+    """
+
+    @pytest.fixture
+    def mock_config(self):
+        """Create a mock config for Deleterr."""
+        return MagicMock(
+            settings={
+                "dry_run": False,
+                "plex": {"url": "http://localhost:32400", "token": "test_token"},
+                "radarr": [{"name": "radarr", "url": "http://localhost:7878", "api_key": "test"}],
+                "sonarr": [{"name": "sonarr", "url": "http://localhost:8989", "api_key": "test"}],
+                "libraries": [],
+                "ssl_verify": False,
+            }
+        )
+
+    @pytest.fixture
+    def deleterr_instance(self, mock_config):
+        """Create a Deleterr instance with mocked dependencies."""
+        with patch("app.deleterr.PlexMediaServer") as mock_plex_class, \
+             patch("app.deleterr.MediaCleaner") as mock_cleaner_class, \
+             patch("app.deleterr.NotificationManager"), \
+             patch("app.deleterr.DRadarr"), \
+             patch("app.deleterr.DSonarr"), \
+             patch.object(mock_config, "settings", mock_config.settings):
+
+            # Prevent __init__ from running process_radarr/process_sonarr
+            from app.deleterr import Deleterr
+
+            # Create instance without running __init__ logic
+            instance = object.__new__(Deleterr)
+            instance.config = mock_config
+            instance.media_server = MagicMock()
+            instance.media_cleaner = MagicMock()
+            instance.notifications = MagicMock()
+            instance.run_result = MagicMock()
+            instance.radarr = {}
+            instance.sonarr = {}
+            instance.libraries_processed = 0
+            instance.libraries_failed = 0
+
+            return instance
+
+    def test_movie_in_death_row_and_matches_rules_is_deleted(self, deleterr_instance):
+        """Test that a movie in death row that still matches rules gets deleted."""
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        # Movie A is in death row AND matches current rules
+        plex_item_a = MagicMock()
+        plex_item_a.ratingKey = 1001
+
+        radarr_movie_a = {
+            "id": 101,
+            "title": "Movie A",
+            "tmdbId": 550,
+            "imdbId": "tt0137523",
+            "year": 2020,
+            "sizeOnDisk": 1000000000,
+        }
+
+        radarr_instance = MagicMock()
+        plex_library = MagicMock()
+
+        # Setup mocks
+        deleterr_instance.media_server.get_library.return_value = plex_library
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+
+        # Death row contains Movie A
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item_a])
+
+        # Current candidates also contains Movie A (still matches rules)
+        deleterr_instance._get_all_deletion_candidates_movies = MagicMock(
+            return_value=[radarr_movie_a]
+        )
+
+        # find_item returns plex_item_a for Movie A
+        deleterr_instance.media_server.find_item.return_value = plex_item_a
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted, preview = deleterr_instance._process_radarr_death_row(
+                library, radarr_instance
+            )
+
+        # Movie A should be deleted (in death row AND matches rules)
+        assert len(deleted) == 1
+        assert deleted[0]["title"] == "Movie A"
+        radarr_instance.del_movie.assert_called_once()
+
+    def test_movie_in_death_row_but_no_longer_matches_is_not_deleted(self, deleterr_instance):
+        """Test that a movie in death row that no longer matches rules is NOT deleted."""
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        # Movie B is in death row but user watched it (no longer matches)
+        plex_item_b = MagicMock()
+        plex_item_b.ratingKey = 1002
+
+        radarr_instance = MagicMock()
+        plex_library = MagicMock()
+
+        # Setup mocks
+        deleterr_instance.media_server.get_library.return_value = plex_library
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+
+        # Death row contains Movie B
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item_b])
+
+        # Current candidates is EMPTY (Movie B was watched, no longer matches)
+        deleterr_instance._get_all_deletion_candidates_movies = MagicMock(return_value=[])
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted, preview = deleterr_instance._process_radarr_death_row(
+                library, radarr_instance
+            )
+
+        # Movie B should NOT be deleted (in death row but doesn't match rules anymore)
+        assert len(deleted) == 0
+        radarr_instance.del_movie.assert_not_called()
+
+    def test_movie_matches_rules_but_not_in_death_row_goes_to_preview(self, deleterr_instance):
+        """Test that a movie matching rules but not in death row goes to preview, not deleted."""
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        # Movie C matches rules but was never in death row (new candidate)
+        plex_item_c = MagicMock()
+        plex_item_c.ratingKey = 1003
+
+        radarr_movie_c = {
+            "id": 103,
+            "title": "Movie C",
+            "tmdbId": 552,
+            "imdbId": "tt0137525",
+            "year": 2021,
+            "sizeOnDisk": 2000000000,
+        }
+
+        radarr_instance = MagicMock()
+        plex_library = MagicMock()
+
+        # Setup mocks
+        deleterr_instance.media_server.get_library.return_value = plex_library
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+
+        # Death row is EMPTY (first run or no items tagged)
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+
+        # Current candidates contains Movie C
+        deleterr_instance._get_all_deletion_candidates_movies = MagicMock(
+            return_value=[radarr_movie_c]
+        )
+
+        deleterr_instance.media_server.find_item.return_value = plex_item_c
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted, preview = deleterr_instance._process_radarr_death_row(
+                library, radarr_instance
+            )
+
+        # Movie C should NOT be deleted (not in death row)
+        assert len(deleted) == 0
+        radarr_instance.del_movie.assert_not_called()
+
+        # Movie C should be in preview for next run
+        assert len(preview) == 1
+        assert preview[0]["title"] == "Movie C"
+
+    def test_mixed_scenario_only_intersection_deleted(self, deleterr_instance):
+        """Test mixed scenario: some items match, some don't, some are new."""
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 10,
+        }
+
+        # Movie A: in death row AND matches rules → DELETE
+        plex_item_a = MagicMock()
+        plex_item_a.ratingKey = 1001
+        radarr_movie_a = {"id": 101, "title": "Movie A", "tmdbId": 550, "sizeOnDisk": 1000}
+
+        # Movie B: in death row but was watched → DON'T DELETE
+        plex_item_b = MagicMock()
+        plex_item_b.ratingKey = 1002
+
+        # Movie C: matches rules but new (not in death row) → DON'T DELETE, goes to preview
+        plex_item_c = MagicMock()
+        plex_item_c.ratingKey = 1003
+        radarr_movie_c = {"id": 103, "title": "Movie C", "tmdbId": 552, "sizeOnDisk": 2000}
+
+        radarr_instance = MagicMock()
+        plex_library = MagicMock()
+
+        deleterr_instance.media_server.get_library.return_value = plex_library
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+
+        # Death row contains A and B
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item_a, plex_item_b])
+
+        # Current candidates contains A and C (B was watched, no longer matches)
+        deleterr_instance._get_all_deletion_candidates_movies = MagicMock(
+            return_value=[radarr_movie_a, radarr_movie_c]
+        )
+
+        # find_item maps movies to plex items
+        def find_item_side_effect(lib, tmdb_id=None, imdb_id=None, title=None, year=None):
+            if tmdb_id == 550:
+                return plex_item_a
+            elif tmdb_id == 552:
+                return plex_item_c
+            return None
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted, preview = deleterr_instance._process_radarr_death_row(
+                library, radarr_instance
+            )
+
+        # Only Movie A should be deleted (intersection of death row AND current candidates)
+        assert len(deleted) == 1
+        assert deleted[0]["title"] == "Movie A"
+
+        # Movie C should be in preview (matches rules but wasn't in death row)
+        assert len(preview) == 1
+        assert preview[0]["title"] == "Movie C"
+
+        # Only one deletion call
+        radarr_instance.del_movie.assert_called_once()
+
+    def test_show_intersection_logic_works_same_as_movies(self, deleterr_instance):
+        """Test that show intersection logic works the same as movies."""
+        library = {
+            "name": "TV Shows",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        # Show A: in death row AND matches rules → DELETE
+        plex_item_a = MagicMock()
+        plex_item_a.ratingKey = 2001
+        sonarr_show_a = {
+            "id": 201,
+            "title": "Show A",
+            "tvdbId": 81189,
+            "imdbId": "tt1234567",
+            "statistics": {"sizeOnDisk": 5000000000, "episodeFileCount": 10},
+        }
+
+        # Show B: in death row but was watched → DON'T DELETE
+        plex_item_b = MagicMock()
+        plex_item_b.ratingKey = 2002
+
+        sonarr_instance = MagicMock()
+        plex_library = MagicMock()
+        unfiltered_all_show_data = []
+
+        deleterr_instance.media_server.get_library.return_value = plex_library
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+
+        # Death row contains A and B
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item_a, plex_item_b])
+
+        # Current candidates contains only A (B was watched)
+        deleterr_instance._get_all_deletion_candidates_shows = MagicMock(
+            return_value=[sonarr_show_a]
+        )
+
+        # find_item returns plex_item_a for Show A
+        deleterr_instance.media_server.find_item.return_value = plex_item_a
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted, preview = deleterr_instance._process_sonarr_death_row(
+                library, sonarr_instance, unfiltered_all_show_data
+            )
+
+        # Only Show A should be deleted
+        assert len(deleted) == 1
+        assert deleted[0]["title"] == "Show A"
+
+        # Show B is NOT deleted (no longer matches rules)
+        deleterr_instance.media_cleaner.delete_series.assert_called_once()
+
+
+class TestLeavingSoonNotifications:
+    """Tests for leaving_soon notification functionality."""
+
+    @pytest.fixture
+    def mock_notification_manager(self):
+        """Create a mock notification manager."""
+        manager = MagicMock()
+        manager.is_leaving_soon_enabled.return_value = True
+        return manager
+
+    @pytest.fixture
+    def mock_config(self):
+        """Create a mock config."""
+        return MagicMock(
+            settings={
+                "dry_run": False,
+                "plex": {"url": "http://localhost:32400", "token": "test_token"},
+                "overseerr": {"url": "http://localhost:5055", "api_key": "test_key"},
+                "radarr": [{"name": "Radarr", "url": "http://localhost:7878", "api_key": "test"}],
+                "sonarr": [],
+                "libraries": [],
+                "ssl_verify": False,
+            }
+        )
+
+    @pytest.fixture
+    def deleterr_with_notifications(self, mock_config, mock_notification_manager):
+        """Create a Deleterr instance with mocked notification manager."""
+        with patch("app.deleterr.PlexMediaServer") as mock_plex_class, \
+             patch("app.deleterr.MediaCleaner") as mock_cleaner_class, \
+             patch("app.deleterr.NotificationManager") as mock_nm_class, \
+             patch("app.deleterr.DRadarr"), \
+             patch("app.deleterr.DSonarr"):
+
+            mock_nm_class.return_value = mock_notification_manager
+
+            from app.deleterr import Deleterr
+
+            # Create instance without running __init__ logic
+            instance = object.__new__(Deleterr)
+            instance.config = mock_config
+            instance.media_server = MagicMock()
+            instance.media_cleaner = MagicMock()
+            instance.notifications = mock_notification_manager
+            instance.run_result = MagicMock()
+            instance.radarr = {}
+            instance.sonarr = {}
+            instance.libraries_processed = 0
+            instance.libraries_failed = 0
+
+            return instance
+
+    def test_send_leaving_soon_notification_called_when_enabled(
+        self, deleterr_with_notifications, mock_notification_manager
+    ):
+        """Test that leaving_soon notification is sent when enabled and items exist."""
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        preview = [
+            {"title": "Movie 1", "year": 2020, "tmdbId": 550, "sizeOnDisk": 1000000000},
+        ]
+
+        # Mock get_library to succeed
+        deleterr_with_notifications.media_server.get_library.return_value = MagicMock()
+
+        deleterr_with_notifications._process_library_leaving_soon(library, preview, "movie")
+
+        # Should have called send_leaving_soon
+        mock_notification_manager.send_leaving_soon.assert_called_once()
+
+        # Verify the call arguments
+        call_args = mock_notification_manager.send_leaving_soon.call_args
+        items = call_args[0][0]  # First positional argument
+        assert len(items) == 1
+        assert items[0].title == "Movie 1"
+
+        # Verify context was passed
+        kwargs = call_args[1]
+        assert kwargs["plex_url"] == "http://localhost:32400"
+        assert kwargs["overseerr_url"] == "http://localhost:5055"
+
+    def test_send_leaving_soon_notification_not_called_when_disabled(
+        self, deleterr_with_notifications, mock_notification_manager
+    ):
+        """Test that leaving_soon notification is not sent when disabled."""
+        mock_notification_manager.is_leaving_soon_enabled.return_value = False
+
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        preview = [
+            {"title": "Movie 1", "year": 2020, "tmdbId": 550, "sizeOnDisk": 1000000000},
+        ]
+
+        deleterr_with_notifications.media_server.get_library.return_value = MagicMock()
+
+        deleterr_with_notifications._process_library_leaving_soon(library, preview, "movie")
+
+        # Should NOT have called send_leaving_soon
+        mock_notification_manager.send_leaving_soon.assert_not_called()
+
+    def test_send_leaving_soon_notification_not_called_when_no_preview(
+        self, deleterr_with_notifications, mock_notification_manager
+    ):
+        """Test that leaving_soon notification is not sent when preview is empty."""
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        preview = []
+
+        deleterr_with_notifications.media_server.get_library.return_value = MagicMock()
+
+        deleterr_with_notifications._process_library_leaving_soon(library, preview, "movie")
+
+        # Should NOT have called send_leaving_soon (no items)
+        mock_notification_manager.send_leaving_soon.assert_not_called()
+
+    def test_send_leaving_soon_notification_skipped_in_dry_run(
+        self, deleterr_with_notifications, mock_notification_manager
+    ):
+        """Test that leaving_soon notification is skipped in dry-run mode."""
+        deleterr_with_notifications.config.settings["dry_run"] = True
+
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        preview = [
+            {"title": "Movie 1", "year": 2020, "tmdbId": 550, "sizeOnDisk": 1000000000},
+        ]
+
+        deleterr_with_notifications._process_library_leaving_soon(library, preview, "movie")
+
+        # Should NOT have called send_leaving_soon (dry-run mode)
+        mock_notification_manager.send_leaving_soon.assert_not_called()
+
+    def test_send_leaving_soon_notification_for_shows(
+        self, deleterr_with_notifications, mock_notification_manager
+    ):
+        """Test that leaving_soon notification works for TV shows."""
+        library = {
+            "name": "TV Shows",
+            "sonarr": "Sonarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        preview = [
+            {
+                "title": "Show 1",
+                "year": 2019,
+                "tvdbId": 81189,
+                "statistics": {"sizeOnDisk": 5000000000},
+            },
+        ]
+
+        deleterr_with_notifications.media_server.get_library.return_value = MagicMock()
+
+        deleterr_with_notifications._process_library_leaving_soon(library, preview, "show")
+
+        # Should have called send_leaving_soon
+        mock_notification_manager.send_leaving_soon.assert_called_once()
+
+        # Verify it was created as a show
+        call_args = mock_notification_manager.send_leaving_soon.call_args
+        items = call_args[0][0]
+        assert len(items) == 1
+        assert items[0].title == "Show 1"
+        assert items[0].media_type == "show"

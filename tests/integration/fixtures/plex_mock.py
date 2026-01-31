@@ -18,15 +18,23 @@ _libraries: Dict[str, List[Dict]] = {
     "Movies": [],
     "TV Shows": []
 }
+_collections: Dict[str, Dict[str, List[str]]] = {
+    "Movies": {},  # collection_name -> [rating_keys]
+    "TV Shows": {},
+}
 _section_map = {"Movies": 1, "TV Shows": 2}
 
 
 def reset_data():
     """Reset all test data."""
-    global _libraries
+    global _libraries, _collections
     _libraries = {
         "Movies": [],
         "TV Shows": []
+    }
+    _collections = {
+        "Movies": {},
+        "TV Shows": {},
     }
 
 
@@ -226,6 +234,252 @@ def api_add_series():
         rating_key=data.get("rating_key"),
     )
     return jsonify(series)
+
+
+# Collection endpoints
+
+@app.route('/library/sections/<int:section_id>/collections')
+def section_collections(section_id: int):
+    """Get all collections in a library section."""
+    section_name = "Movies" if section_id == 1 else "TV Shows"
+    collections = _collections.get(section_name, {})
+
+    collection_list = []
+    for name, rating_keys in collections.items():
+        collection_list.append({
+            "ratingKey": f"collection-{name}",
+            "title": name,
+            "type": "collection",
+            "childCount": len(rating_keys),
+        })
+
+    return jsonify({
+        "MediaContainer": {
+            "size": len(collection_list),
+            "Metadata": collection_list
+        }
+    })
+
+
+@app.route('/library/collections/<collection_key>')
+def get_collection(collection_key: str):
+    """Get a specific collection by key."""
+    # Extract collection name from key
+    name = collection_key.replace("collection-", "")
+
+    for section_name, section_collections in _collections.items():
+        if name in section_collections:
+            rating_keys = section_collections[name]
+            items = []
+            for library in _libraries.values():
+                for item in library:
+                    if item["ratingKey"] in rating_keys:
+                        items.append(item)
+
+            return jsonify({
+                "MediaContainer": {
+                    "ratingKey": collection_key,
+                    "title": name,
+                    "type": "collection",
+                    "size": len(items),
+                    "Metadata": items
+                }
+            })
+
+    return jsonify({"error": "Collection not found"}), 404
+
+
+@app.route('/library/collections/<collection_key>/items', methods=['PUT'])
+def update_collection_items(collection_key: str):
+    """Add or remove items from a collection."""
+    name = collection_key.replace("collection-", "")
+    uri = request.args.get('uri', '')
+
+    # Parse rating keys from uri parameter
+    # Format: server://machineId/com.plexapp.plugins.library/library/metadata/ratingKey
+    import re
+    rating_keys = re.findall(r'/library/metadata/(\d+)', uri)
+
+    for section_name, section_collections in _collections.items():
+        if name in section_collections:
+            section_collections[name].extend(rating_keys)
+            return jsonify({"status": "ok"})
+
+    return jsonify({"error": "Collection not found"}), 404
+
+
+@app.route('/library/collections/<collection_key>/items/<rating_key>', methods=['DELETE'])
+def remove_from_collection(collection_key: str, rating_key: str):
+    """Remove an item from a collection."""
+    name = collection_key.replace("collection-", "")
+
+    for section_name, section_collections in _collections.items():
+        if name in section_collections:
+            if rating_key in section_collections[name]:
+                section_collections[name].remove(rating_key)
+            return jsonify({"status": "ok"})
+
+    return jsonify({"error": "Collection not found"}), 404
+
+
+@app.route('/library/sections/<int:section_id>/collections', methods=['POST'])
+def create_collection(section_id: int):
+    """Create a new collection."""
+    section_name = "Movies" if section_id == 1 else "TV Shows"
+    title = request.args.get('title', 'Untitled')
+
+    if title not in _collections[section_name]:
+        _collections[section_name][title] = []
+
+    return jsonify({
+        "MediaContainer": {
+            "Metadata": [{
+                "ratingKey": f"collection-{title}",
+                "title": title,
+                "type": "collection",
+            }]
+        }
+    })
+
+
+# Label endpoints
+
+@app.route('/library/metadata/<rating_key>/label', methods=['PUT'])
+def add_label(rating_key: str):
+    """Add a label to an item."""
+    label = request.args.get('label.locked', '') or request.args.get('label[0].tag.tag', '')
+
+    for library in _libraries.values():
+        for item in library:
+            if item["ratingKey"] == rating_key:
+                if label and label not in [l["tag"] for l in item.get("labels", [])]:
+                    if "labels" not in item:
+                        item["labels"] = []
+                    item["labels"].append({"tag": label})
+                return jsonify({"status": "ok"})
+
+    return jsonify({"error": "Item not found"}), 404
+
+
+@app.route('/library/metadata/<rating_key>/label', methods=['DELETE'])
+def remove_label(rating_key: str):
+    """Remove a label from an item."""
+    label = request.args.get('label.locked', '') or request.args.get('label[0].tag.tag', '')
+
+    for library in _libraries.values():
+        for item in library:
+            if item["ratingKey"] == rating_key:
+                item["labels"] = [l for l in item.get("labels", []) if l["tag"] != label]
+                return jsonify({"status": "ok"})
+
+    return jsonify({"error": "Item not found"}), 404
+
+
+@app.route('/library/sections/<int:section_id>/all', methods=['GET'])
+def section_all_with_filters(section_id: int):
+    """Get all items in a library section with optional filters."""
+    section_name = "Movies" if section_id == 1 else "TV Shows"
+    items = _libraries.get(section_name, [])
+
+    # Handle label filter
+    label_filter = request.args.get('label', None)
+    guid_filter = request.args.get('guid', None)
+    title_filter = request.args.get('title', None)
+
+    if label_filter:
+        items = [
+            item for item in items
+            if any(l.get("tag", "").lower() == label_filter.lower() for l in item.get("labels", []))
+        ]
+
+    if guid_filter:
+        items = [
+            item for item in items
+            if any(guid_filter in g.get("id", "") for g in item.get("guids", []))
+        ]
+
+    if title_filter:
+        items = [
+            item for item in items
+            if title_filter.lower() in item.get("title", "").lower()
+        ]
+
+    return jsonify({
+        "MediaContainer": {
+            "size": len(items),
+            "Metadata": items
+        }
+    })
+
+
+# Test API endpoints for verification
+
+@app.route('/api/collections/<section_name>')
+def api_get_collections(section_name: str):
+    """Get collections for a section (test API)."""
+    return jsonify(_collections.get(section_name, {}))
+
+
+@app.route('/api/collections/<section_name>/<collection_name>', methods=['POST'])
+def api_create_collection(section_name: str, collection_name: str):
+    """Create a collection (test API)."""
+    if section_name not in _collections:
+        _collections[section_name] = {}
+    _collections[section_name][collection_name] = []
+    return jsonify({"status": "created"})
+
+
+@app.route('/api/collections/<section_name>/<collection_name>/items', methods=['POST'])
+def api_add_to_collection(section_name: str, collection_name: str):
+    """Add items to a collection (test API)."""
+    data = request.json
+    rating_keys = data.get("rating_keys", [])
+
+    if section_name not in _collections:
+        _collections[section_name] = {}
+    if collection_name not in _collections[section_name]:
+        _collections[section_name][collection_name] = []
+
+    _collections[section_name][collection_name].extend(rating_keys)
+    return jsonify({"status": "ok"})
+
+
+@app.route('/api/item/<rating_key>/labels', methods=['GET'])
+def api_get_labels(rating_key: str):
+    """Get labels for an item (test API)."""
+    for library in _libraries.values():
+        for item in library:
+            if item["ratingKey"] == rating_key:
+                return jsonify({"labels": [l["tag"] for l in item.get("labels", [])]})
+    return jsonify({"error": "Not found"}), 404
+
+
+@app.route('/api/item/<rating_key>/labels', methods=['POST'])
+def api_add_label(rating_key: str):
+    """Add a label to an item (test API)."""
+    data = request.json
+    label = data.get("label")
+
+    for library in _libraries.values():
+        for item in library:
+            if item["ratingKey"] == rating_key:
+                if "labels" not in item:
+                    item["labels"] = []
+                if label not in [l["tag"] for l in item["labels"]]:
+                    item["labels"].append({"tag": label})
+                return jsonify({"status": "ok"})
+    return jsonify({"error": "Not found"}), 404
+
+
+@app.route('/api/item/<rating_key>/labels/<label>', methods=['DELETE'])
+def api_remove_label(rating_key: str, label: str):
+    """Remove a label from an item (test API)."""
+    for library in _libraries.values():
+        for item in library:
+            if item["ratingKey"] == rating_key:
+                item["labels"] = [l for l in item.get("labels", []) if l["tag"] != label]
+                return jsonify({"status": "ok"})
+    return jsonify({"error": "Not found"}), 404
 
 
 # Initialize with default test data

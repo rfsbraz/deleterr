@@ -4,7 +4,7 @@
 from typing import Optional
 
 from app import logger
-from app.modules.notifications.models import RunResult
+from app.modules.notifications.models import DeletedItem, RunResult
 
 
 class NotificationManager:
@@ -19,16 +19,23 @@ class NotificationManager:
         """
         self.config = config
         self.providers = []
+        self.leaving_soon_providers = []
         self._notification_config = config.settings.get("notifications", {})
+        self._leaving_soon_config = self._notification_config.get("leaving_soon", {})
 
         # Only initialize providers if notifications are enabled
         if self._notification_config.get("enabled", True):
             self._init_providers()
 
+        # Initialize leaving_soon providers (separate from regular notifications)
+        if self._leaving_soon_config:
+            self._init_leaving_soon_providers()
+
     def _init_providers(self) -> None:
         """Initialize configured notification providers."""
         from app.modules.notifications.providers import (
             DiscordProvider,
+            EmailProvider,
             SlackProvider,
             TelegramProvider,
             WebhookProvider,
@@ -36,6 +43,7 @@ class NotificationManager:
 
         provider_classes = {
             "discord": DiscordProvider,
+            "email": EmailProvider,
             "slack": SlackProvider,
             "telegram": TelegramProvider,
             "webhook": WebhookProvider,
@@ -48,6 +56,32 @@ class NotificationManager:
                 if provider.enabled:
                     self.providers.append(provider)
                     logger.debug(f"Initialized {name} notification provider")
+
+    def _init_leaving_soon_providers(self) -> None:
+        """Initialize leaving_soon notification providers (separate from regular providers)."""
+        from app.modules.notifications.providers import (
+            DiscordProvider,
+            EmailProvider,
+            SlackProvider,
+            TelegramProvider,
+            WebhookProvider,
+        )
+
+        provider_classes = {
+            "discord": DiscordProvider,
+            "email": EmailProvider,
+            "slack": SlackProvider,
+            "telegram": TelegramProvider,
+            "webhook": WebhookProvider,
+        }
+
+        for name, provider_class in provider_classes.items():
+            provider_config = self._leaving_soon_config.get(name, {})
+            if provider_config:
+                provider = provider_class(provider_config)
+                if provider.enabled:
+                    self.leaving_soon_providers.append(provider)
+                    logger.debug(f"Initialized {name} leaving_soon notification provider")
 
     def is_enabled(self) -> bool:
         """Check if any notification providers are enabled."""
@@ -134,3 +168,82 @@ class NotificationManager:
                 logger.error(f"Error testing {provider.name} connection: {e}")
                 results[provider.name] = False
         return results
+
+    def is_leaving_soon_enabled(self) -> bool:
+        """Check if any leaving_soon notification providers are enabled."""
+        return bool(self.leaving_soon_providers)
+
+    def send_leaving_soon(
+        self,
+        items: list[DeletedItem],
+        plex_url: Optional[str] = None,
+        overseerr_url: Optional[str] = None,
+    ) -> bool:
+        """
+        Send leaving soon notifications to all configured leaving_soon providers.
+
+        This is separate from the regular run summary notifications - it's designed
+        for user-facing "watch before deletion" alerts.
+
+        Args:
+            items: List of items scheduled for deletion (preview items)
+            plex_url: Optional base Plex URL for "Watch Now" links
+            overseerr_url: Optional Overseerr URL for "Request Again" links
+
+        Returns:
+            True if at least one provider succeeded, False otherwise.
+        """
+        if not self.is_leaving_soon_enabled():
+            logger.debug("Leaving soon notifications disabled or no providers configured")
+            return False
+
+        if not items:
+            logger.debug("No items to send in leaving soon notification")
+            return False
+
+        # Build context for templates
+        context = {}
+        if plex_url:
+            context["plex_url"] = plex_url
+        if overseerr_url:
+            context["overseerr_url"] = overseerr_url
+
+        # Get template and subject from config
+        template_path = self._leaving_soon_config.get("template")
+        subject = self._leaving_soon_config.get(
+            "subject", "Leaving Soon - Content scheduled for removal"
+        )
+
+        success_count = 0
+        for provider in self.leaving_soon_providers:
+            try:
+                # Email provider has special send_leaving_soon method
+                if hasattr(provider, "send_leaving_soon"):
+                    if provider.send_leaving_soon(
+                        items,
+                        template_path=template_path,
+                        subject=subject,
+                        context=context,
+                    ):
+                        success_count += 1
+                        logger.info(f"Sent leaving soon notification via {provider.name}")
+                    else:
+                        logger.warning(
+                            f"Failed to send leaving soon notification via {provider.name}"
+                        )
+                else:
+                    # For other providers, create a RunResult with preview items
+                    result = RunResult(is_dry_run=False)
+                    for item in items:
+                        result.add_preview(item)
+                    if provider.send(result):
+                        success_count += 1
+                        logger.info(f"Sent leaving soon notification via {provider.name}")
+                    else:
+                        logger.warning(
+                            f"Failed to send leaving soon notification via {provider.name}"
+                        )
+            except Exception as e:
+                logger.error(f"Error sending leaving soon notification via {provider.name}: {e}")
+
+        return success_count > 0

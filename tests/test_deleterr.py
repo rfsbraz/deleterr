@@ -8,7 +8,8 @@ from app.deleterr import Deleterr, main
 
 @pytest.fixture
 def deleterr():
-    with patch("app.deleterr.MediaCleaner", return_value=MagicMock()):
+    with patch("app.deleterr.MediaCleaner", return_value=MagicMock()), \
+         patch("app.deleterr.PlexMediaServer", return_value=MagicMock()):
         yield Deleterr(MagicMock())
 
 
