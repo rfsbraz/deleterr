@@ -54,33 +54,44 @@ AAIAAAACAAABAAAAAAHxc3R6AAAAAAAAAAAAAAACAAACYQAAAA0AAAAUc3RjbwAAAAAAAAABAAAA
 MAAAAA==
 """
 
-# Test media content
+# Test media content - IDs match JustWatch cache for integration testing
+# Movies use TMDB IDs, TV shows use TVDB IDs
 MOVIES = [
-    {"title": "Old Unwatched Movie", "year": 2020, "tmdb_id": 550},
-    {"title": "Recently Watched Movie", "year": 2021, "tmdb_id": 551},
-    {"title": "Movie In Excluded Collection", "year": 2019, "tmdb_id": 552},
+    # Matches JustWatch cache - available on Max
+    {"title": "The Matrix", "year": 1999, "tmdb_id": 603, "imdb_id": "tt0133093"},
+    # Matches JustWatch cache - available on Max
+    {"title": "Dune", "year": 2021, "tmdb_id": 438631, "imdb_id": "tt1160419"},
+    # Matches JustWatch cache - available on Criterion Channel
+    {"title": "The Seventh Seal", "year": 1957, "tmdb_id": 490, "imdb_id": "tt0050976"},
+    # Matches JustWatch cache - no streaming offers (for deletion candidate tests)
+    {"title": "Test Movie", "year": 2020, "tmdb_id": 999999, "imdb_id": "tt9999999"},
+    # Not in cache - will require API call or be treated as unknown
     {"title": "Recently Added Movie", "year": 2023, "tmdb_id": 553},
-    {"title": "Protected Movie", "year": 2022, "tmdb_id": 554},
 ]
 
 TV_SHOWS = [
     {
-        "title": "Old Unwatched Show",
-        "year": 2018,
+        # Matches JustWatch cache - Breaking Bad on Netflix
+        "title": "Breaking Bad",
+        "year": 2008,
         "tvdb_id": 81189,
-        "seasons": {1: 10, 2: 10},
+        "imdb_id": "tt0903747",
+        "seasons": {1: 7, 2: 13},  # Partial seasons for faster tests
     },
     {
-        "title": "Recently Watched Show",
-        "year": 2019,
-        "tvdb_id": 81190,
-        "seasons": {1: 8},
+        # Matches JustWatch cache - Better Call Saul on Netflix/AMC+
+        "title": "Better Call Saul",
+        "year": 2015,
+        "tvdb_id": 8,
+        "imdb_id": "tt3032476",
+        "seasons": {1: 10},
     },
     {
-        "title": "Continuing Show",
+        # Not in cache - for deletion candidate tests
+        "title": "Unknown Show",
         "year": 2020,
-        "tvdb_id": 81191,
-        "seasons": {1: 12, 2: 12, 3: 6},
+        "tvdb_id": 999999,
+        "seasons": {1: 6},
     },
 ]
 
