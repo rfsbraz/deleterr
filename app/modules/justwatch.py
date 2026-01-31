@@ -31,14 +31,20 @@ def _search_justwatch(
     This wraps the simplejustwatchapi library's query building and parsing
     but uses our own HTTP client with proper headers.
     """
+    import hashlib
+    import json
     request = prepare_search_request(title, country, language, count, best_only)
+    # Debug: print request hash for cache debugging
+    normalized = json.dumps(request, sort_keys=True)
+    request_hash = hashlib.sha256(normalized.encode()).hexdigest()[:16]
+    print(f"[DEBUG] JustWatch request hash: {request_hash}")
     headers = {"User-Agent": _USER_AGENT}
     url = _get_graphql_url()
     print(f"[DEBUG] JustWatch API URL: {url}")
     response = httpx.post(url, json=request, headers=headers, timeout=30.0)
     response.raise_for_status()
     data = response.json()
-    print(f"[DEBUG] JustWatch response keys: {data.keys() if isinstance(data, dict) else type(data)}")
+    print(f"[DEBUG] JustWatch response: {json.dumps(data)[:500]}")
     result = parse_search_response(data)
     print(f"[DEBUG] JustWatch search for '{title}' returned {len(result)} results")
     return result
