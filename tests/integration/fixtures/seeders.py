@@ -1,8 +1,7 @@
 """
 Data seeders for integration testing.
 
-These utilities populate Radarr, Sonarr, and the mock Plex server
-with test data for integration tests.
+These utilities populate Radarr and Sonarr with test data for integration tests.
 """
 
 import requests
@@ -702,49 +701,6 @@ class SonarrSeeder(ServiceSeeder):
 
         print(f"Warning: State may not be correct. Tags: {result.get('tags', [])}, Monitored: {result.get('monitored')}")
         return result
-
-
-class PlexMockSeeder:
-    """Seeds the mock Plex server with test data."""
-
-    def __init__(self, base_url: str):
-        self.base_url = base_url.rstrip('/')
-
-    def wait_for_ready(self, timeout: int = 60) -> bool:
-        """Wait for mock Plex to be ready."""
-        start = time.time()
-        while time.time() - start < timeout:
-            try:
-                resp = requests.get(f"{self.base_url}/health", timeout=5)
-                if resp.status_code == 200:
-                    return True
-            except requests.RequestException:
-                # Service may not be ready yet; retry loop continues
-                pass
-            time.sleep(1)
-        return False
-
-    def reset(self) -> None:
-        """Reset all data in mock Plex."""
-        requests.post(f"{self.base_url}/api/reset", timeout=10)
-
-    def add_movie(self, movie_data: Dict) -> Dict:
-        """Add a movie to mock Plex."""
-        resp = requests.post(
-            f"{self.base_url}/api/add_movie",
-            json=movie_data,
-            timeout=10
-        )
-        return resp.json()
-
-    def add_series(self, series_data: Dict) -> Dict:
-        """Add a TV series to mock Plex."""
-        resp = requests.post(
-            f"{self.base_url}/api/add_series",
-            json=series_data,
-            timeout=10
-        )
-        return resp.json()
 
 
 class TautulliSeeder:

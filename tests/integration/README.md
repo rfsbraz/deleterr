@@ -22,10 +22,10 @@ tests/integration/
 │   ├── collection_threshold.yaml   # Collection protection
 │   └── combined_exclusions.yaml    # Multiple exclusion rules
 ├── fixtures/
-│   ├── seeders.py                  # API-based data seeding
-│   ├── plex_mock.py                # Mock Plex server (legacy, Flask app)
-│   ├── plex_bootstrap.py           # Plex bootstrap script for real server
-│   └── Dockerfile.plex-mock        # Dockerfile for mock Plex (legacy)
+│   ├── seeders.py                  # API-based data seeding for Radarr/Sonarr
+│   ├── plex_bootstrap.py           # Plex bootstrap script (creates libraries, seeds media)
+│   ├── plex_test_helper.py         # PlexAPI test helper for integration tests
+│   └── justwatch_proxy.py          # JustWatch caching proxy for testing
 ├── seed_data/
 │   ├── media/                      # Stub media files for Plex
 │   │   ├── movies/                 # Movie stub files
@@ -220,11 +220,6 @@ The `plex_bootstrap.py` script handles:
 3. Creating library sections (Movies, TV Shows)
 4. Triggering library scans
 5. Waiting for scans to complete
-
-### Legacy Mock Server
-
-For simpler unit-style tests, the Flask-based `plex_mock.py` is still available but
-is no longer the primary approach for integration testing
 
 ## Environment Variables
 

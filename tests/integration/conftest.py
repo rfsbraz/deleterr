@@ -26,7 +26,6 @@ from app.modules.sonarr import DSonarr
 from tests.integration.fixtures.seeders import (
     RadarrSeeder,
     SonarrSeeder,
-    PlexMockSeeder,
     TautulliSeeder,
 )
 from tests.integration.fixtures.plex_bootstrap import bootstrap_plex, setup_media
@@ -41,7 +40,6 @@ RADARR_URL = os.getenv("RADARR_URL", "http://localhost:7878")
 SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989")
 TAUTULLI_URL = os.getenv("TAUTULLI_URL", "http://localhost:8181")
 PLEX_URL = os.getenv("PLEX_URL", "http://localhost:32400")
-PLEX_MOCK_URL = PLEX_URL  # Backwards compatibility alias
 WEBHOOK_RECEIVER_URL = os.getenv("WEBHOOK_RECEIVER_URL", "http://localhost:8080")
 JUSTWATCH_PROXY_URL = os.getenv("JUSTWATCH_PROXY_URL", "http://localhost:8888")
 
@@ -370,13 +368,6 @@ def radarr_seeder(radarr_api_key) -> RadarrSeeder:
 def sonarr_seeder(sonarr_api_key) -> SonarrSeeder:
     """Provides a Sonarr data seeder."""
     seeder = SonarrSeeder(SONARR_URL, sonarr_api_key)
-    return seeder
-
-
-@pytest.fixture(scope="session")
-def plex_mock_seeder(docker_services) -> PlexMockSeeder:
-    """Provides a mock Plex data seeder (legacy - for backwards compatibility)."""
-    seeder = PlexMockSeeder(PLEX_URL)
     return seeder
 
 
