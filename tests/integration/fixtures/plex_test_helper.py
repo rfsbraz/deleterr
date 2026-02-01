@@ -166,8 +166,18 @@ class PlexTestHelper:
         """Get all labels on an item."""
         return [label.tag for label in item.labels]
 
-    def has_label(self, item, label: str) -> bool:
-        """Check if an item has a specific label."""
+    def has_label(self, item, label: str, refetch: bool = True) -> bool:
+        """Check if an item has a specific label.
+
+        Args:
+            item: The Plex item to check
+            label: The label to look for
+            refetch: If True, fetch fresh item from server (more reliable)
+        """
+        if refetch:
+            # Re-fetch from library to get current state
+            # This is more reliable than reload() for labels
+            item = self.server.fetchItem(item.ratingKey)
         return label in self.get_labels(item)
 
     def get_items_with_label(
