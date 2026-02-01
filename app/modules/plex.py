@@ -81,7 +81,10 @@ class PlexMediaServer(BaseMediaServer):
                 f"Set collection '{collection.title}' visibility: home={home}, shared={shared}"
             )
         except Exception as e:
-            logger.warning(f"Could not set collection visibility: {e}")
+            logger.warning(
+                f"Could not set visibility for collection '{collection.title}': {e}. "
+                "The collection will still work but may not appear on home screens."
+            )
 
     def get_collection(self, library: Any, name: str) -> Optional[Any]:
         """Get collection by name if it exists.
@@ -116,14 +119,20 @@ class PlexMediaServer(BaseMediaServer):
             try:
                 collection.removeItems(current_items)
             except Exception as e:
-                logger.warning(f"Error removing items from collection: {e}")
+                logger.warning(
+                    f"Error removing {len(current_items)} items from collection '{collection.title}': {e}. "
+                    "Some items may remain in the collection."
+                )
 
         # Add new items
         if items:
             try:
                 collection.addItems(items)
             except Exception as e:
-                logger.warning(f"Error adding items to collection: {e}")
+                logger.warning(
+                    f"Error adding {len(items)} items to collection '{collection.title}': {e}. "
+                    "Some items may be missing from the leaving_soon collection."
+                )
 
     def add_label(self, item: Any, label: str) -> None:
         """Add a label to a Plex media item.
@@ -135,7 +144,7 @@ class PlexMediaServer(BaseMediaServer):
         try:
             item.addLabel(label)
         except Exception as e:
-            logger.warning(f"Error adding label '{label}' to '{item.title}': {e}")
+            logger.debug(f"Could not add label '{label}' to '{item.title}': {e}")
 
     def remove_label(self, item: Any, label: str) -> None:
         """Remove a label from a Plex media item.
@@ -147,7 +156,7 @@ class PlexMediaServer(BaseMediaServer):
         try:
             item.removeLabel(label)
         except Exception as e:
-            logger.warning(f"Error removing label '{label}' from '{item.title}': {e}")
+            logger.debug(f"Could not remove label '{label}' from '{item.title}': {e}")
 
     def get_items_with_label(self, library: Any, label: str) -> list:
         """Get all items in library with given label.
@@ -162,7 +171,10 @@ class PlexMediaServer(BaseMediaServer):
         try:
             return library.search(label=label)
         except Exception as e:
-            logger.warning(f"Error searching for items with label '{label}': {e}")
+            logger.warning(
+                f"Error searching for items with label '{label}' in library '{library.title}': {e}. "
+                "Labeled items may not be processed correctly."
+            )
             return []
 
     def find_item(

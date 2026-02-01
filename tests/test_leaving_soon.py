@@ -531,7 +531,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item_a])
 
         # Current candidates also contains Movie A (still matches rules)
-        deleterr_instance._get_all_deletion_candidates_movies = MagicMock(
+        deleterr_instance._get_deletion_candidates = MagicMock(
             return_value=[radarr_movie_a]
         )
 
@@ -539,8 +539,8 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_server.find_item.return_value = plex_item_a
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_radarr_death_row(
-                library, radarr_instance
+            saved_space, deleted, preview = deleterr_instance._process_death_row(
+                library, radarr_instance, "movie"
             )
 
         # Movie A should be deleted (in death row AND matches rules)
@@ -571,11 +571,11 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item_b])
 
         # Current candidates is EMPTY (Movie B was watched, no longer matches)
-        deleterr_instance._get_all_deletion_candidates_movies = MagicMock(return_value=[])
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[])
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_radarr_death_row(
-                library, radarr_instance
+            saved_space, deleted, preview = deleterr_instance._process_death_row(
+                library, radarr_instance, "movie"
             )
 
         # Movie B should NOT be deleted (in death row but doesn't match rules anymore)
@@ -614,15 +614,15 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance._get_death_row_items = MagicMock(return_value=[])
 
         # Current candidates contains Movie C
-        deleterr_instance._get_all_deletion_candidates_movies = MagicMock(
+        deleterr_instance._get_deletion_candidates = MagicMock(
             return_value=[radarr_movie_c]
         )
 
         deleterr_instance.media_server.find_item.return_value = plex_item_c
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_radarr_death_row(
-                library, radarr_instance
+            saved_space, deleted, preview = deleterr_instance._process_death_row(
+                library, radarr_instance, "movie"
             )
 
         # Movie C should NOT be deleted (not in death row)
@@ -665,7 +665,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item_a, plex_item_b])
 
         # Current candidates contains A and C (B was watched, no longer matches)
-        deleterr_instance._get_all_deletion_candidates_movies = MagicMock(
+        deleterr_instance._get_deletion_candidates = MagicMock(
             return_value=[radarr_movie_a, radarr_movie_c]
         )
 
@@ -680,8 +680,8 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_radarr_death_row(
-                library, radarr_instance
+            saved_space, deleted, preview = deleterr_instance._process_death_row(
+                library, radarr_instance, "movie"
             )
 
         # Only Movie A should be deleted (intersection of death row AND current candidates)
@@ -729,7 +729,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item_a, plex_item_b])
 
         # Current candidates contains only A (B was watched)
-        deleterr_instance._get_all_deletion_candidates_shows = MagicMock(
+        deleterr_instance._get_deletion_candidates = MagicMock(
             return_value=[sonarr_show_a]
         )
 
@@ -737,8 +737,8 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_server.find_item.return_value = plex_item_a
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_sonarr_death_row(
-                library, sonarr_instance, unfiltered_all_show_data
+            saved_space, deleted, preview = deleterr_instance._process_death_row(
+                library, sonarr_instance, "show", unfiltered_all_show_data
             )
 
         # Only Show A should be deleted
@@ -997,8 +997,8 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
             {"id": 2, "title": "Movie B", "year": 2021, "tmdbId": 551, "sizeOnDisk": 2000000000},
         ]
 
-        # Mock _process_radarr_death_row to return preview items
-        deleterr_instance._process_radarr_death_row = MagicMock(
+        # Mock _process_death_row to return preview items
+        deleterr_instance._process_death_row = MagicMock(
             return_value=(0, [], preview_items)  # saved_space=0, deleted=[], preview=items
         )
 
@@ -1041,8 +1041,8 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
              "statistics": {"sizeOnDisk": 5000000000, "episodeFileCount": 10}},
         ]
 
-        # Mock _process_sonarr_death_row to return preview items
-        deleterr_instance._process_sonarr_death_row = MagicMock(
+        # Mock _process_death_row to return preview items
+        deleterr_instance._process_death_row = MagicMock(
             return_value=(0, [], preview_items)  # saved_space=0, deleted=[], preview=items
         )
 
@@ -1139,7 +1139,7 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
         def mock_normal(*args):
             return (0, [], normal_preview)
 
-        deleterr_instance._process_radarr_death_row = mock_death_row
+        deleterr_instance._process_death_row = mock_death_row
         deleterr_instance.media_cleaner.process_library_movies = mock_normal
         deleterr_instance._process_library_leaving_soon = MagicMock()
 

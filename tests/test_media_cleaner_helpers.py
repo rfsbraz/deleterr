@@ -943,9 +943,6 @@ class TestAddListExclusion:
                 library,
                 mock_radarr,
                 radarr_movie,
-                actions_performed=0,
-                max_actions_per_run=10,
-                disk_size=5_000_000_000,
             )
 
         # Verify del_movie was called with add_exclusion=True

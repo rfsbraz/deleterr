@@ -95,9 +95,21 @@ class Tautulli:
                         last_activity[guid] = activity_entry
                 except Exception as e:
                     entry = future_to_entry[future]
-                    logger.warning(
-                        f"Failed to fetch metadata for rating_key {entry.get(key)}: {e}"
-                    )
+                    error_msg = str(e).lower()
+                    if "timeout" in error_msg:
+                        logger.warning(
+                            f"Tautulli metadata fetch timed out for rating_key {entry.get(key)}. "
+                            "Try increasing Tautulli timeout or reducing concurrent requests."
+                        )
+                    elif "404" in error_msg or "not found" in error_msg:
+                        logger.debug(
+                            f"Tautulli metadata not found for rating_key {entry.get(key)} - "
+                            "item may have been removed from Plex"
+                        )
+                    else:
+                        logger.warning(
+                            f"Failed to fetch Tautulli metadata for rating_key {entry.get(key)}: {e}"
+                        )
                 logger.debug("[%s/%s] Processed items", completed, total)
 
         return last_activity

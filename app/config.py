@@ -74,12 +74,31 @@ def load_yaml(stream):
     return Config(yaml.load(stream, Loader=CustomLoader))  
 
 def test_radarr_connection(connection):
-    if not DRadarr(connection["name"], connection["url"], connection["api_key"]).validate_connection():
-        logger.error(
-            f"Failed to connect to {connection['name']} at {connection['url']}, check your configuration."
-        )
+    name = connection["name"]
+    url = connection["url"]
+    try:
+        if not DRadarr(name, url, connection["api_key"]).validate_connection():
+            logger.error(
+                f"Radarr '{name}' at {url} did not respond correctly. "
+                "Verify the URL and API key are correct."
+            )
+            return False
+        return True
+    except Exception as err:
+        error_msg = str(err).lower()
+        if "401" in error_msg or "unauthorized" in error_msg:
+            logger.error(
+                f"Radarr '{name}' authentication failed: Invalid API key. "
+                "Check your api_key configuration."
+            )
+        elif "connection" in error_msg or "timeout" in error_msg:
+            logger.error(
+                f"Cannot reach Radarr '{name}' at {url}: {err}. "
+                "Verify the URL is correct and Radarr is running."
+            )
+        else:
+            logger.error(f"Failed to connect to Radarr '{name}' at {url}: {err}")
         return False
-    return True
 
 
 class Config:
@@ -118,8 +137,19 @@ class Config:
             t.test_connection()
             return True
         except Exception as err:
-            logger.error("Failed to connect to Trakt, check your configuration.")
-            logger.debug(f"Error: {err}")
+            error_msg = str(err).lower()
+            if "401" in error_msg or "unauthorized" in error_msg or "invalid" in error_msg:
+                logger.error(
+                    f"Trakt authentication failed: {err}. "
+                    "Verify your client_id and client_secret are correct."
+                )
+            elif "timeout" in error_msg or "connection" in error_msg:
+                logger.error(
+                    f"Cannot reach Trakt API: {err}. "
+                    "Check your internet connection and firewall settings."
+                )
+            else:
+                logger.error(f"Trakt connection failed: {err}")
             return False
 
     def validate_notifications(self):
@@ -190,10 +220,25 @@ class Config:
                 return False
             return True
         except Exception as err:
-            logger.error(
-                f"Failed to connect to Overseerr at {overseerr_config.get('url')}, check your configuration."
-            )
-            logger.debug(f"Error: {err}")
+            error_msg = str(err).lower()
+            url = overseerr_config.get('url')
+            if "401" in error_msg or "403" in error_msg or "unauthorized" in error_msg:
+                logger.error(
+                    f"Overseerr authentication failed at {url}: {err}. "
+                    "Verify your API key is correct."
+                )
+            elif "timeout" in error_msg or "connection" in error_msg:
+                logger.error(
+                    f"Cannot reach Overseerr at {url}: {err}. "
+                    "Check the URL and ensure Overseerr is running."
+                )
+            elif "ssl" in error_msg or "certificate" in error_msg:
+                logger.error(
+                    f"SSL error connecting to Overseerr at {url}: {err}. "
+                    "Try setting ssl_verify: false in your config if using self-signed certificates."
+                )
+            else:
+                logger.error(f"Overseerr connection failed at {url}: {err}")
             return False
 
     def validate_settings_for_instance(self, library):
@@ -228,19 +273,49 @@ class Config:
         )
 
     def test_api_connection(self, connection):
+        name = connection['name']
+        url = connection['url']
         try:
             response = requests.get(
-                f"{connection['url']}/api",
+                f"{url}/api",
                 params={"apiKey": connection["api_key"]},
                 headers={"Content-Type": "application/json"},
             )
             response.raise_for_status()
             return True
-        except requests.exceptions.RequestException as err:
+        except requests.exceptions.ConnectionError as err:
             logger.error(
-                f"Failed to connect to {connection['name']} at {connection['url']}, check your configuration."
+                f"Cannot reach Sonarr instance '{name}' at {url}: {err}. "
+                "Verify the URL is correct and Sonarr is running."
             )
-            logger.debug(f"Error: {err}")
+            return False
+        except requests.exceptions.Timeout as err:
+            logger.error(
+                f"Connection to Sonarr '{name}' at {url} timed out: {err}. "
+                "The server may be slow or overloaded."
+            )
+            return False
+        except requests.exceptions.HTTPError as err:
+            status_code = err.response.status_code if err.response else "unknown"
+            if status_code == 401:
+                logger.error(
+                    f"Sonarr '{name}' authentication failed (HTTP 401): Invalid API key. "
+                    "Check your api_key configuration."
+                )
+            elif status_code == 403:
+                logger.error(
+                    f"Sonarr '{name}' access denied (HTTP 403): API key may lack permissions."
+                )
+            elif status_code >= 500:
+                logger.error(
+                    f"Sonarr '{name}' server error (HTTP {status_code}): {err}. "
+                    "Check Sonarr logs for details."
+                )
+            else:
+                logger.error(f"Sonarr '{name}' returned HTTP {status_code}: {err}")
+            return False
+        except requests.exceptions.RequestException as err:
+            logger.error(f"Failed to connect to Sonarr '{name}' at {url}: {err}")
             return False
 
     def validate_tautulli(self):
@@ -251,13 +326,26 @@ class Config:
             tautulli = Tautulli(tautulli_config["url"], tautulli_config["api_key"])
             tautulli.test_connection()
         except KeyError:
-            logger.error("Tautulli configuration not found, check your configuration.")
+            logger.error(
+                "Tautulli configuration not found. "
+                "Add 'tautulli' section with 'url' and 'api_key' to your config."
+            )
             return False
         except Exception as err:
-            logger.error(
-                f"Failed to connect to tautulli at {tautulli_config['url']}, check your configuration."
-            )
-            logger.debug(f"Error: {err}")
+            url = tautulli_config.get('url', 'unknown')
+            error_msg = str(err).lower()
+            if "401" in error_msg or "unauthorized" in error_msg or "invalid" in error_msg:
+                logger.error(
+                    f"Tautulli authentication failed at {url}: {err}. "
+                    "Verify your API key is correct (Settings -> Web Interface -> API Key)."
+                )
+            elif "timeout" in error_msg or "connection" in error_msg:
+                logger.error(
+                    f"Cannot reach Tautulli at {url}: {err}. "
+                    "Check the URL and ensure Tautulli is running."
+                )
+            else:
+                logger.error(f"Tautulli connection failed at {url}: {err}")
             return False
 
         return True

@@ -112,3 +112,82 @@ error = logger.error
 debug = logger.debug
 warning = logger.warning
 exception = logger.exception
+
+
+def format_size(size_bytes: int) -> str:
+    """Format bytes as human-readable size string."""
+    if size_bytes >= 1024**4:
+        return f"{size_bytes / (1024**4):.2f} TB"
+    elif size_bytes >= 1024**3:
+        return f"{size_bytes / (1024**3):.2f} GB"
+    elif size_bytes >= 1024**2:
+        return f"{size_bytes / (1024**2):.2f} MB"
+    elif size_bytes >= 1024:
+        return f"{size_bytes / 1024:.2f} KB"
+    return f"{size_bytes} B"
+
+
+def format_duration(seconds: float) -> str:
+    """Format seconds as human-readable duration string."""
+    if seconds >= 3600:
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = seconds % 60
+        return f"{hours}h {minutes}m {secs:.1f}s"
+    elif seconds >= 60:
+        minutes = int(seconds // 60)
+        secs = seconds % 60
+        return f"{minutes}m {secs:.1f}s"
+    return f"{seconds:.1f}s"
+
+
+def log_deletion(
+    title: str,
+    size_bytes: int,
+    media_type: str,
+    is_dry_run: bool,
+    action_num: int = None,
+    max_actions: int = None,
+    extra_info: str = None,
+):
+    """
+    Log a deletion action with consistent formatting.
+
+    Args:
+        title: Media title
+        size_bytes: Size in bytes
+        media_type: 'movie' or 'show'
+        is_dry_run: Whether this is a dry run
+        action_num: Current action number (optional)
+        max_actions: Maximum actions per run (optional)
+        extra_info: Additional info like episode count (optional)
+    """
+    prefix = "[DRY-RUN] " if is_dry_run else ""
+    action_verb = "Would have deleted" if is_dry_run else "Deleting"
+
+    # Format action counter if provided
+    counter = ""
+    if action_num is not None and max_actions is not None:
+        counter = f"[{action_num}/{max_actions}] "
+
+    # Format size and extra info
+    size_str = format_size(size_bytes)
+    extra = f" - {extra_info}" if extra_info else ""
+
+    logger.info(f"{prefix}{counter}{action_verb} {media_type} '{title}' ({size_str}{extra})")
+
+
+def log_freed_space(saved_space: int, media_type: str, is_dry_run: bool):
+    """
+    Log total freed space with consistent formatting.
+
+    Args:
+        saved_space: Bytes freed
+        media_type: 'movie' or 'show' (pluralized in output)
+        is_dry_run: Whether this is a dry run
+    """
+    prefix = "[DRY-RUN] " if is_dry_run else ""
+    action_verb = "Would have freed" if is_dry_run else "Freed"
+    media_plural = "movies" if media_type == "movie" else "shows"
+
+    logger.info(f"{prefix}{action_verb} {format_size(saved_space)} of space by deleting {media_plural}")

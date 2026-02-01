@@ -2,7 +2,21 @@
 """Data models for the notification system."""
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Optional
+
+
+@dataclass
+class LibraryStats:
+    """Statistics for a single library during a run."""
+
+    name: str
+    instance_name: str
+    instance_type: str  # "radarr" or "sonarr"
+    items_found: int = 0
+    items_deleted: int = 0
+    items_unmatched: int = 0
+    bytes_freed: int = 0
 
 
 @dataclass
@@ -54,6 +68,9 @@ class RunResult:
     is_dry_run: bool = True
     deleted_items: list[DeletedItem] = field(default_factory=list)
     preview_items: list[DeletedItem] = field(default_factory=list)
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    library_stats: list[LibraryStats] = field(default_factory=list)
 
     def add_deleted(self, item: DeletedItem) -> None:
         """Add a deleted item to the results."""
@@ -96,3 +113,24 @@ class RunResult:
     def has_content(self) -> bool:
         """Check if there's any content to report."""
         return bool(self.deleted_items or self.preview_items)
+
+    @property
+    def duration_seconds(self) -> Optional[float]:
+        """Calculate run duration in seconds."""
+        if self.start_time and self.end_time:
+            return (self.end_time - self.start_time).total_seconds()
+        return None
+
+    @property
+    def total_items_found(self) -> int:
+        """Total items found across all libraries."""
+        return sum(stats.items_found for stats in self.library_stats)
+
+    @property
+    def total_unmatched(self) -> int:
+        """Total unmatched items across all libraries."""
+        return sum(stats.items_unmatched for stats in self.library_stats)
+
+    def add_library_stats(self, stats: LibraryStats) -> None:
+        """Add statistics for a library."""
+        self.library_stats.append(stats)
