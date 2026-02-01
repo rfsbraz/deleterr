@@ -1733,7 +1733,13 @@ def title_and_year_match(plex_media_item, history):
 
 
 def sort_media(media_list, sort_config, activity_data=None, plex_guid_item_pair=None):
-    """Sort media by one or more fields with configurable order per field."""
+    """Sort media by one or more fields with configurable order per field.
+
+    Special handling for 'last_watched' field:
+    - Unwatched items (inf) ALWAYS come first, regardless of order setting
+    - The order setting only affects how watched items are sorted among themselves
+    - This ensures unwatched content is prioritized for deletion before recently-watched content
+    """
     from functools import cmp_to_key
 
     field_str = sort_config.get("field", "title")
@@ -1763,6 +1769,18 @@ def sort_media(media_list, sort_config, activity_data=None, plex_guid_item_pair=
                 return 1 if order == "asc" else -1
             if val_b is None:
                 return -1 if order == "asc" else 1
+
+            # Special handling for last_watched: unwatched items (inf) ALWAYS come first
+            # This ensures unwatched content is deleted before watched content, regardless
+            # of the order setting. The order only affects sorting among watched items.
+            if field == "last_watched":
+                a_unwatched = val_a == float('inf')
+                b_unwatched = val_b == float('inf')
+                if a_unwatched and not b_unwatched:
+                    return -1  # Unwatched 'a' comes first
+                if b_unwatched and not a_unwatched:
+                    return 1   # Unwatched 'b' comes first
+                # Both watched or both unwatched - apply normal order
 
             # Compare values
             if val_a < val_b:

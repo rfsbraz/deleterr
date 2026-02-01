@@ -1,14 +1,10 @@
 # encoding: utf-8
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
 from tautulli import RawAPI
 
 from app import logger
-
-# Maximum concurrent workers for metadata fetching to avoid overwhelming Tautulli
-MAX_METADATA_WORKERS = 10
 
 HISTORY_PAGE_SIZE = 300
 
@@ -42,76 +38,39 @@ class Tautulli:
         self.api.get_library_media_info(section_id=section_id, refresh=True)
 
     def get_activity(self, library_config, section):
-        last_activity = {}
+        """
+        Get watch activity for a library section.
+
+        Fetches history data from Tautulli and extracts GUID, title, year directly
+        from the history response (no separate metadata API calls needed).
+
+        Args:
+            library_config: Library configuration dict with thresholds
+            section: Plex library section ID
+
+        Returns:
+            Dictionary mapping GUID to activity data (last_watched, title, year)
+        """
         min_date = self._calculate_min_date(library_config)
         logger.debug("Fetching last activity since %s", min_date)
         raw_data = self._fetch_history_data(section, min_date)
 
         # Return empty dictionary if no data is found
         if not raw_data:
-            return last_activity
+            return {}
 
         key = self._determine_key(raw_data)
         filtered_data = filter_by_most_recent(raw_data, key, "stopped")
 
-        last_activity = self._fetch_metadata_parallel(filtered_data, key)
-
-        return last_activity
-
-    def _fetch_metadata_parallel(self, filtered_data, key):
-        """
-        Fetch metadata for all entries in parallel using ThreadPoolExecutor.
-
-        Args:
-            filtered_data: List of history entries to fetch metadata for
-            key: The key to use for rating_key lookup ('rating_key' or 'grandparent_rating_key')
-
-        Returns:
-            Dictionary mapping GUID to activity entry data
-        """
+        # Extract data directly from history response - no metadata API calls needed!
+        # The get_history endpoint already returns guid, title, year, grandparent_title
         last_activity = {}
-        total = len(filtered_data)
+        for entry in filtered_data:
+            guid = entry.get("guid")
+            if guid:
+                last_activity[guid] = self._prepare_activity_entry(entry)
 
-        def fetch_single_metadata(entry):
-            """Fetch metadata for a single entry."""
-            rating_key = entry[key]
-            metadata = self.api.get_metadata(rating_key)
-            if metadata:
-                return metadata["guid"], self._prepare_activity_entry(entry, metadata)
-            return None, None
-
-        with ThreadPoolExecutor(max_workers=MAX_METADATA_WORKERS) as executor:
-            future_to_entry = {
-                executor.submit(fetch_single_metadata, entry): entry
-                for entry in filtered_data
-            }
-
-            completed = 0
-            for future in as_completed(future_to_entry):
-                completed += 1
-                try:
-                    guid, activity_entry = future.result()
-                    if guid:
-                        last_activity[guid] = activity_entry
-                except Exception as e:
-                    entry = future_to_entry[future]
-                    error_msg = str(e).lower()
-                    if "timeout" in error_msg:
-                        logger.warning(
-                            f"Tautulli metadata fetch timed out for rating_key {entry.get(key)}. "
-                            "Try increasing Tautulli timeout or reducing concurrent requests."
-                        )
-                    elif "404" in error_msg or "not found" in error_msg:
-                        logger.debug(
-                            f"Tautulli metadata not found for rating_key {entry.get(key)} - "
-                            "item may have been removed from Plex"
-                        )
-                    else:
-                        logger.warning(
-                            f"Failed to fetch Tautulli metadata for rating_key {entry.get(key)}: {e}"
-                        )
-                logger.debug("[%s/%s] Processed items", completed, total)
-
+        logger.debug("Processed %d unique items from history", len(last_activity))
         return last_activity
 
     def _calculate_min_date(self, library_config):
@@ -155,9 +114,24 @@ class Tautulli:
             else "rating_key"
         )
 
-    def _prepare_activity_entry(self, entry, metadata):
+    def _prepare_activity_entry(self, entry):
+        """
+        Prepare activity entry from history data.
+
+        For TV shows, uses grandparent_title (series name).
+        For movies, uses title directly.
+
+        Args:
+            entry: History entry from Tautulli get_history
+
+        Returns:
+            Dict with last_watched, title, and year
+        """
+        # For TV shows, grandparent_title is the series name
+        # For movies, title is the movie name
+        title = entry.get("grandparent_title") or entry.get("title")
         return {
             "last_watched": datetime.fromtimestamp(entry["stopped"]),
-            "title": metadata["title"],
-            "year": int(metadata.get("year") or 0),
+            "title": title,
+            "year": int(entry.get("year") or 0),
         }
