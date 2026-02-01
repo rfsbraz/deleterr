@@ -5,6 +5,8 @@ import atexit
 import locale
 import os
 import sys
+import time
+from datetime import datetime
 
 from app.modules.radarr import DRadarr
 from app.modules.sonarr import DSonarr
@@ -13,7 +15,7 @@ from app.modules.plex import PlexMediaServer
 from app import logger
 from app.config import hang_on_error, load_config
 from app.media_cleaner import ConfigurationError, MediaCleaner
-from app.modules.notifications import NotificationManager, RunResult, DeletedItem
+from app.modules.notifications import NotificationManager, RunResult, DeletedItem, LibraryStats
 from app.utils import print_readable_freed_space
 
 # Lock file for single instance detection
@@ -82,7 +84,10 @@ class Deleterr:
 
         self.media_cleaner = MediaCleaner(config, media_server=self.media_server)
         self.notifications = NotificationManager(config)
-        self.run_result = RunResult(is_dry_run=config.settings.get("dry_run", True))
+        self.run_result = RunResult(
+            is_dry_run=config.settings.get("dry_run", True),
+            start_time=datetime.now(),
+        )
 
         self.sonarr = {
             connection["name"]: DSonarr(connection["name"], connection["url"], connection["api_key"])
@@ -98,6 +103,10 @@ class Deleterr:
 
         self.process_radarr()
         self.process_sonarr()
+
+        # Record end time and log summary
+        self.run_result.end_time = datetime.now()
+        self._log_run_summary()
 
         # Send notification after all processing
         self._send_notification()
@@ -132,7 +141,10 @@ class Deleterr:
                             items_to_delete.append(item)
                             seen_keys.add(item.ratingKey)
                 except Exception as e:
-                    logger.warning(f"Error getting items from collection '{collection_name}': {e}")
+                    logger.error(
+                        f"Failed to read items from collection '{collection_name}' in library '{library.get('name')}': {e}. "
+                        "Items in this collection will NOT be deleted on this run."
+                    )
 
         # Get items with label (presence of config = enabled)
         labels_config = leaving_soon_config.get("labels")
@@ -166,7 +178,7 @@ class Deleterr:
                 if movies:
                     return movies[0]
             except Exception as e:
-                logger.debug(f"Error looking up movie by TMDB ID: {e}")
+                logger.debug(f"Radarr lookup by TMDB ID {guids.get('tmdb_id')} failed: {e}")
 
         # Try IMDB ID
         if guids.get("imdb_id"):
@@ -174,11 +186,13 @@ class Deleterr:
                 movies = radarr_instance.get_movie(guids["imdb_id"])
                 if movies:
                     return movies[0]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Radarr lookup by IMDB ID {guids.get('imdb_id')} failed: {e}")
 
         logger.warning(
-            f"Could not find '{plex_item.title}' in Radarr (TMDB: {guids.get('tmdb_id')}, IMDB: {guids.get('imdb_id')})"
+            f"'{plex_item.title}' is in the leaving_soon collection but not found in Radarr "
+            f"(TMDB: {guids.get('tmdb_id')}, IMDB: {guids.get('imdb_id')}). "
+            "It may have been deleted manually or the IDs don't match."
         )
         return None
 
@@ -202,7 +216,7 @@ class Deleterr:
                 if series:
                     return series
             except Exception as e:
-                logger.debug(f"Error looking up show by TVDB ID: {e}")
+                logger.debug(f"Sonarr lookup by TVDB ID {guids.get('tvdb_id')} failed: {e}")
 
         # Try IMDB ID
         if guids.get("imdb_id"):
@@ -212,17 +226,19 @@ class Deleterr:
                 for series in all_series:
                     if series.get("imdbId") == guids["imdb_id"]:
                         return series
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Sonarr lookup by IMDB ID {guids.get('imdb_id')} failed: {e}")
 
         logger.warning(
-            f"Could not find '{plex_item.title}' in Sonarr (TVDB: {guids.get('tvdb_id')}, IMDB: {guids.get('imdb_id')})"
+            f"'{plex_item.title}' is in the leaving_soon collection but not found in Sonarr "
+            f"(TVDB: {guids.get('tvdb_id')}, IMDB: {guids.get('imdb_id')}). "
+            "It may have been deleted manually or the IDs don't match."
         )
         return None
 
-    def _process_radarr_death_row(self, library, radarr_instance):
+    def _process_death_row(self, library, media_instance, media_type, all_data=None):
         """
-        Process movies using the death row pattern.
+        Process items using the death row pattern (unified for movies and shows).
 
         The death row collection is NOT the source of truth for deletions.
         We delete items that BOTH:
@@ -233,18 +249,20 @@ class Deleterr:
 
         Args:
             library: Library configuration dict
-            radarr_instance: Radarr instance
+            media_instance: Radarr or Sonarr instance
+            media_type: 'movie' or 'show'
+            all_data: All show data from Sonarr (only needed for shows)
 
         Returns:
             tuple: (saved_space, deleted_items, preview_candidates)
         """
         from app.media_cleaner import library_meets_disk_space_threshold
 
-        if not library_meets_disk_space_threshold(library, radarr_instance):
+        if not library_meets_disk_space_threshold(library, media_instance):
             return 0, [], []
 
         library_name = library.get("name", "Unknown")
-        logger.info("Processing library '%s' with leaving_soon (death row pattern)", library_name)
+        logger.info(f"Processing library '{library_name}' with leaving_soon (death row pattern)")
 
         # Get Plex library
         try:
@@ -258,26 +276,34 @@ class Deleterr:
         death_row_keys = {item.ratingKey for item in death_row_plex_items}
 
         # Get ALL items that currently match deletion rules
-        all_deletion_candidates = self._get_all_deletion_candidates_movies(
-            library, radarr_instance, plex_library
+        all_deletion_candidates = self._get_deletion_candidates(
+            library, media_instance, plex_library, media_type, all_data
         )
 
         # Items to delete = intersection of death row AND current candidates
         # Only build the Plex lookup map if there are death row items to check
         items_to_delete = []
         if death_row_keys:
-            # Build a map of Plex ratingKey -> Radarr movie for candidates
+            # Build a map of Plex ratingKey -> media item for candidates
             candidate_by_plex_key = {}
-            for radarr_movie in all_deletion_candidates:
-                plex_item = self.media_server.find_item(
-                    plex_library,
-                    tmdb_id=radarr_movie.get("tmdbId"),
-                    imdb_id=radarr_movie.get("imdbId"),
-                    title=radarr_movie.get("title"),
-                    year=radarr_movie.get("year"),
-                )
+            for media_item in all_deletion_candidates:
+                if media_type == "movie":
+                    plex_item = self.media_server.find_item(
+                        plex_library,
+                        tmdb_id=media_item.get("tmdbId"),
+                        imdb_id=media_item.get("imdbId"),
+                        title=media_item.get("title"),
+                        year=media_item.get("year"),
+                    )
+                else:
+                    plex_item = self.media_server.find_item(
+                        plex_library,
+                        tvdb_id=media_item.get("tvdbId"),
+                        imdb_id=media_item.get("imdbId"),
+                        title=media_item.get("title"),
+                    )
                 if plex_item:
-                    candidate_by_plex_key[plex_item.ratingKey] = radarr_movie
+                    candidate_by_plex_key[plex_item.ratingKey] = media_item
 
             for plex_key in death_row_keys:
                 if plex_key in candidate_by_plex_key:
@@ -289,46 +315,52 @@ class Deleterr:
 
         if death_row_plex_items:
             logger.info(
-                "Found %d items in leaving_soon, %d still match deletion criteria",
-                len(death_row_plex_items),
-                len(items_to_delete)
+                f"Found {len(death_row_plex_items)} items in leaving_soon, "
+                f"{len(items_to_delete)} still match deletion criteria"
             )
         else:
             logger.info("No items in leaving_soon (first run or empty death row)")
 
         # Delete items that are in death row AND still match deletion rules
-        for radarr_movie in items_to_delete:
-            disk_size = radarr_movie.get("sizeOnDisk", 0)
+        for media_item in items_to_delete:
+            if media_type == "movie":
+                disk_size = media_item.get("sizeOnDisk", 0)
+                extra_info = None
+            else:
+                disk_size = media_item.get("statistics", {}).get("sizeOnDisk", 0)
+                total_episodes = media_item.get("statistics", {}).get("episodeFileCount", 0)
+                extra_info = f"{total_episodes} episodes"
+
             saved_space += disk_size
 
-            if is_dry_run:
-                logger.info(
-                    "[DRY-RUN] Would have deleted movie '%s' from death row (%s)",
-                    radarr_movie["title"],
-                    print_readable_freed_space(disk_size),
-                )
-            else:
-                logger.info(
-                    "Deleting movie '%s' from death row (%s)",
-                    radarr_movie["title"],
-                    print_readable_freed_space(disk_size),
-                )
-                radarr_instance.del_movie(
-                    radarr_movie["id"],
-                    delete_files=True,
-                    add_exclusion=library.get("add_list_exclusion_on_delete", False),
-                )
-                # Update Overseerr status if configured
-                self.media_cleaner._update_overseerr_status(library, radarr_movie, "movie")
+            # Log the deletion
+            logger.log_deletion(
+                title=media_item["title"],
+                size_bytes=disk_size,
+                media_type=media_type,
+                is_dry_run=is_dry_run,
+                extra_info=extra_info,
+            )
 
-            deleted_items.append(radarr_movie)
+            if not is_dry_run:
+                if media_type == "movie":
+                    media_instance.del_movie(
+                        media_item["id"],
+                        delete_files=True,
+                        add_exclusion=library.get("add_list_exclusion_on_delete", False),
+                    )
+                    self.media_cleaner._update_overseerr_status(library, media_item, "movie")
+                else:
+                    self.media_cleaner.delete_series(media_instance, media_item)
+                    self.media_cleaner._update_overseerr_status(library, media_item, "tv")
+
+            deleted_items.append(media_item)
 
         # Get preview candidates for next run (excluding what we just deleted)
         preview_next = library.get("preview_next")
         if preview_next is None:
             preview_next = library.get("max_actions_per_run", 10)
 
-        # Preview = candidates that weren't deleted, limited to preview_next
         deleted_ids = {m.get("id") for m in deleted_items}
         preview_candidates = [
             m for m in all_deletion_candidates
@@ -337,361 +369,171 @@ class Deleterr:
 
         return saved_space, deleted_items, preview_candidates
 
-    def _process_sonarr_death_row(self, library, sonarr_instance, unfiltered_all_show_data):
+    def _get_deletion_candidates(self, library, media_instance, plex_library, media_type, all_data=None, limit=None):
         """
-        Process shows using the death row pattern.
+        Get items that currently match deletion rules (unified for movies and shows).
 
-        The death row collection is NOT the source of truth for deletions.
-        We delete items that BOTH:
-        1. Currently match deletion rules (watched, past threshold, not excluded, etc.)
-        2. Were previously tagged in the death row collection/labels
-
-        This ensures items watched since being tagged won't be deleted.
+        This is used by the death row pattern to determine which items
+        should actually be deleted (intersection of death row AND current candidates).
 
         Args:
             library: Library configuration dict
-            sonarr_instance: Sonarr instance
-            unfiltered_all_show_data: All shows from Sonarr
+            media_instance: Radarr or Sonarr instance
+            plex_library: Plex library section
+            media_type: 'movie' or 'show'
+            all_data: All show data from Sonarr (only needed for shows, optional)
+            limit: Maximum number of candidates to return (None = no limit)
 
         Returns:
-            tuple: (saved_space, deleted_items, preview_candidates)
+            List of media dicts that match deletion criteria
         """
-        from app.media_cleaner import library_meets_disk_space_threshold
+        if limit == 0:
+            return []
 
-        if not library_meets_disk_space_threshold(library, sonarr_instance):
-            return 0, [], []
-
-        library_name = library.get("name", "Unknown")
-        logger.info("Processing library '%s' with leaving_soon (death row pattern)", library_name)
-
-        # Get Plex library
-        try:
-            plex_library = self.media_server.get_library(library_name)
-        except Exception as e:
-            logger.error(f"Failed to get Plex library '{library_name}': {e}")
-            return 0, [], []
-
-        # Get death row items (items tagged on previous run)
-        death_row_plex_items = self._get_death_row_items(library, plex_library)
-        death_row_keys = {item.ratingKey for item in death_row_plex_items}
-
-        # Get ALL items that currently match deletion rules
-        all_deletion_candidates = self._get_all_deletion_candidates_shows(
-            library, sonarr_instance, plex_library, unfiltered_all_show_data
-        )
-
-        # Items to delete = intersection of death row AND current candidates
-        # Only build the Plex lookup map if there are death row items to check
-        items_to_delete = []
-        if death_row_keys:
-            # Build a map of Plex ratingKey -> Sonarr show for candidates
-            candidate_by_plex_key = {}
-            for sonarr_show in all_deletion_candidates:
-                plex_item = self.media_server.find_item(
-                    plex_library,
-                    tvdb_id=sonarr_show.get("tvdbId"),
-                    imdb_id=sonarr_show.get("imdbId"),
-                    title=sonarr_show.get("title"),
-                )
-                if plex_item:
-                    candidate_by_plex_key[plex_item.ratingKey] = sonarr_show
-
-            for plex_key in death_row_keys:
-                if plex_key in candidate_by_plex_key:
-                    items_to_delete.append(candidate_by_plex_key[plex_key])
-
-        saved_space = 0
-        deleted_items = []
-        is_dry_run = self.config.settings.get("dry_run", True)
-
-        if death_row_plex_items:
-            logger.info(
-                "Found %d items in leaving_soon, %d still match deletion criteria",
-                len(death_row_plex_items),
-                len(items_to_delete)
-            )
+        if media_type == "movie":
+            trakt_items = self.media_cleaner.get_trakt_items("movie", library)
+            activity = self.media_cleaner.get_movie_activity(library, plex_library)
+            media_data = media_instance.get_movies()
+            instance_kwargs = {"radarr_instance": media_instance}
         else:
-            logger.info("No items in leaving_soon (first run or empty death row)")
-
-        # Delete items that are in death row AND still match deletion rules
-        for sonarr_show in items_to_delete:
-            disk_size = sonarr_show.get("statistics", {}).get("sizeOnDisk", 0)
-            total_episodes = sonarr_show.get("statistics", {}).get("episodeFileCount", 0)
-            saved_space += disk_size
-
-            if is_dry_run:
-                logger.info(
-                    "[DRY-RUN] Would have deleted show '%s' from death row (%s - %s episodes)",
-                    sonarr_show["title"],
-                    print_readable_freed_space(disk_size),
-                    total_episodes,
-                )
-            else:
-                logger.info(
-                    "Deleting show '%s' from death row (%s - %s episodes)",
-                    sonarr_show["title"],
-                    print_readable_freed_space(disk_size),
-                    total_episodes,
-                )
-                self.media_cleaner.delete_series(sonarr_instance, sonarr_show)
-                # Update Overseerr status if configured
-                self.media_cleaner._update_overseerr_status(library, sonarr_show, "tv")
-
-            deleted_items.append(sonarr_show)
-
-        # Get preview candidates for next run (excluding what we just deleted)
-        preview_next = library.get("preview_next")
-        if preview_next is None:
-            preview_next = library.get("max_actions_per_run", 10)
-
-        # Preview = candidates that weren't deleted, limited to preview_next
-        deleted_ids = {s.get("id") for s in deleted_items}
-        preview_candidates = [
-            s for s in all_deletion_candidates
-            if s.get("id") not in deleted_ids
-        ][:preview_next]
-
-        return saved_space, deleted_items, preview_candidates
-
-    def _get_all_deletion_candidates_movies(self, library, radarr_instance, plex_library):
-        """
-        Get ALL movies that currently match deletion rules.
-
-        This is used by the death row pattern to determine which items
-        should actually be deleted (intersection of death row AND current candidates).
-
-        Args:
-            library: Library configuration dict
-            radarr_instance: Radarr instance
-            plex_library: Plex library section
-
-        Returns:
-            List of all Radarr movie dicts that match deletion criteria
-        """
-        trakt_movies = self.media_cleaner.get_trakt_items("movie", library)
-        movie_activity = self.media_cleaner.get_movie_activity(library, plex_library)
-        all_movie_data = radarr_instance.get_movies()
+            media_data = self.media_cleaner.filter_shows(library, all_data) if all_data else []
+            trakt_items = self.media_cleaner.get_trakt_items("show", library)
+            activity = self.media_cleaner.get_show_activity(library, plex_library)
+            instance_kwargs = {"sonarr_instance": media_instance}
 
         candidates = []
-        for radarr_movie in self.media_cleaner.process_library_rules(
-            library, plex_library, all_movie_data, movie_activity, trakt_movies,
-            radarr_instance=radarr_instance
+        for media_item in self.media_cleaner.process_library_rules(
+            library, plex_library, media_data, activity, trakt_items, **instance_kwargs
         ):
-            candidates.append(radarr_movie)
+            candidates.append(media_item)
+            if limit is not None and len(candidates) >= limit:
+                break
 
         return candidates
-
-    def _get_all_deletion_candidates_shows(self, library, sonarr_instance, plex_library, unfiltered_all_show_data):
-        """
-        Get ALL shows that currently match deletion rules.
-
-        This is used by the death row pattern to determine which items
-        should actually be deleted (intersection of death row AND current candidates).
-
-        Args:
-            library: Library configuration dict
-            sonarr_instance: Sonarr instance
-            plex_library: Plex library section
-            unfiltered_all_show_data: All shows from Sonarr
-
-        Returns:
-            List of all Sonarr show dicts that match deletion criteria
-        """
-        all_show_data = self.media_cleaner.filter_shows(library, unfiltered_all_show_data)
-        trakt_items = self.media_cleaner.get_trakt_items("show", library)
-        show_activity = self.media_cleaner.get_show_activity(library, plex_library)
-
-        candidates = []
-        for sonarr_show in self.media_cleaner.process_library_rules(
-            library, plex_library, all_show_data, show_activity, trakt_items,
-            sonarr_instance=sonarr_instance
-        ):
-            candidates.append(sonarr_show)
-
-        return candidates
-
-    def _get_preview_candidates_movies(self, library, radarr_instance, plex_library, preview_limit):
-        """
-        Get preview candidates for movies (items to be tagged for next run).
-
-        Uses the existing rule-based logic but only returns preview candidates.
-
-        Args:
-            library: Library configuration dict
-            radarr_instance: Radarr instance
-            plex_library: Plex library section
-            preview_limit: Maximum number of preview items to return
-
-        Returns:
-            List of Radarr movie dicts
-        """
-        if preview_limit == 0:
-            return []
-
-        trakt_movies = self.media_cleaner.get_trakt_items("movie", library)
-        movie_activity = self.media_cleaner.get_movie_activity(library, plex_library)
-        all_movie_data = radarr_instance.get_movies()
-
-        preview_candidates = []
-        for radarr_movie in self.media_cleaner.process_library_rules(
-            library, plex_library, all_movie_data, movie_activity, trakt_movies,
-            radarr_instance=radarr_instance
-        ):
-            if len(preview_candidates) >= preview_limit:
-                break
-            preview_candidates.append(radarr_movie)
-
-        return preview_candidates
-
-    def _get_preview_candidates_shows(self, library, sonarr_instance, plex_library, unfiltered_all_show_data, preview_limit):
-        """
-        Get preview candidates for shows (items to be tagged for next run).
-
-        Uses the existing rule-based logic but only returns preview candidates.
-
-        Args:
-            library: Library configuration dict
-            sonarr_instance: Sonarr instance
-            plex_library: Plex library section
-            unfiltered_all_show_data: All shows from Sonarr
-            preview_limit: Maximum number of preview items to return
-
-        Returns:
-            List of Sonarr show dicts
-        """
-        if preview_limit == 0:
-            return []
-
-        all_show_data = self.media_cleaner.filter_shows(library, unfiltered_all_show_data)
-        trakt_items = self.media_cleaner.get_trakt_items("show", library)
-        show_activity = self.media_cleaner.get_show_activity(library, plex_library)
-
-        preview_candidates = []
-        for sonarr_show in self.media_cleaner.process_library_rules(
-            library, plex_library, all_show_data, show_activity, trakt_items,
-            sonarr_instance=sonarr_instance
-        ):
-            if len(preview_candidates) >= preview_limit:
-                break
-            preview_candidates.append(sonarr_show)
-
-        return preview_candidates
 
     def process_radarr(self):
         for name, radarr in self.radarr.items():
-            logger.info("Processing radarr instance: '%s'", name)
+            logger.info(f"Processing radarr instance: '{name}'")
+
+            # Get libraries for this instance
+            libraries_for_instance = [
+                lib for lib in self.config.settings.get("libraries", [])
+                if lib.get("radarr") == name
+            ]
+            total_libraries = len(libraries_for_instance)
 
             saved_space = 0
             all_preview = []
-            for library in self.config.settings.get("libraries", []):
-                if library.get("radarr") == name:
-                    try:
-                        leaving_soon_config = library.get("leaving_soon")
+            for idx, library in enumerate(libraries_for_instance, 1):
+                library_name = library.get("name", "Unknown")
+                logger.info(f"[{idx}/{total_libraries}] Processing library '{library_name}'")
+                library_start = time.time()
 
-                        if leaving_soon_config:
-                            # Death row pattern: delete previously tagged items, tag new preview
-                            space, deleted, preview = self._process_radarr_death_row(
-                                library, radarr
-                            )
-                        else:
-                            # Normal deletion flow
-                            space, deleted, preview = self.media_cleaner.process_library_movies(
-                                library, radarr
-                            )
+                try:
+                    leaving_soon_config = library.get("leaving_soon")
 
-                        saved_space += space
-                        self.libraries_processed += 1
+                    if leaving_soon_config:
+                        # Death row pattern: delete previously tagged items, tag new preview
+                        space, deleted, preview = self._process_death_row(
+                            library, radarr, "movie"
+                        )
+                    else:
+                        # Normal deletion flow
+                        space, deleted, preview = self.media_cleaner.process_library_movies(
+                            library, radarr
+                        )
 
-                        # Track deleted items for notifications
-                        library_name = library.get("name", "Unknown")
-                        for item in deleted:
-                            self.run_result.add_deleted(
-                                DeletedItem.from_radarr(item, library_name, name)
-                            )
+                    saved_space += space
+                    self.libraries_processed += 1
 
-                        if leaving_soon_config:
-                            # Process leaving_soon feature - tag preview items for next run
-                            # Don't add to all_preview as these items are being tagged, not deleted
-                            self._process_library_leaving_soon(
-                                library, preview, "movie"
-                            )
-                        else:
-                            # Normal flow: preview items will be deleted on next run
-                            all_preview.extend(preview)
-                    except ConfigurationError as e:
-                        logger.error(str(e))
-                        self.libraries_failed += 1
+                    # Track deleted items for notifications
+                    for item in deleted:
+                        self.run_result.add_deleted(
+                            DeletedItem.from_radarr(item, library_name, name)
+                        )
 
-            if self.config.settings.get("dry_run"):
-                logger.info(
-                    "[DRY-RUN] Would have freed %s of space by deleting movies",
-                    print_readable_freed_space(saved_space),
-                )
-            else:
-                logger.info(
-                    "Freed %s of space by deleting movies",
-                    print_readable_freed_space(saved_space),
-                )
+                    if leaving_soon_config:
+                        # Process leaving_soon feature - tag preview items for next run
+                        # Don't add to all_preview as these items are being tagged, not deleted
+                        self._process_library_leaving_soon(
+                            library, preview, "movie"
+                        )
+                    else:
+                        # Normal flow: preview items will be deleted on next run
+                        all_preview.extend(preview)
+
+                    # Log library completion time
+                    library_duration = time.time() - library_start
+                    logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
+                except ConfigurationError as e:
+                    logger.error(str(e))
+                    self.libraries_failed += 1
+
+            logger.log_freed_space(saved_space, "movie", self.config.settings.get("dry_run", True))
 
             # Log preview of next scheduled deletions
             self._log_preview(all_preview, "movie")
 
     def process_sonarr(self):
         for name, sonarr in self.sonarr.items():
-            logger.info("Processing sonarr instance: '%s'", name)
+            logger.info(f"Processing sonarr instance: '{name}'")
             unfiltered_all_show_data = sonarr.get_series()
+
+            # Get libraries for this instance
+            libraries_for_instance = [
+                lib for lib in self.config.settings.get("libraries", [])
+                if lib.get("sonarr") == name
+            ]
+            total_libraries = len(libraries_for_instance)
 
             saved_space = 0
             all_preview = []
-            for library in self.config.settings.get("libraries", []):
-                if library.get("sonarr") == name:
-                    try:
-                        leaving_soon_config = library.get("leaving_soon")
+            for idx, library in enumerate(libraries_for_instance, 1):
+                library_name = library.get("name", "Unknown")
+                logger.info(f"[{idx}/{total_libraries}] Processing library '{library_name}'")
+                library_start = time.time()
 
-                        if leaving_soon_config:
-                            # Death row pattern: delete previously tagged items, tag new preview
-                            space, deleted, preview = self._process_sonarr_death_row(
-                                library, sonarr, unfiltered_all_show_data
-                            )
-                        else:
-                            # Normal deletion flow
-                            space, deleted, preview = self.media_cleaner.process_library(
-                                library, sonarr, unfiltered_all_show_data
-                            )
+                try:
+                    leaving_soon_config = library.get("leaving_soon")
 
-                        saved_space += space
-                        self.libraries_processed += 1
+                    if leaving_soon_config:
+                        # Death row pattern: delete previously tagged items, tag new preview
+                        space, deleted, preview = self._process_death_row(
+                            library, sonarr, "show", unfiltered_all_show_data
+                        )
+                    else:
+                        # Normal deletion flow
+                        space, deleted, preview = self.media_cleaner.process_library(
+                            library, sonarr, unfiltered_all_show_data
+                        )
 
-                        # Track deleted items for notifications
-                        library_name = library.get("name", "Unknown")
-                        for item in deleted:
-                            self.run_result.add_deleted(
-                                DeletedItem.from_sonarr(item, library_name, name)
-                            )
+                    saved_space += space
+                    self.libraries_processed += 1
 
-                        if leaving_soon_config:
-                            # Process leaving_soon feature - tag preview items for next run
-                            # Don't add to all_preview as these items are being tagged, not deleted
-                            self._process_library_leaving_soon(
-                                library, preview, "show"
-                            )
-                        else:
-                            # Normal flow: preview items will be deleted on next run
-                            all_preview.extend(preview)
-                    except ConfigurationError as e:
-                        logger.error(str(e))
-                        self.libraries_failed += 1
+                    # Track deleted items for notifications
+                    for item in deleted:
+                        self.run_result.add_deleted(
+                            DeletedItem.from_sonarr(item, library_name, name)
+                        )
 
-            if self.config.settings.get("dry_run"):
-                logger.info(
-                    "[DRY-RUN] Would have freed %s of space by deleting shows",
-                    print_readable_freed_space(saved_space),
-                )
-            else:
-                logger.info(
-                    "Freed %s of space by deleting shows",
-                    print_readable_freed_space(saved_space),
-                )
+                    if leaving_soon_config:
+                        # Process leaving_soon feature - tag preview items for next run
+                        # Don't add to all_preview as these items are being tagged, not deleted
+                        self._process_library_leaving_soon(
+                            library, preview, "show"
+                        )
+                    else:
+                        # Normal flow: preview items will be deleted on next run
+                        all_preview.extend(preview)
+
+                    # Log library completion time
+                    library_duration = time.time() - library_start
+                    logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
+                except ConfigurationError as e:
+                    logger.error(str(e))
+                    self.libraries_failed += 1
+
+            logger.log_freed_space(saved_space, "show", self.config.settings.get("dry_run", True))
 
             # Log preview of next scheduled deletions
             self._log_preview(all_preview, "show")
@@ -842,6 +684,60 @@ class Deleterr:
                 print_readable_freed_space(size),
             )
 
+    def _log_run_summary(self):
+        """Log comprehensive run summary at end of execution."""
+        separator = "=" * 60
+
+        logger.info(separator)
+        logger.info("RUN SUMMARY")
+        logger.info(separator)
+
+        # Dry-run mode indicator
+        if self.run_result.is_dry_run:
+            logger.info("[DRY-RUN MODE] No changes were made")
+
+        # Duration
+        if self.run_result.duration_seconds is not None:
+            logger.info(f"Duration: {logger.format_duration(self.run_result.duration_seconds)}")
+
+        # Libraries processed
+        logger.info(f"Libraries processed: {self.libraries_processed}")
+        if self.libraries_failed > 0:
+            logger.info(f"Libraries failed: {self.libraries_failed}")
+
+        # Items summary
+        total_deleted = len(self.run_result.deleted_items)
+        total_preview = len(self.run_result.preview_items)
+
+        if self.run_result.library_stats:
+            total_found = self.run_result.total_items_found
+            total_unmatched = self.run_result.total_unmatched
+            unmatched_str = f" ({total_unmatched} unmatched)" if total_unmatched > 0 else ""
+            logger.info(f"Total items found: {total_found}{unmatched_str}")
+
+        logger.info(f"Total items deleted: {total_deleted}")
+
+        if total_preview > 0:
+            logger.info(f"Total items previewed: {total_preview}")
+
+        # Space freed
+        total_freed = self.run_result.total_freed_bytes
+        if total_freed > 0:
+            logger.info(f"Total space freed: {logger.format_size(total_freed)}")
+
+        # Per-library statistics (if tracked)
+        if self.run_result.library_stats:
+            logger.info("-" * 40)
+            logger.info("Per-Library Statistics:")
+            for stats in self.run_result.library_stats:
+                unmatched_info = f", {stats.items_unmatched} unmatched" if stats.items_unmatched > 0 else ""
+                logger.info(
+                    f"  {stats.name} ({stats.instance_type.title()}): "
+                    f"{stats.items_found} found, {stats.items_deleted} deleted{unmatched_info}"
+                )
+
+        logger.info(separator)
+
     def _send_notification(self):
         """Send notification with run results."""
         if self.notifications.is_enabled():
@@ -884,8 +780,8 @@ def main():
         console=True, log_dir="/config/logs", verbose=log_level == "DEBUG"
     )
 
-    logger.info("Running version %s", get_file_contents("/app/commit_tag.txt"))
-    logger.info("Log level set to %s", log_level)
+    logger.info(f"Running version {get_file_contents('/app/commit_tag.txt')}")
+    logger.info(f"Log level set to {log_level}")
 
     parser = argparse.ArgumentParser(description="Deleterr - Automated media cleanup for Plex")
     parser.add_argument(

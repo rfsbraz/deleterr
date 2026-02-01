@@ -72,8 +72,29 @@ class Overseerr:
             )
             response.raise_for_status()
             return response.json() if response.content else {}
+        except requests.exceptions.ConnectionError as e:
+            logger.warning(f"Cannot reach Overseerr at {self.url}: Connection refused or host unreachable")
+            logger.debug(f"Connection error details: {e}")
+            return None
+        except requests.exceptions.Timeout as e:
+            logger.warning(f"Overseerr request to {endpoint} timed out after 30s")
+            logger.debug(f"Timeout details: {e}")
+            return None
+        except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code if e.response else "unknown"
+            if status_code == 401:
+                logger.warning(f"Overseerr API authentication failed (HTTP 401): Check your API key")
+            elif status_code == 403:
+                logger.warning(f"Overseerr API access denied (HTTP 403): API key may lack permissions")
+            elif status_code == 404:
+                logger.debug(f"Overseerr resource not found (HTTP 404): {endpoint}")
+            elif status_code >= 500:
+                logger.warning(f"Overseerr server error (HTTP {status_code}) on {endpoint}")
+            else:
+                logger.warning(f"Overseerr API error (HTTP {status_code}) on {endpoint}: {e}")
+            return None
         except requests.exceptions.RequestException as e:
-            logger.debug(f"Overseerr API request failed: {e}")
+            logger.warning(f"Overseerr API request failed: {e}")
             return None
 
     def test_connection(self):
@@ -306,8 +327,8 @@ class Overseerr:
 
         media_id = self._get_media_id(tmdb_id, media_type)
         if not media_id:
-            logger.warning(
-                f"Could not find Overseerr media ID for TMDB ID {tmdb_id}"
+            logger.debug(
+                f"Media not found in Overseerr (TMDB: {tmdb_id}) - may not have been requested via Overseerr"
             )
             return False
 
@@ -323,7 +344,8 @@ class Overseerr:
             return True
 
         logger.warning(
-            f"Failed to update Overseerr status for media ID {media_id} (TMDB: {tmdb_id})"
+            f"Could not update Overseerr status for TMDB {tmdb_id} (media_id: {media_id}). "
+            "The item will remain marked as 'available' in Overseerr."
         )
         return False
 

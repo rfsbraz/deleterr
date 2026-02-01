@@ -384,8 +384,10 @@ class MediaCleaner:
             return 0, [], []
 
         all_show_data = self.filter_shows(library, unfiltered_all_show_data)
-        logger.info("Instance has %s items to process of type '%s'", len(all_show_data),
-                    library.get("series_type", DEFAULT_SONARR_SERIES_TYPE))
+        logger.info(
+            f"Instance has {len(all_show_data)} items to process of type "
+            f"'{library.get('series_type', DEFAULT_SONARR_SERIES_TYPE)}'"
+        )
 
         if not all_show_data:
             return 0, [], []
@@ -399,16 +401,16 @@ class MediaCleaner:
         if preview_next is None:
             preview_next = max_actions_per_run or 0
 
-        logger.info("Processing library '%s'", library.get("name"))
+        library_name = library.get('name')
+        logger.debug(f"Fetching Plex library '{library_name}'...")
+        plex_library = self.get_plex_library(library)
+        logger.info(f"Plex library loaded ({plex_library.totalSize} items)")
 
         trakt_items = self.get_trakt_items("show", library)
-        logger.info("Got %s trakt items to exclude", len(trakt_items))
-
-        plex_library = self.get_plex_library(library)
-        logger.info("Got %s items in plex library", plex_library.totalSize)
+        logger.info(f"Got {len(trakt_items)} trakt items to exclude")
 
         show_activity = self.get_show_activity(library, plex_library)
-        logger.info("Got %s items in tautulli activity", len(show_activity))
+        logger.info(f"Got {len(show_activity)} items in tautulli activity")
 
         return self.process_shows(
             library,
@@ -488,25 +490,21 @@ class MediaCleaner:
 
         is_dry_run = self.config.settings.get("dry_run")
 
-        if is_dry_run:
-            logger.info(
-                "[DRY-RUN] [%s/%s] Would have deleted show '%s' from sonarr instance '%s'  (%s - %s episodes) ",
-                actions_performed,
-                max_actions_per_run,
-                sonarr_show["title"],
-                library.get("name"),
-                print_readable_freed_space(disk_size),
-                total_episodes,
-            )
-        else:
+        logger.log_deletion(
+            title=sonarr_show["title"],
+            size_bytes=disk_size,
+            media_type="show",
+            is_dry_run=is_dry_run,
+            action_num=actions_performed,
+            max_actions=max_actions_per_run,
+            extra_info=f"{total_episodes} episodes",
+        )
+
+        if not is_dry_run:
             self.delete_show_if_allowed(
                 library,
                 sonarr_instance,
                 sonarr_show,
-                actions_performed,
-                max_actions_per_run,
-                disk_size,
-                total_episodes,
             )
 
         return disk_size
@@ -516,20 +514,7 @@ class MediaCleaner:
             library,
             sonarr_instance,
             sonarr_show,
-            actions_performed,
-            max_actions_per_run,
-            disk_size,
-            total_episodes,
     ):
-        logger.info(
-            "[%s/%s] Deleting show '%s' from sonarr instance  '%s' (%s - %s episodes)",
-            actions_performed,
-            max_actions_per_run,
-            sonarr_show["title"],
-            library.get("name"),
-            print_readable_freed_space(disk_size),
-            total_episodes,
-        )
         self.delete_series(sonarr_instance, sonarr_show)
 
         # Update Overseerr status after successful deletion
@@ -557,10 +542,12 @@ class MediaCleaner:
         if preview_next is None:
             preview_next = max_actions_per_run or 0
 
-        logger.info("Processing library '%s'", library.get("name"))
+        library_name = library.get('name')
+        logger.debug(f"Fetching Plex library '{library_name}'...")
+        movies_library = self.get_plex_library(library)
+        logger.info(f"Plex library loaded ({movies_library.totalSize} items)")
 
         trakt_movies = self.get_trakt_items("movie", library)
-        movies_library = self.get_plex_library(library)
         movie_activity = self.get_movie_activity(library, movies_library)
 
         return self.process_movies(
@@ -640,23 +627,20 @@ class MediaCleaner:
 
         is_dry_run = self.config.settings.get("dry_run")
 
-        if is_dry_run:
-            logger.info(
-                "[DRY-RUN] [%s/%s] Would have deleted movie '%s' from radarr instance '%s' (%s)",
-                actions_performed,
-                max_actions_per_run,
-                radarr_movie["title"],
-                library.get("name"),
-                print_readable_freed_space(disk_size),
-            )
-        else:
+        logger.log_deletion(
+            title=radarr_movie["title"],
+            size_bytes=disk_size,
+            media_type="movie",
+            is_dry_run=is_dry_run,
+            action_num=actions_performed,
+            max_actions=max_actions_per_run,
+        )
+
+        if not is_dry_run:
             self.delete_movie_if_allowed(
                 library,
                 radarr_instance,
                 radarr_movie,
-                actions_performed,
-                max_actions_per_run,
-                disk_size,
             )
 
         return disk_size
@@ -674,17 +658,25 @@ class MediaCleaner:
             try:
                 if episode["episodeFileId"] != 0:
                     sonarr.del_episode_file(episode["episodeFileId"])
-            except PyarrResourceNotFound as e:
+            except PyarrResourceNotFound:
                 # If the episode file doesn't exist, it's probably because it was already deleted by sonarr
-                # Sometimes happens for multi-episode files
+                # Sometimes happens for multi-episode files - this is expected and not an error
                 logger.debug(
-                    f"Failed to delete episode file {episode['episodeFileId']} for show {sonarr_show['id']} ({sonarr_show['title']}): {e}"
+                    f"Episode file already deleted for '{sonarr_show['title']}' (file ID: {episode['episodeFileId']})"
                 )
             except PyarrServerError as e:
-                # If the episode file is still in use, we can't delete the show
-                logger.error(
-                    f"Failed to delete episode file {episode['episodeFileId']} for show {sonarr_show['id']} ({sonarr_show['title']}): {e}"
-                )
+                # If the episode file is still in use or another server error, we can't delete the show
+                error_msg = str(e).lower()
+                if "in use" in error_msg or "locked" in error_msg:
+                    logger.error(
+                        f"Cannot delete '{sonarr_show['title']}': Episode file is in use (being played or downloaded). "
+                        "Will retry on next run."
+                    )
+                else:
+                    logger.error(
+                        f"Sonarr error deleting episode file for '{sonarr_show['title']}': {e}. "
+                        "Check Sonarr logs for details. Will retry on next run."
+                    )
                 skip_deleting_show = True
                 break
 
@@ -692,8 +684,8 @@ class MediaCleaner:
         if not skip_deleting_show:
             sonarr.del_series(sonarr_show["id"], delete_files=True)
         else:
-            logger.info(
-                f"Skipping deleting show {sonarr_show['id']} ({sonarr_show['title']}) due to errors deleting episode files. It will be deleted on the next run."
+            logger.warning(
+                f"Skipping deletion of '{sonarr_show['title']}' - will be deleted on the next run"
             )
 
     def delete_movie_if_allowed(
@@ -701,18 +693,7 @@ class MediaCleaner:
             library,
             radarr_instance,
             radarr_movie,
-            actions_performed,
-            max_actions_per_run,
-            disk_size,
     ):
-        logger.info(
-            "[%s/%s] Deleting movie '%s' from radarr instance  '%s' (%s)",
-            actions_performed,
-            max_actions_per_run,
-            radarr_movie["title"],
-            library.get("name"),
-            print_readable_freed_space(disk_size),
-        )
         radarr_instance.del_movie(
             radarr_movie["id"],
             delete_files=True,
@@ -748,12 +729,14 @@ class MediaCleaner:
                     f"Updated Overseerr status for '{media_data.get('title')}' (TMDB: {tmdb_id})"
                 )
             else:
-                logger.warning(
-                    f"Failed to update Overseerr status for '{media_data.get('title')}'"
+                logger.debug(
+                    f"Could not update Overseerr status for '{media_data.get('title')}' - "
+                    "may not have been requested via Overseerr"
                 )
         except Exception as e:
             logger.warning(
-                f"Error updating Overseerr status for '{media_data.get('title')}': {e}"
+                f"Overseerr status update failed for '{media_data.get('title')}': {e}. "
+                "The item will still be deleted but will remain marked as 'available' in Overseerr."
             )
 
     def get_death_row_items(self, library_config, plex_library):
@@ -889,7 +872,10 @@ class MediaCleaner:
                 f"Updated collection '{collection_name}' with {len(plex_items)} items"
             )
         except Exception as e:
-            logger.error(f"Error updating collection '{collection_name}': {e}")
+            logger.error(
+                f"Failed to update leaving_soon collection '{collection_name}': {e}. "
+                "Users will not see updated leaving_soon notifications in Plex."
+            )
 
     def _update_leaving_soon_labels(self, plex_library, plex_items, labels_config):
         """

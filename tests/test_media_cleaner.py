@@ -880,9 +880,6 @@ def test_process_movie_not_dry_run(mock_delete_movie_if_allowed, standard_config
         library,
         radarr_instance,
         radarr_movie,
-        actions_performed,
-        max_actions_per_run,
-        radarr_movie["sizeOnDisk"],
     )
     assert result == radarr_movie["sizeOnDisk"]
 
@@ -1001,9 +998,6 @@ def test_delete_movie_if_allowed(standard_config):
     library = {"name": "Test Library"}
     radarr_instance = MagicMock()
     radarr_movie = {"id": 1, "title": "Test Movie"}
-    actions_performed = 0
-    max_actions_per_run = 1
-    disk_size = 100
 
     media_cleaner_instance = MediaCleaner(standard_config)
 
@@ -1012,9 +1006,6 @@ def test_delete_movie_if_allowed(standard_config):
         library,
         radarr_instance,
         radarr_movie,
-        actions_performed,
-        max_actions_per_run,
-        disk_size,
     )
 
     # Assert
