@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1](https://github.com/rfsbraz/deleterr/compare/v0.2.0...v0.2.1) (2026-02-01)
+
+
+### Features
+
+* add last_watched sort field and multi-level sorting ([#202](https://github.com/rfsbraz/deleterr/issues/202)) ([725b6b4](https://github.com/rfsbraz/deleterr/commit/725b6b46b48eb870f6b716ebde032a2c17c3dee6))
+
+
+### Performance Improvements
+
+* optimize long-running queries with parallelization and indexing ([#203](https://github.com/rfsbraz/deleterr/issues/203)) ([1b75d5a](https://github.com/rfsbraz/deleterr/commit/1b75d5a3b6546842de78750f7167902dbf764dfd))
+
 ## [0.2.0](https://github.com/rfsbraz/deleterr/compare/v0.1.5...v0.2.0) (2026-02-01)
 
 
