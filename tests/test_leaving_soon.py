@@ -924,3 +924,239 @@ class TestLeavingSoonNotifications:
         assert len(items) == 1
         assert items[0].title == "Show 1"
         assert items[0].media_type == "show"
+
+
+class TestLeavingSoonPreviewDoesNotDuplicate:
+    """Tests ensuring leaving_soon preview items don't appear in 'would be deleted' list.
+
+    The critical behavior: when leaving_soon is enabled, items to be tagged should
+    ONLY appear in the "would be added to leaving_soon" log, NOT in the
+    "Would be deleted" log. These are mutually exclusive states.
+    """
+
+    @pytest.fixture
+    def mock_config(self):
+        """Create a mock config for Deleterr."""
+        return MagicMock(
+            settings={
+                "dry_run": True,  # Dry run to see logs
+                "plex": {"url": "http://localhost:32400", "token": "test_token"},
+                "radarr": [{"name": "Radarr", "url": "http://localhost:7878", "api_key": "test"}],
+                "sonarr": [{"name": "Sonarr", "url": "http://localhost:8989", "api_key": "test"}],
+                "libraries": [],
+                "ssl_verify": False,
+            }
+        )
+
+    @pytest.fixture
+    def deleterr_instance(self, mock_config):
+        """Create a Deleterr instance with mocked dependencies."""
+        with patch("app.deleterr.PlexMediaServer"), \
+             patch("app.deleterr.MediaCleaner"), \
+             patch("app.deleterr.NotificationManager"), \
+             patch("app.deleterr.DRadarr"), \
+             patch("app.deleterr.DSonarr"):
+
+            from app.deleterr import Deleterr
+
+            # Create instance without running __init__ logic
+            instance = object.__new__(Deleterr)
+            instance.config = mock_config
+            instance.media_server = MagicMock()
+            instance.media_cleaner = MagicMock()
+            instance.notifications = MagicMock()
+            instance.run_result = MagicMock()
+            instance.radarr = {"Radarr": MagicMock()}
+            instance.sonarr = {"Sonarr": MagicMock()}
+            instance.libraries_processed = 0
+            instance.libraries_failed = 0
+
+            return instance
+
+    def test_leaving_soon_preview_not_in_deletion_preview_movies(self, mock_config, deleterr_instance):
+        """Test that movie items being tagged for leaving_soon don't appear in deletion preview.
+
+        This test verifies the fix for the bug where items showed up in BOTH:
+        - "[DRY-RUN] 2 items would be added to leaving_soon collection/labels"
+        - "[DRY-RUN] Would be deleted (2 items, ...)"
+
+        With leaving_soon enabled, items should ONLY appear in the first list.
+        """
+        # Configure a library with leaving_soon enabled
+        library_with_leaving_soon = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+        mock_config.settings["libraries"] = [library_with_leaving_soon]
+
+        # Preview items that would be tagged for leaving_soon
+        preview_items = [
+            {"id": 1, "title": "Movie A", "year": 2020, "tmdbId": 550, "sizeOnDisk": 1000000000},
+            {"id": 2, "title": "Movie B", "year": 2021, "tmdbId": 551, "sizeOnDisk": 2000000000},
+        ]
+
+        # Mock _process_radarr_death_row to return preview items
+        deleterr_instance._process_radarr_death_row = MagicMock(
+            return_value=(0, [], preview_items)  # saved_space=0, deleted=[], preview=items
+        )
+
+        # Track what _log_preview receives
+        log_preview_calls = []
+        original_log_preview = deleterr_instance._log_preview
+
+        def tracking_log_preview(items, media_type):
+            log_preview_calls.append(items)
+
+        deleterr_instance._log_preview = tracking_log_preview
+
+        # Mock _process_library_leaving_soon to do nothing
+        deleterr_instance._process_library_leaving_soon = MagicMock()
+
+        # Run process_radarr
+        deleterr_instance.process_radarr()
+
+        # _log_preview should be called with an EMPTY list for leaving_soon libraries
+        # because preview items are for tagging, not for "would be deleted"
+        assert len(log_preview_calls) == 1, "Expected _log_preview to be called once"
+        assert log_preview_calls[0] == [], \
+            f"Expected empty preview list for leaving_soon library, got {len(log_preview_calls[0])} items: " \
+            f"{[i.get('title') for i in log_preview_calls[0]]}"
+
+    def test_leaving_soon_preview_not_in_deletion_preview_shows(self, mock_config, deleterr_instance):
+        """Test that show items being tagged for leaving_soon don't appear in deletion preview."""
+        # Configure a library with leaving_soon enabled
+        library_with_leaving_soon = {
+            "name": "TV Shows",
+            "sonarr": "Sonarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+        mock_config.settings["libraries"] = [library_with_leaving_soon]
+
+        # Preview items that would be tagged for leaving_soon
+        preview_items = [
+            {"id": 1, "title": "Show A", "year": 2020, "tvdbId": 81189,
+             "statistics": {"sizeOnDisk": 5000000000, "episodeFileCount": 10}},
+        ]
+
+        # Mock _process_sonarr_death_row to return preview items
+        deleterr_instance._process_sonarr_death_row = MagicMock(
+            return_value=(0, [], preview_items)  # saved_space=0, deleted=[], preview=items
+        )
+
+        # Track what _log_preview receives
+        log_preview_calls = []
+
+        def tracking_log_preview(items, media_type):
+            log_preview_calls.append(items)
+
+        deleterr_instance._log_preview = tracking_log_preview
+
+        # Mock _process_library_leaving_soon to do nothing
+        deleterr_instance._process_library_leaving_soon = MagicMock()
+
+        # Mock get_series to return empty (we're testing the logic flow, not series processing)
+        deleterr_instance.sonarr["Sonarr"].get_series.return_value = []
+
+        # Run process_sonarr
+        deleterr_instance.process_sonarr()
+
+        # _log_preview should be called with an EMPTY list for leaving_soon libraries
+        assert len(log_preview_calls) == 1, "Expected _log_preview to be called once"
+        assert log_preview_calls[0] == [], \
+            f"Expected empty preview list for leaving_soon library, got {len(log_preview_calls[0])} items"
+
+    def test_normal_library_still_shows_deletion_preview(self, mock_config, deleterr_instance):
+        """Test that libraries WITHOUT leaving_soon still show deletion preview correctly."""
+        # Configure a library WITHOUT leaving_soon
+        library_without_leaving_soon = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            # No leaving_soon config
+        }
+        mock_config.settings["libraries"] = [library_without_leaving_soon]
+
+        # Preview items that would be deleted (no leaving_soon = immediate deletion candidates)
+        preview_items = [
+            {"id": 1, "title": "Movie A", "year": 2020, "tmdbId": 550, "sizeOnDisk": 1000000000},
+        ]
+
+        # Mock process_library_movies to return preview items
+        deleterr_instance.media_cleaner.process_library_movies = MagicMock(
+            return_value=(0, [], preview_items)  # saved_space=0, deleted=[], preview=items
+        )
+
+        # Track what _log_preview receives
+        log_preview_calls = []
+
+        def tracking_log_preview(items, media_type):
+            log_preview_calls.append(items)
+
+        deleterr_instance._log_preview = tracking_log_preview
+
+        # Run process_radarr
+        deleterr_instance.process_radarr()
+
+        # _log_preview should be called WITH the preview items (normal library behavior)
+        assert len(log_preview_calls) == 1, "Expected _log_preview to be called once"
+        assert len(log_preview_calls[0]) == 1, \
+            f"Expected preview list with 1 item for normal library, got {len(log_preview_calls[0])}"
+        assert log_preview_calls[0][0]["title"] == "Movie A"
+
+    def test_mixed_libraries_separate_preview_correctly(self, mock_config, deleterr_instance):
+        """Test that mixed libraries (some with leaving_soon, some without) preview correctly."""
+        # One library with leaving_soon, one without
+        mock_config.settings["libraries"] = [
+            {
+                "name": "Movies",
+                "radarr": "Radarr",
+                "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            },
+            {
+                "name": "Kids Movies",
+                "radarr": "Radarr",
+                # No leaving_soon - normal deletion flow
+            },
+        ]
+
+        # leaving_soon library returns items for tagging
+        leaving_soon_preview = [
+            {"id": 1, "title": "Movie for Tagging", "sizeOnDisk": 1000},
+        ]
+
+        # Normal library returns items for deletion
+        normal_preview = [
+            {"id": 2, "title": "Movie for Deletion", "sizeOnDisk": 2000},
+        ]
+
+        call_count = [0]
+
+        def mock_death_row(*args):
+            return (0, [], leaving_soon_preview)
+
+        def mock_normal(*args):
+            return (0, [], normal_preview)
+
+        deleterr_instance._process_radarr_death_row = mock_death_row
+        deleterr_instance.media_cleaner.process_library_movies = mock_normal
+        deleterr_instance._process_library_leaving_soon = MagicMock()
+
+        # Track what _log_preview receives
+        log_preview_calls = []
+
+        def tracking_log_preview(items, media_type):
+            log_preview_calls.append([i.get("title") for i in items])
+
+        deleterr_instance._log_preview = tracking_log_preview
+
+        # Run process_radarr
+        deleterr_instance.process_radarr()
+
+        # _log_preview should only contain items from the normal library
+        assert len(log_preview_calls) == 1
+        assert "Movie for Deletion" in log_preview_calls[0], \
+            f"Expected normal library preview, got: {log_preview_calls[0]}"
+        assert "Movie for Tagging" not in log_preview_calls[0], \
+            f"leaving_soon preview should not appear in deletion preview: {log_preview_calls[0]}"

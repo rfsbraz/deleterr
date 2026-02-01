@@ -596,7 +596,6 @@ class Deleterr:
                             )
 
                         saved_space += space
-                        all_preview.extend(preview)
                         self.libraries_processed += 1
 
                         # Track deleted items for notifications
@@ -606,10 +605,15 @@ class Deleterr:
                                 DeletedItem.from_radarr(item, library_name, name)
                             )
 
-                        # Process leaving_soon feature - tag preview items for next run
-                        self._process_library_leaving_soon(
-                            library, preview, "movie"
-                        )
+                        if leaving_soon_config:
+                            # Process leaving_soon feature - tag preview items for next run
+                            # Don't add to all_preview as these items are being tagged, not deleted
+                            self._process_library_leaving_soon(
+                                library, preview, "movie"
+                            )
+                        else:
+                            # Normal flow: preview items will be deleted on next run
+                            all_preview.extend(preview)
                     except ConfigurationError as e:
                         logger.error(str(e))
                         self.libraries_failed += 1
@@ -652,7 +656,6 @@ class Deleterr:
                             )
 
                         saved_space += space
-                        all_preview.extend(preview)
                         self.libraries_processed += 1
 
                         # Track deleted items for notifications
@@ -662,10 +665,15 @@ class Deleterr:
                                 DeletedItem.from_sonarr(item, library_name, name)
                             )
 
-                        # Process leaving_soon feature - tag preview items for next run
-                        self._process_library_leaving_soon(
-                            library, preview, "show"
-                        )
+                        if leaving_soon_config:
+                            # Process leaving_soon feature - tag preview items for next run
+                            # Don't add to all_preview as these items are being tagged, not deleted
+                            self._process_library_leaving_soon(
+                                library, preview, "show"
+                            )
+                        else:
+                            # Normal flow: preview items will be deleted on next run
+                            all_preview.extend(preview)
                     except ConfigurationError as e:
                         logger.error(str(e))
                         self.libraries_failed += 1
