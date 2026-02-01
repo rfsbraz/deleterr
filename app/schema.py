@@ -161,14 +161,37 @@ class DiskSizeThreshold(BaseModel):
 class SortConfig(BaseModel):
     """Sorting configuration for deletion order."""
 
-    field: Literal["title", "size", "release_year", "runtime", "added_date", "rating", "seasons", "episodes"] = Field(
+    field: str = Field(
         default="title",
-        description="Field to sort by: title, size, release_year, runtime, added_date, rating, seasons, episodes",
+        description="Field(s) to sort by. Comma-separated for multi-level sorting. "
+                    "Options: title, size, release_year, runtime, added_date, rating, "
+                    "seasons, episodes, last_watched. "
+                    "Example: 'last_watched,size' sorts by watch status first, then size",
     )
-    order: Literal["asc", "desc"] = Field(
+    order: str = Field(
         default="asc",
-        description="Sort order: asc (ascending), desc (descending)",
+        description="Sort order(s): asc (ascending), desc (descending). "
+                    "Comma-separated to match fields. If fewer orders than fields, "
+                    "last order is reused. Example: 'desc,asc' or just 'desc'",
     )
+
+    @model_validator(mode="after")
+    def validate_sort_fields(self):
+        valid_fields = {"title", "size", "release_year", "runtime", "added_date",
+                        "rating", "seasons", "episodes", "last_watched"}
+        valid_orders = {"asc", "desc"}
+
+        fields = [f.strip() for f in self.field.split(",")]
+        for f in fields:
+            if f not in valid_fields:
+                raise ValueError(f"Invalid sort field: {f}. Valid: {', '.join(sorted(valid_fields))}")
+
+        orders = [o.strip() for o in self.order.split(",")]
+        for o in orders:
+            if o not in valid_orders:
+                raise ValueError(f"Invalid sort order: {o}. Valid: asc, desc")
+
+        return self
 
 
 class LeavingSoonCollectionConfig(BaseModel):
@@ -177,6 +200,14 @@ class LeavingSoonCollectionConfig(BaseModel):
     name: str = Field(
         default="Leaving Soon",
         description="Name of the collection to create in Plex",
+    )
+    promote_home: bool = Field(
+        default=True,
+        description="Promote collection to appear on your Plex Home page",
+    )
+    promote_shared: bool = Field(
+        default=True,
+        description="Promote collection to appear on shared users' Home pages (Friends' Home)",
     )
 
 

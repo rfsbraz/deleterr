@@ -64,6 +64,25 @@ class PlexMediaServer(BaseMediaServer):
             logger.debug(f"Creating new collection '{name}' in library '{library.title}'")
             return library.createCollection(title=name, smart=False, items=[])
 
+    def set_collection_visibility(
+        self, collection: Any, home: bool = False, shared: bool = True
+    ) -> None:
+        """Set collection visibility on home screens.
+
+        Args:
+            collection: The Plex collection.
+            home: Whether to show on owner's Home page.
+            shared: Whether to show on shared users' (Friends') Home pages.
+        """
+        try:
+            hub = collection.visibility()
+            hub.updateVisibility(home=home, shared=shared)
+            logger.debug(
+                f"Set collection '{collection.title}' visibility: home={home}, shared={shared}"
+            )
+        except Exception as e:
+            logger.warning(f"Could not set collection visibility: {e}")
+
     def get_collection(self, library: Any, name: str) -> Optional[Any]:
         """Get collection by name if it exists.
 

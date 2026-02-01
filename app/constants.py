@@ -8,6 +8,7 @@ VALID_SORT_FIELDS = [
     "rating",
     "seasons",
     "episodes",
+    "last_watched",
 ]
 
 VALID_INSTANCE_TYPES = ["radarr", "sonarr"]

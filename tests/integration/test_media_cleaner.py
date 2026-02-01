@@ -635,6 +635,167 @@ class TestSortingBehavior:
         assert sorted_list[1]["title"] == "Medium Rated"
         assert sorted_list[2]["title"] == "Low Rated"
 
+    def test_sort_by_multiple_fields(
+        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
+    ):
+        """Test multi-level sorting with comma-separated fields."""
+        from app.media_cleaner import sort_media
+
+        media_list = [
+            {"title": "A", "year": 2020, "sizeOnDisk": 1_000_000_000},
+            {"title": "B", "year": 2020, "sizeOnDisk": 3_000_000_000},
+            {"title": "C", "year": 2019, "sizeOnDisk": 2_000_000_000},
+            {"title": "D", "year": 2020, "sizeOnDisk": 2_000_000_000},
+        ]
+
+        # Sort by year desc, then size desc
+        sort_config = {"field": "release_year,size", "order": "desc"}
+        sorted_list = sort_media(media_list, sort_config)
+
+        # 2020 items first by size desc (B=3GB, D=2GB, A=1GB), then 2019 (C)
+        assert sorted_list[0]["title"] == "B"
+        assert sorted_list[1]["title"] == "D"
+        assert sorted_list[2]["title"] == "A"
+        assert sorted_list[3]["title"] == "C"
+
+    def test_sort_by_multiple_fields_mixed_orders(
+        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
+    ):
+        """Test multi-level sorting with different orders per field."""
+        from app.media_cleaner import sort_media
+
+        media_list = [
+            {"title": "A", "year": 2020, "sizeOnDisk": 1_000_000_000},
+            {"title": "B", "year": 2020, "sizeOnDisk": 3_000_000_000},
+            {"title": "C", "year": 2019, "sizeOnDisk": 2_000_000_000},
+            {"title": "D", "year": 2020, "sizeOnDisk": 2_000_000_000},
+        ]
+
+        # Sort by year desc, then size asc
+        sort_config = {"field": "release_year,size", "order": "desc,asc"}
+        sorted_list = sort_media(media_list, sort_config)
+
+        # 2020 items first by size asc (A=1GB, D=2GB, B=3GB), then 2019 (C)
+        assert sorted_list[0]["title"] == "A"
+        assert sorted_list[1]["title"] == "D"
+        assert sorted_list[2]["title"] == "B"
+        assert sorted_list[3]["title"] == "C"
+
+    def test_sort_by_last_watched_desc(
+        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
+    ):
+        """Test sorting by last_watched with unwatched items first."""
+        from app.media_cleaner import sort_media
+
+        # Create mock Plex items
+        plex_item_a = MagicMock()
+        plex_item_a.guid = "plex://movie/a"
+        plex_item_a.guids = [MagicMock(id="tmdb://1001")]
+        plex_item_a.title = "Watched Recently"
+        plex_item_a.year = 2020
+
+        plex_item_b = MagicMock()
+        plex_item_b.guid = "plex://movie/b"
+        plex_item_b.guids = [MagicMock(id="tmdb://1002")]
+        plex_item_b.title = "Watched Long Ago"
+        plex_item_b.year = 2019
+
+        plex_item_c = MagicMock()
+        plex_item_c.guid = "plex://movie/c"
+        plex_item_c.guids = [MagicMock(id="tmdb://1003")]
+        plex_item_c.title = "Never Watched"
+        plex_item_c.year = 2021
+
+        plex_guid_item_pair = [
+            (["plex://movie/a", "tmdb://1001"], plex_item_a),
+            (["plex://movie/b", "tmdb://1002"], plex_item_b),
+            (["plex://movie/c", "tmdb://1003"], plex_item_c),
+        ]
+
+        # Activity data: A watched 10 days ago, B watched 30 days ago, C never
+        activity_data = {
+            "plex://movie/a": {
+                "title": "Watched Recently",
+                "year": 2020,
+                "last_watched": datetime.now() - timedelta(days=10),
+            },
+            "plex://movie/b": {
+                "title": "Watched Long Ago",
+                "year": 2019,
+                "last_watched": datetime.now() - timedelta(days=30),
+            },
+        }
+
+        media_list = [
+            {"title": "Watched Recently", "year": 2020, "tmdbId": 1001},
+            {"title": "Watched Long Ago", "year": 2019, "tmdbId": 1002},
+            {"title": "Never Watched", "year": 2021, "tmdbId": 1003},
+        ]
+
+        sort_config = {"field": "last_watched", "order": "desc"}
+        sorted_list = sort_media(media_list, sort_config, activity_data, plex_guid_item_pair)
+
+        # Unwatched first, then longest-ago watched
+        assert sorted_list[0]["title"] == "Never Watched"
+        assert sorted_list[1]["title"] == "Watched Long Ago"
+        assert sorted_list[2]["title"] == "Watched Recently"
+
+    def test_sort_by_last_watched_then_size(
+        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
+    ):
+        """Test combined last_watched and size sorting."""
+        from app.media_cleaner import sort_media
+
+        # Create mock Plex items - two unwatched items to test secondary sort
+        plex_item_a = MagicMock()
+        plex_item_a.guid = "plex://movie/a"
+        plex_item_a.guids = [MagicMock(id="tmdb://1001")]
+        plex_item_a.title = "Watched Movie"
+        plex_item_a.year = 2020
+
+        plex_item_b = MagicMock()
+        plex_item_b.guid = "plex://movie/b"
+        plex_item_b.guids = [MagicMock(id="tmdb://1002")]
+        plex_item_b.title = "Unwatched Small"
+        plex_item_b.year = 2019
+
+        plex_item_c = MagicMock()
+        plex_item_c.guid = "plex://movie/c"
+        plex_item_c.guids = [MagicMock(id="tmdb://1003")]
+        plex_item_c.title = "Unwatched Large"
+        plex_item_c.year = 2021
+
+        plex_guid_item_pair = [
+            (["plex://movie/a", "tmdb://1001"], plex_item_a),
+            (["plex://movie/b", "tmdb://1002"], plex_item_b),
+            (["plex://movie/c", "tmdb://1003"], plex_item_c),
+        ]
+
+        # Only item A is watched
+        activity_data = {
+            "plex://movie/a": {
+                "title": "Watched Movie",
+                "year": 2020,
+                "last_watched": datetime.now() - timedelta(days=5),
+            },
+        }
+
+        media_list = [
+            {"title": "Watched Movie", "year": 2020, "tmdbId": 1001, "sizeOnDisk": 2_000_000_000},
+            {"title": "Unwatched Small", "year": 2019, "tmdbId": 1002, "sizeOnDisk": 1_000_000_000},
+            {"title": "Unwatched Large", "year": 2021, "tmdbId": 1003, "sizeOnDisk": 5_000_000_000},
+        ]
+
+        # Sort by last_watched desc, then size desc
+        sort_config = {"field": "last_watched,size", "order": "desc"}
+        sorted_list = sort_media(media_list, sort_config, activity_data, plex_guid_item_pair)
+
+        # Unwatched items first, sorted by size desc
+        # Then watched items sorted by days since watched desc
+        assert sorted_list[0]["title"] == "Unwatched Large"  # Unwatched, 5GB
+        assert sorted_list[1]["title"] == "Unwatched Small"  # Unwatched, 1GB
+        assert sorted_list[2]["title"] == "Watched Movie"    # Watched 5 days ago
+
 
 class TestSeriesTypeFiltering:
     """Test series_type filtering for Sonarr."""

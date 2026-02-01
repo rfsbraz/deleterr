@@ -390,15 +390,23 @@ class Config:
             sort_field = sort_config.get("field")
             sort_order = sort_config.get("order")
 
-            if sort_field and sort_field not in VALID_SORT_FIELDS:
-                self.log_and_exit(
-                    f"Invalid sort field '{sort_field}' in library '{library['name']}', supported values are {VALID_SORT_FIELDS}."
-                )
+            # Support comma-separated fields for multi-level sorting
+            if sort_field:
+                fields = [f.strip() for f in sort_field.split(",")]
+                for field in fields:
+                    if field not in VALID_SORT_FIELDS:
+                        self.log_and_exit(
+                            f"Invalid sort field '{field}' in library '{library['name']}', supported values are {VALID_SORT_FIELDS}."
+                        )
 
-            if sort_order and sort_order not in VALID_SORT_ORDERS:
-                self.log_and_exit(
-                    f"Invalid sort order '{sort_order}' in library '{library['name']}', supported values are {VALID_SORT_ORDERS}."
-                )
+            # Support comma-separated orders for multi-level sorting
+            if sort_order:
+                orders = [o.strip() for o in sort_order.split(",")]
+                for order in orders:
+                    if order not in VALID_SORT_ORDERS:
+                        self.log_and_exit(
+                            f"Invalid sort order '{order}' in library '{library['name']}', supported values are {VALID_SORT_ORDERS}."
+                        )
 
     def validate_radarr_exclusions(self, library):
         exclude = library.get("exclude", {})

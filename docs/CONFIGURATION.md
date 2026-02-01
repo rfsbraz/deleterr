@@ -532,8 +532,8 @@ Configuration for each Plex library to manage.
 
 | Property | Type | Required | Default | Description |
 |----------|------|----------|---------|-------------|
-| `field` | string (`title`, `size`, `release_year`, `runtime`, `added_date`, `rating`, `seasons`, `episodes`) | No | `"title"` | Field to sort by: title, size, release_year, runtime, added_date, rating, seasons, episodes |
-| `order` | string (`asc`, `desc`) | No | `"asc"` | Sort order: asc (ascending), desc (descending) |
+| `field` | string | No | `"title"` | Field(s) to sort by. Comma-separated for multi-level sorting. Options: title, size, release_year, runtime, added_date, rating, seasons, episodes, last_watched. Example: 'last_watched,size' sorts by watch status first, then size |
+| `order` | string | No | `"asc"` | Sort order(s): asc (ascending), desc (descending). Comma-separated to match fields. If fewer orders than fields, last order is reused. Example: 'desc,asc' or just 'desc' |
 
 ### Leaving Soon
 
@@ -550,6 +550,8 @@ This implements a "death row" pattern where items are tagged on one run, then de
 | Property | Type | Required | Default | Description |
 |----------|------|----------|---------|-------------|
 | `leaving_soon.collection.name` | string | No | `"Leaving Soon"` | Name of the collection to create in Plex |
+| `leaving_soon.collection.promote_home` | boolean | No | `true` | Promote collection to appear on your Plex Home page |
+| `leaving_soon.collection.promote_shared` | boolean | No | `true` | Promote collection to appear on shared users' Home pages (Friends' Home) |
 
 **Label Settings:**
 
