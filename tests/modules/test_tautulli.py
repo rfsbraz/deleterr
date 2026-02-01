@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, Mock, patch
+from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -27,30 +27,6 @@ def test_filter_by_most_recent(data, key, sort_key, expected):
     assert result == expected
 
 
-@patch("app.config.Config", Mock())
-@patch("app.modules.tautulli.RawAPI", Mock())
-@pytest.mark.parametrize(
-    "library_config,expected_days",
-    [
-        ({"last_watched_threshold": 5, "added_at_threshold": 30}, 30),
-        ({"last_watched_threshold": 20, "added_at_threshold": 10}, 20),
-        ({"last_watched_threshold": 11, "added_at_threshold": 11}, 11),
-        ({"last_watched_threshold": 11, "added_at_threshold": 11}, 11),
-        ({"added_at_threshold": 11}, 11),
-        ({"last_watched_threshold": 11}, 11),
-        ({}, 0),
-    ],
-)
-def test_calculate_min_date(library_config, expected_days):
-    expected = datetime.now() - timedelta(days=expected_days)
-
-    with patch("tautulli.RawAPI", Mock()):
-        tautulli = Tautulli("url", "api_key")
-
-        result = tautulli._calculate_min_date(library_config)
-        assert result.date() == expected.date()
-
-
 @patch("app.modules.tautulli.RawAPI", MagicMock())
 def test_determine_key():
     # Arrange
@@ -76,10 +52,9 @@ def test_fetch_history_data(mock_api):
     # Arrange
     tautulli_instance = Tautulli("id", "secret")
     section = "test_section"
-    min_date = "2022-01-01"
 
     # Act
-    result = tautulli_instance._fetch_history_data(section, min_date)
+    result = tautulli_instance._fetch_history_data(section)
 
     # Assert
     assert result == ["item1", "item2"]
@@ -89,7 +64,6 @@ def test_fetch_history_data(mock_api):
         order_column="date",
         order_direction="asc",
         start=0,
-        after=min_date,
         length=HISTORY_PAGE_SIZE,
         include_activity=1,
     )
@@ -98,59 +72,47 @@ def test_fetch_history_data(mock_api):
         order_column="date",
         order_direction="asc",
         start=2,
-        after=min_date,
         length=HISTORY_PAGE_SIZE,
         include_activity=1,
     )
 
 
 @patch("app.modules.tautulli.RawAPI", MagicMock())
-@patch.object(Tautulli, "_calculate_min_date", return_value="2022-01-01")
 @patch.object(
     Tautulli,
     "_fetch_history_data",
     return_value=[{"rating_key": "123", "stopped": 1641081600, "guid": "plex://movie/abc123", "title": "Test Movie", "year": 2022}],
 )
-def test_get_activity(
-    mock_fetch_history_data,
-    mock_calculate_min_date,
-):
+def test_get_activity(mock_fetch_history_data):
     """Test that get_activity extracts data directly from history without metadata calls."""
     # Arrange
     tautulli_instance = Tautulli("id", "secret")
-    library_config = {}
     section = "section"
 
     # Act
-    result = tautulli_instance.get_activity(library_config, section)
+    result = tautulli_instance.get_activity(section)
 
     # Assert - verify data extracted directly from history response
     assert "plex://movie/abc123" in result
     assert result["plex://movie/abc123"]["title"] == "Test Movie"
     assert result["plex://movie/abc123"]["year"] == 2022
-    mock_calculate_min_date.assert_called_once_with(library_config)
-    mock_fetch_history_data.assert_called_once_with(section, "2022-01-01")
+    mock_fetch_history_data.assert_called_once_with(section)
 
 
 @patch("app.modules.tautulli.RawAPI", MagicMock())
-@patch.object(Tautulli, "_calculate_min_date", return_value="2022-01-01")
 @patch.object(
     Tautulli,
     "_fetch_history_data",
     return_value=[{"grandparent_rating_key": "123", "stopped": 1641081600, "guid": "plex://show/abc123", "grandparent_title": "Test Show", "title": "Episode 1", "year": 2022}],
 )
-def test_get_activity_tv_show(
-    mock_fetch_history_data,
-    mock_calculate_min_date,
-):
+def test_get_activity_tv_show(mock_fetch_history_data):
     """Test that get_activity uses grandparent_title for TV shows."""
     # Arrange
     tautulli_instance = Tautulli("id", "secret")
-    library_config = {}
     section = "section"
 
     # Act
-    result = tautulli_instance.get_activity(library_config, section)
+    result = tautulli_instance.get_activity(section)
 
     # Assert - verify grandparent_title is used for TV shows
     assert "plex://show/abc123" in result
@@ -158,46 +120,35 @@ def test_get_activity_tv_show(
 
 
 @patch("app.modules.tautulli.RawAPI", MagicMock())
-@patch.object(Tautulli, "_calculate_min_date", return_value="2022-01-01")
 @patch.object(Tautulli, "_fetch_history_data", return_value=[])
-def test_get_activity_without_tautulli_items(
-    mock_fetch_history_data,
-    mock_calculate_min_date,
-):
+def test_get_activity_without_tautulli_items(mock_fetch_history_data):
     """Test that get_activity returns empty dict when no history data."""
     # Arrange
     tautulli_instance = Tautulli("id", "secret")
-    library_config = {}
     section = "section"
 
     # Act
-    result = tautulli_instance.get_activity(library_config, section)
+    result = tautulli_instance.get_activity(section)
 
     # Assert
     assert result == {}
-    mock_calculate_min_date.assert_called_once_with(library_config)
-    mock_fetch_history_data.assert_called_once_with(section, "2022-01-01")
+    mock_fetch_history_data.assert_called_once_with(section)
 
 
 @patch("app.modules.tautulli.RawAPI", MagicMock())
-@patch.object(Tautulli, "_calculate_min_date", return_value="2022-01-01")
 @patch.object(
     Tautulli,
     "_fetch_history_data",
     return_value=[{"rating_key": "123", "stopped": 1641081600, "title": "Test Movie", "year": 2022}],  # Missing guid
 )
-def test_get_activity_skips_entries_without_guid(
-    mock_fetch_history_data,
-    mock_calculate_min_date,
-):
+def test_get_activity_skips_entries_without_guid(mock_fetch_history_data):
     """Test that entries without guid are skipped."""
     # Arrange
     tautulli_instance = Tautulli("id", "secret")
-    library_config = {}
     section = "section"
 
     # Act
-    result = tautulli_instance.get_activity(library_config, section)
+    result = tautulli_instance.get_activity(section)
 
     # Assert - no entries added without guid
     assert result == {}

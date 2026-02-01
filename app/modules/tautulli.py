@@ -1,6 +1,6 @@
 # encoding: utf-8
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from tautulli import RawAPI
 
@@ -37,23 +37,21 @@ class Tautulli:
     def refresh_library(self, section_id):
         self.api.get_library_media_info(section_id=section_id, refresh=True)
 
-    def get_activity(self, library_config, section):
+    def get_activity(self, section):
         """
         Get watch activity for a library section.
 
-        Fetches history data from Tautulli and extracts GUID, title, year directly
+        Fetches all history data from Tautulli and extracts GUID, title, year directly
         from the history response (no separate metadata API calls needed).
 
         Args:
-            library_config: Library configuration dict with thresholds
             section: Plex library section ID
 
         Returns:
             Dictionary mapping GUID to activity data (last_watched, title, year)
         """
-        min_date = self._calculate_min_date(library_config)
-        logger.debug("Fetching last activity since %s", min_date)
-        raw_data = self._fetch_history_data(section, min_date)
+        logger.debug("Fetching all activity history for section %s", section)
+        raw_data = self._fetch_history_data(section)
 
         # Return empty dictionary if no data is found
         if not raw_data:
@@ -73,18 +71,7 @@ class Tautulli:
         logger.debug("Processed %d unique items from history", len(last_activity))
         return last_activity
 
-    def _calculate_min_date(self, library_config):
-        last_watched_threshold = library_config.get("last_watched_threshold", 0)
-        added_at_threshold = library_config.get("added_at_threshold", 0)
-
-        last_watched_threshold_date = datetime.now() - timedelta(
-            days=last_watched_threshold
-        )
-        unwatched_threshold_date = datetime.now() - timedelta(days=added_at_threshold)
-
-        return min(last_watched_threshold_date, unwatched_threshold_date)
-
-    def _fetch_history_data(self, section, min_date):
+    def _fetch_history_data(self, section):
         start = 0
         raw_data = []
         while True:
@@ -93,7 +80,6 @@ class Tautulli:
                 order_column="date",
                 order_direction="asc",
                 start=start,
-                after=min_date,
                 length=HISTORY_PAGE_SIZE,
                 include_activity=1,
             )
@@ -103,7 +89,7 @@ class Tautulli:
             start += len(history["data"])
             raw_data.extend(history["data"])
 
-        logger.debug("Fetched %s items", len(raw_data))
+        logger.debug("Fetched %s history entries", len(raw_data))
 
         return raw_data
 

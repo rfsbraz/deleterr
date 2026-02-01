@@ -357,10 +357,10 @@ class MediaCleaner:
         return self.plex.library.section(library.get("name"))
 
     def get_show_activity(self, library, plex_library):
-        return self.tautulli.get_activity(library, plex_library.key)
+        return self.tautulli.get_activity(plex_library.key)
 
     def get_movie_activity(self, library, movies_library):
-        return self.tautulli.get_activity(library, movies_library.key)
+        return self.tautulli.get_activity(movies_library.key)
 
     def filter_shows(self, library, unfiltered_all_show_data):
         return [
