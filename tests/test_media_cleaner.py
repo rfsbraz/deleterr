@@ -11,9 +11,11 @@ from app.media_cleaner import (
     ConfigurationError,
     DEFAULT_MAX_ACTIONS_PER_RUN,
     MediaCleaner,
+    PlexLibraryIndex,
     check_excluded_radarr_fields,
     find_watched_data,
     library_meets_disk_space_threshold,
+    normalize_title,
 )
 
 
@@ -2388,3 +2390,264 @@ class TestPreviewNextFeature:
         assert mock_process_movie.call_count == 3
         assert len(deleted_items) == 3
         assert len(preview) == 3
+
+
+class TestNormalizeTitle:
+    """Tests for the normalize_title function used for fuzzy title matching."""
+
+    @pytest.mark.parametrize(
+        "input_title, expected",
+        [
+            # Basic normalization
+            ("Test Title", "test title"),
+            ("TEST TITLE", "test title"),
+            ("test title", "test title"),
+            # Punctuation removal
+            ("Star Wars: The Force Awakens", "star wars the force awakens"),
+            ("Spider-Man: No Way Home", "spider man no way home"),
+            ("The Batman's Legacy", "the batman s legacy"),  # Apostrophe becomes space
+            ("Mission: Impossible – Fallout", "mission impossible fallout"),
+            # Article handling (", The" at end -> "the " at start)
+            ("Assassin, The", "the assassin"),
+            ("Godfather, The", "the godfather"),
+            ("Christmas Story, A", "a christmas story"),
+            ("American Dream, An", "an american dream"),
+            # Whitespace normalization
+            ("The   Matrix", "the matrix"),
+            ("  Inception  ", "inception"),
+            ("Fight\tClub", "fight club"),
+            # Empty and None
+            ("", ""),
+            # Unicode normalization (accents)
+            ("Amélie", "amelie"),
+            ("Señor de los Anillos", "senor de los anillos"),
+            ("Crème brûlée", "creme brulee"),
+            # Mixed cases
+            ("James Bond: No Time to Die", "james bond no time to die"),
+            ("Ant-Man and the Wasp", "ant man and the wasp"),
+        ],
+    )
+    def test_normalize_title(self, input_title, expected):
+        """Test that normalize_title handles various title formats correctly."""
+        assert normalize_title(input_title) == expected
+
+    def test_normalize_title_none_safe(self):
+        """Test that normalize_title handles None gracefully."""
+        # The function expects a string but should handle edge cases
+        assert normalize_title("") == ""
+
+
+class TestPlexLibraryIndexNormalizedMatching:
+    """Tests for the PlexLibraryIndex normalized title matching."""
+
+    def _create_mock_plex_item(self, title, year, guids=None):
+        """Helper to create a mock Plex item."""
+        mock_item = MagicMock()
+        mock_item.title = title
+        mock_item.year = year
+        mock_item.guids = guids or []
+        mock_item.guid = f"plex://movie/{title.lower().replace(' ', '-')}"
+        return mock_item
+
+    def test_index_builds_normalized_title_index(self):
+        """Test that the index builds a normalized title index."""
+        plex_item = self._create_mock_plex_item("Star Wars: The Force Awakens", 2015)
+        plex_guid_item_pair = [(["plex://movie/starwars"], plex_item)]
+
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Should have entry in by_title_year (exact lowercase)
+        assert ("star wars: the force awakens", 2015) in index.by_title_year
+        # Should also have entry in by_normalized_title_year (punctuation stripped)
+        assert ("star wars the force awakens", 2015) in index.by_normalized_title_year
+
+    def test_find_by_normalized_title_with_punctuation_difference(self):
+        """Test finding a title when punctuation differs between source and Plex."""
+        # Plex has "Star Wars: The Force Awakens"
+        plex_item = self._create_mock_plex_item("Star Wars: The Force Awakens", 2015)
+        plex_guid_item_pair = [(["plex://movie/starwars"], plex_item)]
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Search for "Star Wars The Force Awakens" (no colon)
+        result = index.find_by_title_and_year("Star Wars The Force Awakens", 2015)
+
+        assert result is not None
+        assert result.title == "Star Wars: The Force Awakens"
+
+    def test_find_by_normalized_title_with_article_reorder(self):
+        """Test finding a title when article position differs."""
+        # Plex has "Assassin, The"
+        plex_item = self._create_mock_plex_item("Assassin, The", 2023)
+        plex_guid_item_pair = [(["plex://movie/assassin"], plex_item)]
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Search for "The Assassin"
+        result = index.find_by_title_and_year("The Assassin", 2023)
+
+        assert result is not None
+        assert result.title == "Assassin, The"
+
+    def test_find_by_normalized_title_with_year_offset(self):
+        """Test finding a title with year difference using normalized matching."""
+        plex_item = self._create_mock_plex_item("Spider-Man: No Way Home", 2021)
+        plex_guid_item_pair = [(["plex://movie/spiderman"], plex_item)]
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Search with 1 year off and different punctuation
+        result = index.find_by_title_and_year("Spider Man No Way Home", 2022)
+
+        assert result is not None
+        assert result.title == "Spider-Man: No Way Home"
+
+    def test_find_by_original_title(self):
+        """Test finding a title using the original_title parameter."""
+        # Plex has the original French title
+        plex_item = self._create_mock_plex_item("Amélie", 2001)
+        plex_guid_item_pair = [(["plex://movie/amelie"], plex_item)]
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Search with English title but provide original title
+        result = index.find_by_title_and_year(
+            "Amelie",  # English title
+            2001,
+            alternate_titles=[],
+            original_title="Amélie"  # Original French title
+        )
+
+        assert result is not None
+        assert result.title == "Amélie"
+
+    def test_exact_match_preferred_over_normalized(self):
+        """Test that exact matches are preferred over normalized matches."""
+        # Two different movies with similar normalized titles
+        plex_item_1 = self._create_mock_plex_item("The Matrix", 1999)
+        plex_item_2 = self._create_mock_plex_item("Matrix, The", 2000)
+        plex_guid_item_pair = [
+            (["plex://movie/matrix1"], plex_item_1),
+            (["plex://movie/matrix2"], plex_item_2),
+        ]
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Exact match should return the exact item
+        result = index.find_by_title_and_year("The Matrix", 1999)
+        assert result is not None
+        assert result.title == "The Matrix"
+        assert result.year == 1999
+
+    def test_alternate_titles_checked_in_normalized_matching(self):
+        """Test that alternate titles are also normalized and checked."""
+        plex_item = self._create_mock_plex_item("El laberinto del fauno", 2006)
+        plex_guid_item_pair = [(["plex://movie/pans-labyrinth"], plex_item)]
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Search with English title and Spanish alternate
+        result = index.find_by_title_and_year(
+            "Pan's Labyrinth",
+            2006,
+            alternate_titles=["El Laberinto del Fauno"]
+        )
+
+        assert result is not None
+        assert result.title == "El laberinto del fauno"
+
+
+class TestPlexLibraryIndexIMDBNormalization:
+    """Tests for IMDB ID normalization in PlexLibraryIndex."""
+
+    def _create_mock_plex_item(self, title, year, guids=None):
+        """Helper to create a mock Plex item."""
+        mock_item = MagicMock()
+        mock_item.title = title
+        mock_item.year = year
+        mock_item.guids = guids or []
+        mock_item.guid = f"plex://movie/{title.lower().replace(' ', '-')}"
+        mock_item.media = []  # No media for these tests
+        return mock_item
+
+    def test_imdb_id_with_tt_prefix(self):
+        """Test that IMDB IDs with tt prefix work."""
+        mock_guid = MagicMock()
+        mock_guid.id = "imdb://tt0133093"
+        plex_item = self._create_mock_plex_item("The Matrix", 1999, [mock_guid])
+        plex_guid_item_pair = [(["plex://movie/matrix", "imdb://tt0133093"], plex_item)]
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Search with tt prefix
+        result = index.find_by_imdb_id("tt0133093")
+        assert result is not None
+        assert result.title == "The Matrix"
+
+    def test_imdb_id_without_tt_prefix(self):
+        """Test that IMDB IDs without tt prefix are normalized."""
+        mock_guid = MagicMock()
+        mock_guid.id = "imdb://tt0133093"
+        plex_item = self._create_mock_plex_item("The Matrix", 1999, [mock_guid])
+        plex_guid_item_pair = [(["plex://movie/matrix", "imdb://tt0133093"], plex_item)]
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Search without tt prefix - should still find it
+        result = index.find_by_imdb_id("0133093")
+        assert result is not None
+        assert result.title == "The Matrix"
+
+
+class TestPlexLibraryIndexFilenameMatching:
+    """Tests for filename matching in PlexLibraryIndex."""
+
+    def _create_mock_plex_item_with_file(self, title, year, file_path):
+        """Helper to create a mock Plex item with a file."""
+        mock_item = MagicMock()
+        mock_item.title = title
+        mock_item.year = year
+        mock_item.guids = []
+        mock_item.guid = f"plex://movie/{title.lower().replace(' ', '-')}"
+
+        # Create mock media/parts structure
+        mock_part = MagicMock()
+        mock_part.file = file_path
+        mock_media = MagicMock()
+        mock_media.parts = [mock_part]
+        mock_item.media = [mock_media]
+
+        return mock_item
+
+    def test_find_by_filename_full_path(self):
+        """Test finding item by filename from a full path."""
+        plex_item = self._create_mock_plex_item_with_file(
+            "The Matrix", 1999,
+            "/movies/The Matrix (1999)/The.Matrix.1999.BluRay.1080p.mkv"
+        )
+        plex_guid_item_pair = [(["plex://movie/matrix"], plex_item)]
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Search by a similar path from Radarr
+        result = index.find_by_filename("/media/movies/The.Matrix.1999.BluRay.1080p.mkv")
+        assert result is not None
+        assert result.title == "The Matrix"
+
+    def test_find_by_filename_just_filename(self):
+        """Test finding item by just the filename."""
+        plex_item = self._create_mock_plex_item_with_file(
+            "Inception", 2010,
+            "/movies/Inception (2010)/Inception.2010.1080p.BluRay.x264.mkv"
+        )
+        plex_guid_item_pair = [(["plex://movie/inception"], plex_item)]
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Search by just the filename
+        result = index.find_by_filename("Inception.2010.1080p.BluRay.x264.mkv")
+        assert result is not None
+        assert result.title == "Inception"
+
+    def test_no_filename_match_returns_none(self):
+        """Test that non-matching filename returns None."""
+        plex_item = self._create_mock_plex_item_with_file(
+            "The Matrix", 1999,
+            "/movies/The Matrix (1999)/The.Matrix.1999.BluRay.1080p.mkv"
+        )
+        plex_guid_item_pair = [(["plex://movie/matrix"], plex_item)]
+        index = PlexLibraryIndex(plex_guid_item_pair)
+
+        # Search for non-existent file
+        result = index.find_by_filename("Nonexistent.Movie.2020.mkv")
+        assert result is None
