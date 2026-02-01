@@ -225,7 +225,8 @@ class PlexLibraryIndex:
             alternate_titles = []
 
         # Build list of all titles to try (includes original title if provided)
-        all_titles = [title] + alternate_titles
+        # Filter out None values to prevent AttributeError on .lower()
+        all_titles = [t for t in [title] + alternate_titles if t is not None]
         if original_title and original_title not in all_titles:
             all_titles.append(original_title)
 
@@ -1059,6 +1060,8 @@ class MediaCleaner:
         return None
 
     def match_title_and_year(self, plex_media_item, title, year):
+        if not title:
+            return False
         if (
                 title.lower() == plex_media_item.title.lower()
                 or f"{title.lower()} ({year})" == plex_media_item.title.lower()
@@ -1077,8 +1080,10 @@ class MediaCleaner:
         return False
 
     def find_by_title_and_year(self, plex_library, title, year, alternate_titles):
+        # Filter out None values to prevent AttributeError
+        all_titles = [t for t in [title] + alternate_titles if t is not None]
         for _, plex_media_item in plex_library:
-            for t in [title] + alternate_titles:
+            for t in all_titles:
                 if self.match_title_and_year(
                         plex_media_item, t, year
                 ) and self.match_year(plex_media_item, year):
@@ -1843,12 +1848,14 @@ def get_plex_item_for_sort(media_data, plex_guid_item_pair):
             return plex_item
 
     # Fallback to title+year matching
-    for plex_guid, plex_item in plex_guid_item_pair:
-        if (plex_item.title.lower() == media_data["title"].lower()
-            and media_data.get("year")
-            and plex_item.year
-            and abs(plex_item.year - media_data["year"]) <= 2):
-            return plex_item
+    media_title = media_data.get("title")
+    if media_title:
+        for plex_guid, plex_item in plex_guid_item_pair:
+            if (plex_item.title.lower() == media_title.lower()
+                and media_data.get("year")
+                and plex_item.year
+                and abs(plex_item.year - media_data["year"]) <= 2):
+                return plex_item
 
     return None
 
