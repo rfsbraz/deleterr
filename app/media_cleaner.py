@@ -1,4 +1,6 @@
+import re
 import time
+import unicodedata
 from datetime import datetime
 
 import requests
@@ -14,6 +16,51 @@ from app.utils import parse_size_to_bytes, print_readable_freed_space
 
 DEFAULT_MAX_ACTIONS_PER_RUN = 10
 DEFAULT_SONARR_SERIES_TYPE = "standard"
+
+
+def normalize_title(title: str) -> str:
+    """
+    Normalize a title for matching purposes.
+
+    Handles common variations in titles:
+    - Strips punctuation (colons, dashes, apostrophes, etc.)
+    - Normalizes whitespace
+    - Handles articles ("The", "A", "An") at end of title (e.g., "Title, The" -> "the title")
+    - Converts to lowercase
+    - Normalizes unicode characters (accents, etc.)
+
+    Args:
+        title: The title to normalize
+
+    Returns:
+        Normalized title string for comparison
+    """
+    if not title:
+        return ""
+
+    # Normalize unicode characters (é -> e, ñ -> n, etc.)
+    normalized = unicodedata.normalize("NFKD", title)
+    normalized = "".join(c for c in normalized if not unicodedata.combining(c))
+
+    # Convert to lowercase
+    normalized = normalized.lower()
+
+    # Handle "Title, The" -> "the title" pattern (article at end of string only)
+    # Must match at end of string to avoid false positives like ", and" in middle
+    if normalized.endswith(", the"):
+        normalized = "the " + normalized[:-5]
+    elif normalized.endswith(", a"):
+        normalized = "a " + normalized[:-3]
+    elif normalized.endswith(", an"):
+        normalized = "an " + normalized[:-4]
+
+    # Remove punctuation (keep alphanumeric and spaces)
+    normalized = re.sub(r"[^\w\s]", " ", normalized)
+
+    # Normalize whitespace (multiple spaces -> single space, trim)
+    normalized = " ".join(normalized.split())
+
+    return normalized
 
 
 class PlexLibraryIndex:
@@ -35,10 +82,41 @@ class PlexLibraryIndex:
         self.by_tvdb_id = {}
         self.by_imdb_id = {}
         self.by_guid = {}
-        self.by_title_year = {}  # Key: (normalized_title, year)
+        self.by_title_year = {}  # Key: (lowercase_title, year)
+        self.by_normalized_title_year = {}  # Key: (normalized_title, year) for fuzzy matching
+        self.by_filename = {}  # Key: normalized filename (without path/extension)
         self._plex_guid_item_pair = plex_guid_item_pair
 
         self._build_indices()
+
+    def _normalize_imdb_id(self, imdb_id: str) -> str:
+        """Normalize IMDB ID to include 'tt' prefix."""
+        if not imdb_id:
+            return ""
+        imdb_id = str(imdb_id).strip()
+        if imdb_id.startswith("tt"):
+            return imdb_id
+        # Add tt prefix if it's just digits
+        if imdb_id.isdigit():
+            return f"tt{imdb_id}"
+        return imdb_id
+
+    def _extract_filename(self, plex_media_item) -> str:
+        """Extract normalized filename from Plex media item."""
+        try:
+            # Get the first media part's file path
+            for media in getattr(plex_media_item, 'media', []):
+                for part in getattr(media, 'parts', []):
+                    if hasattr(part, 'file') and part.file:
+                        # Extract just the filename, normalize it
+                        import os
+                        filename = os.path.basename(part.file)
+                        # Remove extension and normalize
+                        name_without_ext = os.path.splitext(filename)[0]
+                        return normalize_title(name_without_ext)
+        except Exception:
+            pass
+        return ""
 
     def _build_indices(self):
         """Build all lookup indices in a single pass through the library."""
@@ -56,13 +134,27 @@ class PlexLibraryIndex:
                     self.by_tvdb_id[tvdb_id] = plex_media_item
                 elif "imdb://" in guid:
                     imdb_id = guid.split("imdb://")[-1].split("?")[0]
+                    # Store both with and without tt prefix for flexible matching
+                    normalized_imdb = self._normalize_imdb_id(imdb_id)
                     self.by_imdb_id[imdb_id] = plex_media_item
+                    if normalized_imdb != imdb_id:
+                        self.by_imdb_id[normalized_imdb] = plex_media_item
 
-            # Index by title + year (normalized)
+            # Index by title + year (exact lowercase match)
             if plex_media_item.title and plex_media_item.year:
                 key = (plex_media_item.title.lower(), plex_media_item.year)
                 if key not in self.by_title_year:
                     self.by_title_year[key] = plex_media_item
+
+                # Also index by normalized title for fuzzy matching
+                normalized_key = (normalize_title(plex_media_item.title), plex_media_item.year)
+                if normalized_key not in self.by_normalized_title_year:
+                    self.by_normalized_title_year[normalized_key] = plex_media_item
+
+            # Index by filename for file-based matching
+            filename = self._extract_filename(plex_media_item)
+            if filename and filename not in self.by_filename:
+                self.by_filename[filename] = plex_media_item
 
     def find_by_tmdb_id(self, tmdb_id):
         """Find item by TMDB ID. O(1) lookup."""
@@ -73,8 +165,29 @@ class PlexLibraryIndex:
         return self.by_tvdb_id.get(str(tvdb_id))
 
     def find_by_imdb_id(self, imdb_id):
-        """Find item by IMDB ID. O(1) lookup."""
-        return self.by_imdb_id.get(str(imdb_id))
+        """Find item by IMDB ID. O(1) lookup. Handles both with/without 'tt' prefix."""
+        if not imdb_id:
+            return None
+        imdb_str = str(imdb_id)
+        # Try exact match first
+        result = self.by_imdb_id.get(imdb_str)
+        if result:
+            return result
+        # Try normalized version (with tt prefix)
+        normalized = self._normalize_imdb_id(imdb_str)
+        return self.by_imdb_id.get(normalized)
+
+    def find_by_filename(self, path_or_filename):
+        """Find item by filename. O(1) lookup after normalization."""
+        if not path_or_filename:
+            return None
+        import os
+        # Extract just the filename if a full path is provided
+        filename = os.path.basename(path_or_filename)
+        # Remove extension and normalize
+        name_without_ext = os.path.splitext(filename)[0]
+        normalized = normalize_title(name_without_ext)
+        return self.by_filename.get(normalized)
 
     def find_by_guid(self, guid):
         """Find item by GUID. O(1) lookup."""
@@ -88,14 +201,22 @@ class PlexLibraryIndex:
                 return item
         return None
 
-    def find_by_title_and_year(self, title, year, alternate_titles=None):
+    def find_by_title_and_year(self, title, year, alternate_titles=None, original_title=None):
         """
-        Find item by title and year. O(1) for exact match, O(n) for fuzzy match.
+        Find item by title and year. O(1) for exact match, falls back to normalized matching.
+
+        Matching strategy (in order):
+        1. Exact lowercase title + year match
+        2. Exact lowercase title + year with ±2 year tolerance
+        3. Title with year in parentheses pattern
+        4. Normalized title matching (strips punctuation, handles articles)
+        5. Normalized title with ±2 year tolerance
 
         Args:
             title: Primary title to search for
             year: Release year
             alternate_titles: List of alternate titles to try
+            original_title: Original language title (e.g., for foreign films)
 
         Returns:
             Plex media item or None
@@ -103,11 +224,15 @@ class PlexLibraryIndex:
         if alternate_titles is None:
             alternate_titles = []
 
+        # Build list of all titles to try (includes original title if provided)
         all_titles = [title] + alternate_titles
+        if original_title and original_title not in all_titles:
+            all_titles.append(original_title)
 
+        # Phase 1: Try exact lowercase matching
         for t in all_titles:
-            # Exact title + year match
             if year:
+                # Exact match
                 key = (t.lower(), year)
                 if key in self.by_title_year:
                     return self.by_title_year[key]
@@ -123,6 +248,26 @@ class PlexLibraryIndex:
             for (stored_title, stored_year), item in self.by_title_year.items():
                 if stored_title == title_with_year:
                     return item
+
+        # Phase 2: Try normalized title matching (handles punctuation, articles, etc.)
+        for t in all_titles:
+            normalized_t = normalize_title(t)
+            if year:
+                # Exact normalized match
+                key = (normalized_t, year)
+                if key in self.by_normalized_title_year:
+                    logger.debug(f"Matched '{t}' via normalized title: '{normalized_t}'")
+                    return self.by_normalized_title_year[key]
+
+                # Allow 2 years difference with normalized title
+                for year_offset in [-1, 1, -2, 2]:
+                    key = (normalized_t, year + year_offset)
+                    if key in self.by_normalized_title_year:
+                        logger.debug(
+                            f"Matched '{t}' via normalized title with year offset: "
+                            f"'{normalized_t}' (year {year} -> {year + year_offset})"
+                        )
+                        return self.by_normalized_title_year[key]
 
         return None
 
@@ -803,6 +948,8 @@ class MediaCleaner:
         tvdb_id=None,
         tmdb_id=None,
         index=None,
+        original_title=None,
+        path=None,
     ):
         """
         Find a Plex media item using various identifiers.
@@ -817,6 +964,8 @@ class MediaCleaner:
             tvdb_id: TVDB ID
             tmdb_id: TMDB ID
             index: Optional PlexLibraryIndex for O(1) lookups
+            original_title: Original language title (e.g., for foreign films)
+            path: File path from Radarr/Sonarr for filename matching as last resort
 
         Returns:
             Plex media item or None
@@ -827,7 +976,7 @@ class MediaCleaner:
         # Use index for O(1) lookups if available
         if index is not None:
             return self._get_plex_item_indexed(
-                index, guid, title, year, alternate_titles, imdb_id, tvdb_id, tmdb_id
+                index, guid, title, year, alternate_titles, imdb_id, tvdb_id, tmdb_id, original_title, path
             )
 
         # Fallback to O(n) iteration-based lookups
@@ -858,10 +1007,18 @@ class MediaCleaner:
         return plex_media_item
 
     def _get_plex_item_indexed(
-        self, index, guid, title, year, alternate_titles, imdb_id, tvdb_id, tmdb_id
+        self, index, guid, title, year, alternate_titles, imdb_id, tvdb_id, tmdb_id, original_title=None, path=None
     ):
         """
         Find a Plex media item using the PlexLibraryIndex for O(1) lookups.
+
+        Matching order:
+        1. GUID (direct Plex identifier)
+        2. TVDB ID (for TV shows)
+        3. IMDB ID (normalized to handle tt prefix)
+        4. TMDB ID
+        5. Title + year (exact, then normalized for fuzzy matching)
+        6. Filename (if path provided, as last resort)
         """
         if guid:
             plex_media_item = index.find_by_guid(guid)
@@ -883,9 +1040,18 @@ class MediaCleaner:
             if plex_media_item:
                 return plex_media_item
 
-        plex_media_item = index.find_by_title_and_year(title, year, alternate_titles)
+        plex_media_item = index.find_by_title_and_year(title, year, alternate_titles, original_title)
+        if plex_media_item:
+            return plex_media_item
 
-        return plex_media_item
+        # Last resort: try to match by filename
+        if path:
+            plex_media_item = index.find_by_filename(path)
+            if plex_media_item:
+                logger.debug(f"Matched '{title}' via filename from path: {path}")
+                return plex_media_item
+
+        return None
 
     def find_by_guid(self, plex_library, guid):
         for guids, plex_media_item in plex_library:
@@ -966,7 +1132,9 @@ class MediaCleaner:
         logger.debug(
             f"Built Plex library index: {len(plex_index.by_tmdb_id)} TMDB, "
             f"{len(plex_index.by_tvdb_id)} TVDB, {len(plex_index.by_imdb_id)} IMDB, "
-            f"{len(plex_index.by_title_year)} title+year entries"
+            f"{len(plex_index.by_title_year)} title+year, "
+            f"{len(plex_index.by_normalized_title_year)} normalized, "
+            f"{len(plex_index.by_filename)} filename entries"
         )
 
         if apply_last_watch_threshold_to_collections:
@@ -999,6 +1167,8 @@ class MediaCleaner:
                 tvdb_id=media_data.get("tvdbId"),
                 tmdb_id=media_data.get("tmdbId"),
                 index=plex_index,
+                original_title=media_data.get("originalTitle"),
+                path=media_data.get("path"),  # Used for filename matching as last resort
             )
 
             if plex_media_item is None:
@@ -1007,8 +1177,19 @@ class MediaCleaner:
                         f"{media_data['title']} ({media_data['year']}) not found in Plex, but has no episodes, skipping"
                     )
                 else:
+                    # Build debug info for unmatched items
+                    ids_tried = []
+                    if media_data.get("tmdbId"):
+                        ids_tried.append(f"TMDB:{media_data['tmdbId']}")
+                    if media_data.get("imdbId"):
+                        ids_tried.append(f"IMDB:{media_data['imdbId']}")
+                    if media_data.get("tvdbId"):
+                        ids_tried.append(f"TVDB:{media_data['tvdbId']}")
+
                     logger.warning(
-                        f"UNMATCHED: {media_data['title']} ({media_data['year']}) not found in Plex."
+                        f"UNMATCHED: {media_data['title']} ({media_data['year']}) not found in Plex. "
+                        f"IDs tried: {', '.join(ids_tried) if ids_tried else 'none'}. "
+                        f"Normalized title: '{normalize_title(media_data['title'])}'"
                     )
                     unmatched += 1
                 continue
