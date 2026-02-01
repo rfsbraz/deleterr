@@ -225,20 +225,26 @@ class TestLastWatchedSort:
         sorted_list = sort_media(media_list, sort_config, activity_data, plex_guid_item_pair)
         titles = [item["sortTitle"] for item in sorted_list]
 
-        # C is unwatched (infinity), B watched 30 days ago, A watched 10 days ago
-        # desc order: infinity > 30 > 10, so C, B, A
+        # C is unwatched - unwatched ALWAYS come first regardless of order
+        # desc order among watched: 30 > 10, so B before A
         assert titles == ["C", "B", "A"]
 
-    def test_last_watched_asc_watched_recently_first(self, plex_items_and_activity):
-        """Test that recently watched items come first with asc order."""
+    def test_last_watched_asc_unwatched_still_first(self, plex_items_and_activity):
+        """Test that unwatched items STILL come first even with asc order.
+
+        This is intentional behavior: unwatched items should be prioritized
+        for deletion before recently-watched items, regardless of order setting.
+        The order setting only affects how watched items are sorted among themselves.
+        """
         media_list, activity_data, plex_guid_item_pair = plex_items_and_activity
 
         sort_config = {"field": "last_watched", "order": "asc"}
         sorted_list = sort_media(media_list, sort_config, activity_data, plex_guid_item_pair)
         titles = [item["sortTitle"] for item in sorted_list]
 
-        # asc order: 10 < 30 < infinity, so A, B, C
-        assert titles == ["A", "B", "C"]
+        # C is unwatched - unwatched ALWAYS come first regardless of order
+        # asc order among watched: 10 < 30, so A before B
+        assert titles == ["C", "A", "B"]
 
     def test_last_watched_with_secondary_sort(self, plex_items_and_activity):
         """Test last_watched combined with secondary sort field."""

@@ -109,52 +109,64 @@ def test_fetch_history_data(mock_api):
 @patch.object(
     Tautulli,
     "_fetch_history_data",
-    return_value=[{"rating_key": "123", "stopped": "2022-01-02"}],
+    return_value=[{"rating_key": "123", "stopped": 1641081600, "guid": "plex://movie/abc123", "title": "Test Movie", "year": 2022}],
 )
-@patch.object(Tautulli, "_prepare_activity_entry", return_value="prepared_entry")
 def test_get_activity(
-    mock_prepare_activity_entry,
     mock_fetch_history_data,
     mock_calculate_min_date,
 ):
+    """Test that get_activity extracts data directly from history without metadata calls."""
     # Arrange
     tautulli_instance = Tautulli("id", "secret")
-    tautulli_instance.api = MagicMock(
-        get_metadata=MagicMock(return_value={"guid": "guid"})
-    )
     library_config = {}
     section = "section"
 
     # Act
     result = tautulli_instance.get_activity(library_config, section)
 
-    # Assert
-    assert result == {"guid": "prepared_entry"}
+    # Assert - verify data extracted directly from history response
+    assert "plex://movie/abc123" in result
+    assert result["plex://movie/abc123"]["title"] == "Test Movie"
+    assert result["plex://movie/abc123"]["year"] == 2022
     mock_calculate_min_date.assert_called_once_with(library_config)
     mock_fetch_history_data.assert_called_once_with(section, "2022-01-01")
-    mock_prepare_activity_entry.assert_called_once_with(
-        {"rating_key": "123", "stopped": "2022-01-02"}, {"guid": "guid"}
-    )
+
 
 @patch("app.modules.tautulli.RawAPI", MagicMock())
 @patch.object(Tautulli, "_calculate_min_date", return_value="2022-01-01")
 @patch.object(
     Tautulli,
     "_fetch_history_data",
-    return_value=[{"rating_key": "123", "stopped": "2022-01-02"}],
+    return_value=[{"grandparent_rating_key": "123", "stopped": 1641081600, "guid": "plex://show/abc123", "grandparent_title": "Test Show", "title": "Episode 1", "year": 2022}],
 )
-@patch.object(Tautulli, "_prepare_activity_entry", return_value="prepared_entry")
-def test_get_activity_without_tautulli_items(
-        mock_prepare_activity_entry,
-        mock_fetch_history_data,
-        mock_calculate_min_date,
+def test_get_activity_tv_show(
+    mock_fetch_history_data,
+    mock_calculate_min_date,
 ):
+    """Test that get_activity uses grandparent_title for TV shows."""
     # Arrange
     tautulli_instance = Tautulli("id", "secret")
-    tautulli_instance.api = MagicMock(
-        get_metadata=MagicMock(return_value={"guid": "guid"})
-    )
-    mock_fetch_history_data.return_value = []
+    library_config = {}
+    section = "section"
+
+    # Act
+    result = tautulli_instance.get_activity(library_config, section)
+
+    # Assert - verify grandparent_title is used for TV shows
+    assert "plex://show/abc123" in result
+    assert result["plex://show/abc123"]["title"] == "Test Show"  # Uses grandparent_title
+
+
+@patch("app.modules.tautulli.RawAPI", MagicMock())
+@patch.object(Tautulli, "_calculate_min_date", return_value="2022-01-01")
+@patch.object(Tautulli, "_fetch_history_data", return_value=[])
+def test_get_activity_without_tautulli_items(
+    mock_fetch_history_data,
+    mock_calculate_min_date,
+):
+    """Test that get_activity returns empty dict when no history data."""
+    # Arrange
+    tautulli_instance = Tautulli("id", "secret")
     library_config = {}
     section = "section"
 
@@ -165,3 +177,81 @@ def test_get_activity_without_tautulli_items(
     assert result == {}
     mock_calculate_min_date.assert_called_once_with(library_config)
     mock_fetch_history_data.assert_called_once_with(section, "2022-01-01")
+
+
+@patch("app.modules.tautulli.RawAPI", MagicMock())
+@patch.object(Tautulli, "_calculate_min_date", return_value="2022-01-01")
+@patch.object(
+    Tautulli,
+    "_fetch_history_data",
+    return_value=[{"rating_key": "123", "stopped": 1641081600, "title": "Test Movie", "year": 2022}],  # Missing guid
+)
+def test_get_activity_skips_entries_without_guid(
+    mock_fetch_history_data,
+    mock_calculate_min_date,
+):
+    """Test that entries without guid are skipped."""
+    # Arrange
+    tautulli_instance = Tautulli("id", "secret")
+    library_config = {}
+    section = "section"
+
+    # Act
+    result = tautulli_instance.get_activity(library_config, section)
+
+    # Assert - no entries added without guid
+    assert result == {}
+
+
+@patch("app.modules.tautulli.RawAPI", MagicMock())
+def test_prepare_activity_entry_movie():
+    """Test _prepare_activity_entry extracts correct data for movies."""
+    tautulli_instance = Tautulli("id", "secret")
+
+    entry = {
+        "stopped": 1641081600,  # 2022-01-02 00:00:00 UTC
+        "title": "Test Movie",
+        "year": 2022,
+    }
+
+    result = tautulli_instance._prepare_activity_entry(entry)
+
+    assert result["title"] == "Test Movie"
+    assert result["year"] == 2022
+    assert result["last_watched"] == datetime.fromtimestamp(1641081600)
+
+
+@patch("app.modules.tautulli.RawAPI", MagicMock())
+def test_prepare_activity_entry_tv_show():
+    """Test _prepare_activity_entry uses grandparent_title for TV shows."""
+    tautulli_instance = Tautulli("id", "secret")
+
+    entry = {
+        "stopped": 1641081600,
+        "grandparent_title": "Breaking Bad",  # Series name
+        "title": "Pilot",  # Episode name
+        "year": 2008,
+    }
+
+    result = tautulli_instance._prepare_activity_entry(entry)
+
+    # Should use grandparent_title (series name), not episode title
+    assert result["title"] == "Breaking Bad"
+    assert result["year"] == 2008
+
+
+@patch("app.modules.tautulli.RawAPI", MagicMock())
+def test_prepare_activity_entry_missing_year():
+    """Test _prepare_activity_entry handles missing year gracefully."""
+    tautulli_instance = Tautulli("id", "secret")
+
+    entry = {
+        "stopped": 1641081600,
+        "title": "Test Movie",
+        # year is missing
+    }
+
+    result = tautulli_instance._prepare_activity_entry(entry)
+
+    assert result["title"] == "Test Movie"
+    assert result["year"] == 0  # Should default to 0
