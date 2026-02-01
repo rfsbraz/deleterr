@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6](https://github.com/rfsbraz/deleterr/compare/v0.2.5...v0.2.6) (2026-02-01)
+
+
+### Performance Improvements
+
+* **tautulli:** fetch all history instead of using date filter ([#216](https://github.com/rfsbraz/deleterr/issues/216)) ([634732b](https://github.com/rfsbraz/deleterr/commit/634732ba121257e34d66a50d5a6611a3b3feae85))
+
 ## [0.2.5](https://github.com/rfsbraz/deleterr/compare/v0.2.4...v0.2.5) (2026-02-01)
 
 
