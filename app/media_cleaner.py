@@ -16,6 +16,121 @@ DEFAULT_MAX_ACTIONS_PER_RUN = 10
 DEFAULT_SONARR_SERIES_TYPE = "standard"
 
 
+class PlexLibraryIndex:
+    """
+    Index for O(1) lookups of Plex media items by various identifiers.
+
+    Instead of iterating through the entire library for each lookup (O(n*m)),
+    this class builds dictionaries once and provides O(1) lookups thereafter.
+    """
+
+    def __init__(self, plex_guid_item_pair):
+        """
+        Build indices from plex_guid_item_pair list.
+
+        Args:
+            plex_guid_item_pair: List of (guids, plex_media_item) tuples
+        """
+        self.by_tmdb_id = {}
+        self.by_tvdb_id = {}
+        self.by_imdb_id = {}
+        self.by_guid = {}
+        self.by_title_year = {}  # Key: (normalized_title, year)
+        self._plex_guid_item_pair = plex_guid_item_pair
+
+        self._build_indices()
+
+    def _build_indices(self):
+        """Build all lookup indices in a single pass through the library."""
+        for guids, plex_media_item in self._plex_guid_item_pair:
+            # Index by each GUID
+            for guid in guids:
+                self.by_guid[guid] = plex_media_item
+
+                # Extract and index specific ID types
+                if "tmdb://" in guid:
+                    tmdb_id = guid.split("tmdb://")[-1].split("?")[0]
+                    self.by_tmdb_id[tmdb_id] = plex_media_item
+                elif "tvdb://" in guid:
+                    tvdb_id = guid.split("tvdb://")[-1].split("?")[0]
+                    self.by_tvdb_id[tvdb_id] = plex_media_item
+                elif "imdb://" in guid:
+                    imdb_id = guid.split("imdb://")[-1].split("?")[0]
+                    self.by_imdb_id[imdb_id] = plex_media_item
+
+            # Index by title + year (normalized)
+            if plex_media_item.title and plex_media_item.year:
+                key = (plex_media_item.title.lower(), plex_media_item.year)
+                if key not in self.by_title_year:
+                    self.by_title_year[key] = plex_media_item
+
+    def find_by_tmdb_id(self, tmdb_id):
+        """Find item by TMDB ID. O(1) lookup."""
+        return self.by_tmdb_id.get(str(tmdb_id))
+
+    def find_by_tvdb_id(self, tvdb_id):
+        """Find item by TVDB ID. O(1) lookup."""
+        return self.by_tvdb_id.get(str(tvdb_id))
+
+    def find_by_imdb_id(self, imdb_id):
+        """Find item by IMDB ID. O(1) lookup."""
+        return self.by_imdb_id.get(str(imdb_id))
+
+    def find_by_guid(self, guid):
+        """Find item by GUID. O(1) lookup."""
+        # Direct lookup first
+        if guid in self.by_guid:
+            return self.by_guid[guid]
+
+        # Check if guid is contained in any stored guid
+        for stored_guid, item in self.by_guid.items():
+            if guid in stored_guid:
+                return item
+        return None
+
+    def find_by_title_and_year(self, title, year, alternate_titles=None):
+        """
+        Find item by title and year. O(1) for exact match, O(n) for fuzzy match.
+
+        Args:
+            title: Primary title to search for
+            year: Release year
+            alternate_titles: List of alternate titles to try
+
+        Returns:
+            Plex media item or None
+        """
+        if alternate_titles is None:
+            alternate_titles = []
+
+        all_titles = [title] + alternate_titles
+
+        for t in all_titles:
+            # Exact title + year match
+            if year:
+                key = (t.lower(), year)
+                if key in self.by_title_year:
+                    return self.by_title_year[key]
+
+                # Allow 2 years difference
+                for year_offset in [-1, 1, -2, 2]:
+                    key = (t.lower(), year + year_offset)
+                    if key in self.by_title_year:
+                        return self.by_title_year[key]
+
+            # Try title with year in parentheses
+            title_with_year = f"{t.lower()} ({year})"
+            for (stored_title, stored_year), item in self.by_title_year.items():
+                if stored_title == title_with_year:
+                    return item
+
+        return None
+
+    def get_plex_guid_item_pair(self):
+        """Return the original plex_guid_item_pair for backward compatibility."""
+        return self._plex_guid_item_pair
+
+
 class MediaCleaner:
     def __init__(self, config, media_server=None):
         self.config = config
@@ -687,9 +802,35 @@ class MediaCleaner:
         imdb_id=None,
         tvdb_id=None,
         tmdb_id=None,
+        index=None,
     ):
+        """
+        Find a Plex media item using various identifiers.
+
+        Args:
+            plex_library: Either a list of (guids, plex_media_item) tuples or a PlexLibraryIndex
+            guid: Plex GUID to search for
+            title: Title to search for
+            year: Release year
+            alternate_titles: List of alternate titles
+            imdb_id: IMDB ID
+            tvdb_id: TVDB ID
+            tmdb_id: TMDB ID
+            index: Optional PlexLibraryIndex for O(1) lookups
+
+        Returns:
+            Plex media item or None
+        """
         if alternate_titles is None:
             alternate_titles = []
+
+        # Use index for O(1) lookups if available
+        if index is not None:
+            return self._get_plex_item_indexed(
+                index, guid, title, year, alternate_titles, imdb_id, tvdb_id, tmdb_id
+            )
+
+        # Fallback to O(n) iteration-based lookups
         if guid:
             plex_media_item = self.find_by_guid(plex_library, guid)
             if plex_media_item:
@@ -713,6 +854,36 @@ class MediaCleaner:
         plex_media_item = self.find_by_title_and_year(
             plex_library, title, year, alternate_titles
         )
+
+        return plex_media_item
+
+    def _get_plex_item_indexed(
+        self, index, guid, title, year, alternate_titles, imdb_id, tvdb_id, tmdb_id
+    ):
+        """
+        Find a Plex media item using the PlexLibraryIndex for O(1) lookups.
+        """
+        if guid:
+            plex_media_item = index.find_by_guid(guid)
+            if plex_media_item:
+                return plex_media_item
+
+        if tvdb_id:
+            plex_media_item = index.find_by_tvdb_id(tvdb_id)
+            if plex_media_item:
+                return plex_media_item
+
+        if imdb_id:
+            plex_media_item = index.find_by_imdb_id(imdb_id)
+            if plex_media_item:
+                return plex_media_item
+
+        if tmdb_id:
+            plex_media_item = index.find_by_tmdb_id(tmdb_id)
+            if plex_media_item:
+                return plex_media_item
+
+        plex_media_item = index.find_by_title_and_year(title, year, alternate_titles)
 
         return plex_media_item
 
@@ -789,10 +960,19 @@ class MediaCleaner:
             )
             for plex_media_item in plex_library.all()
         ]
+
+        # Build index once for O(1) lookups instead of O(n) iterations per item
+        plex_index = PlexLibraryIndex(plex_guid_item_pair)
+        logger.debug(
+            f"Built Plex library index: {len(plex_index.by_tmdb_id)} TMDB, "
+            f"{len(plex_index.by_tvdb_id)} TVDB, {len(plex_index.by_imdb_id)} IMDB, "
+            f"{len(plex_index.by_title_year)} title+year entries"
+        )
+
         if apply_last_watch_threshold_to_collections:
             logger.debug("Gathering collection watched status")
             for guid, watched_data in activity_data.items():
-                plex_media_item = self.get_plex_item(plex_guid_item_pair, guid=guid)
+                plex_media_item = self.get_plex_item(plex_guid_item_pair, guid=guid, index=plex_index)
                 if plex_media_item is None:
                     continue
                 last_watched = (datetime.now() - watched_data["last_watched"]).days
@@ -818,6 +998,7 @@ class MediaCleaner:
                 imdb_id=media_data.get("imdbId"),
                 tvdb_id=media_data.get("tvdbId"),
                 tmdb_id=media_data.get("tmdbId"),
+                index=plex_index,
             )
 
             if plex_media_item is None:
@@ -986,19 +1167,27 @@ class MediaCleaner:
 
 
 def check_excluded_radarr_fields(media_data, plex_media_item, exclude, radarr_instance):
+    """
+    Check if a movie should be excluded based on Radarr-specific fields.
+
+    Args:
+        media_data: Media data from Radarr (already contains full movie data from get_movies())
+        plex_media_item: Plex media item
+        exclude: Exclusion configuration from library
+        radarr_instance: Radarr instance (may be None if not configured)
+
+    Returns:
+        True if media should NOT be excluded (i.e., is actionable)
+        False if media should be excluded (i.e., skip this media)
+    """
     radarr_exclusions = exclude.get("radarr", {})
 
     if not radarr_exclusions or not radarr_instance:
         return True
 
-    radarr_media_item = radarr_instance.get_movie(media_data["tmdbId"])
-
-    if not radarr_media_item:
-        logger.warning(f"{media_data['title']} not found in Radarr, skipping")
-        return True
-    else:
-        # Radarr returns a list of movies, but TMDB ID is unique
-        radarr_media_item = radarr_media_item[0]
+    # For movies, media_data already contains the movie data from Radarr's get_movies()
+    # We use this directly rather than fetching again (same pattern as check_excluded_sonarr_fields)
+    radarr_media_item = media_data
 
     if 'monitored' in radarr_exclusions and radarr_exclusions.get("monitored") == radarr_media_item.get("monitored"):
         logger.debug(f"{media_data['title']} has excluded radarr monitored status, skipping")
@@ -1020,7 +1209,7 @@ def check_excluded_radarr_fields(media_data, plex_media_item, exclude, radarr_in
 
     if radarr_exclusions.get('paths'):
         for path in radarr_exclusions.get('paths'):
-            if path in radarr_media_item.get('path'):
+            if path in radarr_media_item.get('path', ''):
                 logger.debug(f"{media_data['title']} has excluded radarr path, skipping")
                 return False
 
