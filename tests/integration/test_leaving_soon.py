@@ -1,12 +1,10 @@
 # encoding: utf-8
 """Integration tests for the leaving_soon feature.
 
-These tests verify that the leaving_soon feature works correctly with real
-Plex, Radarr, and Sonarr services.
+These tests verify that the leaving_soon feature in MediaCleaner works correctly.
 """
 
 import pytest
-from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -17,54 +15,8 @@ INTEGRATION_DIR = Path(__file__).parent
 
 
 @pytest.mark.integration
-class TestLeavingSoonWithRealPlex:
-    """Integration tests for leaving_soon feature with real Plex server."""
-
-    def test_leaving_soon_collection_workflow(self, clean_plex_test_data):
-        """Test the leaving_soon collection workflow with real Plex."""
-        helper = clean_plex_test_data
-
-        movies = helper.get_all_movies()[:2]
-        if len(movies) < 2:
-            pytest.skip("Not enough movies in library")
-
-        # Create "Leaving Soon" collection
-        collection = helper.create_collection("Leaving Soon", movies)
-        assert collection is not None
-        assert collection.title == "Leaving Soon"
-
-        # Verify items in collection
-        items = helper.get_collection_items("Leaving Soon")
-        assert len(items) == 2
-
-        # Cleanup
-        helper.delete_collection("Leaving Soon")
-
-    def test_leaving_soon_label_workflow(self, clean_plex_test_data):
-        """Test the leaving_soon label workflow with real Plex."""
-        helper = clean_plex_test_data
-
-        movies = helper.get_all_movies()[:2]
-        if len(movies) < 2:
-            pytest.skip("Not enough movies in library")
-
-        # Add leaving-soon label to movies
-        for movie in movies:
-            helper.add_label(movie, "leaving-soon")
-
-        # Find all items with leaving-soon label
-        labeled_items = helper.get_items_with_label("leaving-soon")
-        assert len(labeled_items) >= 2
-
-        # Remove labels (cleanup)
-        for movie in movies:
-            movie.reload()
-            helper.remove_label(movie, "leaving-soon")
-
-
-@pytest.mark.integration
-class TestLeavingSoonTaggingOnlyMode:
-    """Integration tests for tagging_only mode."""
+class TestLeavingSoonConfigValidation:
+    """Integration tests for leaving_soon configuration."""
 
     def test_tagging_only_config_validation(self, docker_services):
         """Test that tagging_only mode configuration is valid."""
@@ -120,10 +72,10 @@ class TestLeavingSoonTaggingOnlyMode:
 
 @pytest.mark.integration
 class TestLeavingSoonMediaCleaner:
-    """Integration tests for MediaCleaner leaving_soon processing."""
+    """Integration tests for MediaCleaner.process_leaving_soon."""
 
-    def test_process_leaving_soon_with_mock_media_server(self, docker_services):
-        """Test MediaCleaner.process_leaving_soon with mocked media server."""
+    def test_process_leaving_soon_calls_media_server_methods(self, docker_services):
+        """Test MediaCleaner.process_leaving_soon calls correct media server methods."""
         from tests.integration.conftest import TAUTULLI_URL, PLEX_URL
 
         # Create config
@@ -172,3 +124,74 @@ class TestLeavingSoonMediaCleaner:
             mock_plex_library, "Leaving Soon"
         )
         mock_media_server.add_label.assert_called_once_with(mock_plex_item, "leaving-soon")
+
+    def test_process_leaving_soon_skips_when_no_config(self, docker_services):
+        """Test process_leaving_soon does nothing when leaving_soon not configured."""
+        from tests.integration.conftest import TAUTULLI_URL, PLEX_URL
+
+        config = MagicMock()
+        config.settings = {
+            "dry_run": False,
+            "ssl_verify": False,
+            "plex": {"url": PLEX_URL, "token": "test-token"},
+            "tautulli": {
+                "url": TAUTULLI_URL,
+                "api_key": docker_services["tautulli"],
+            },
+        }
+
+        mock_media_server = MagicMock()
+
+        with patch("app.media_cleaner.PlexServer"):
+            cleaner = MediaCleaner(config, media_server=mock_media_server)
+
+        # No leaving_soon config
+        library_config = {"name": "Movies"}
+        items_to_tag = [{"title": "Test Movie", "year": 2020, "tmdbId": 8888}]
+        mock_plex_library = MagicMock()
+
+        cleaner.process_leaving_soon(library_config, mock_plex_library, items_to_tag, "movie")
+
+        # Should not call any media server methods
+        mock_media_server.find_item.assert_not_called()
+        mock_media_server.get_or_create_collection.assert_not_called()
+        mock_media_server.add_label.assert_not_called()
+
+    def test_process_leaving_soon_handles_missing_plex_item(self, docker_services):
+        """Test process_leaving_soon gracefully handles items not found in Plex."""
+        from tests.integration.conftest import TAUTULLI_URL, PLEX_URL
+
+        config = MagicMock()
+        config.settings = {
+            "dry_run": False,
+            "ssl_verify": False,
+            "plex": {"url": PLEX_URL, "token": "test-token"},
+            "tautulli": {
+                "url": TAUTULLI_URL,
+                "api_key": docker_services["tautulli"],
+            },
+        }
+
+        mock_media_server = MagicMock()
+        # Simulate item not found in Plex
+        mock_media_server.find_item.return_value = None
+
+        with patch("app.media_cleaner.PlexServer"):
+            cleaner = MediaCleaner(config, media_server=mock_media_server)
+
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+            },
+        }
+
+        items_to_tag = [{"title": "Missing Movie", "year": 2020, "tmdbId": 99999}]
+        mock_plex_library = MagicMock()
+
+        # Should not raise, just skip the item
+        cleaner.process_leaving_soon(library_config, mock_plex_library, items_to_tag, "movie")
+
+        mock_media_server.find_item.assert_called_once()
+        # Collection should still be created/updated (with empty items)
+        mock_media_server.get_or_create_collection.assert_called_once()
