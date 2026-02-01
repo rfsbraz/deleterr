@@ -1,22 +1,19 @@
----
-title: Deleterr
----
-
 # Deleterr
 
 Automated media library management for Plex using Radarr, Sonarr, and Tautulli.
 
 Deleterr identifies and deletes media files based on user-specified criteria. Setup Deleterr to run on a schedule and it will automatically delete media files that meet your criteria, keeping your library fresh and clean without manual management.
 
-> **Warning**: Do not use this with media content you can't afford to lose. Enable the recycle bin in Sonarr/Radarr settings if you want to recover deleted files.
+!!! warning
+    Do not use this with media content you can't afford to lose. Enable the recycle bin in Sonarr/Radarr settings if you want to recover deleted files.
 
 ---
 
 ## Quick Links
 
-- [Getting Started](getting-started) - Docker setup and first run
-- [Configuration Reference](CONFIGURATION) - All settings explained
-- [Templates](templates) - Copy-paste ready configurations
+- [Getting Started](getting-started.md) - Docker setup and first run
+- [Configuration Reference](CONFIGURATION.md) - All settings explained
+- [Templates](templates.md) - Copy-paste ready configurations
 
 ---
 
@@ -43,14 +40,31 @@ Deleterr identifies and deletes media files based on user-specified criteria. Se
 
 ---
 
-## Features
+## Key Features
 
-- **Multi-instance support** - Configure multiple Radarr/Sonarr instances (e.g., 4K libraries)
-- **Flexible exclusions** - Protect media by title, genre, actor, collection, Trakt lists, or streaming availability
-- **Watch-based rules** - Delete only watched content or content not watched within a threshold
-- **Disk thresholds** - Only delete when disk space falls below a limit
-- **Sorting options** - Prioritize deletion by size, age, rating, or other fields
-- **Dry run mode** - Preview changes before executing
+### Leaving Soon Collections
+
+Deleterr's signature feature - a "death row" pattern where items are tagged to a "Leaving Soon" collection first, users get notified, and deletion happens on the next run. This gives users time to watch content before it's removed.
+
+[Learn more about Leaving Soon](features/leaving-soon.md)
+
+### User Notifications
+
+Alert your users via Email, Discord, Slack, or Telegram about content that's expiring soon.
+
+[Learn more about Notifications](features/notifications.md)
+
+### Smart Exclusions
+
+Protect content by genre, actor, Plex labels, streaming availability (JustWatch), Trakt lists, and more.
+
+### Multi-Instance Support
+
+Configure multiple Radarr/Sonarr instances (e.g., separate 4K libraries) with different retention policies.
+
+### Disk Thresholds
+
+Only delete when disk space falls below a specified limit - perfect for space-constrained systems.
 
 ---
 

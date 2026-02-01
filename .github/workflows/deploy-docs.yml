@@ -1,16 +1,16 @@
-name: Validate Docs
+name: Deploy Docs
 
 on:
-  pull_request:
-    paths:
-      - 'docs/**'
-      - 'mkdocs.yml'
-      - 'requirements-docs.txt'
-      - 'app/schema.py'
-      - 'scripts/generate_docs.py'
+  release:
+    types: [published]
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,5 +27,5 @@ jobs:
       - name: Generate docs from schema
         run: python -m scripts.generate_docs
 
-      - name: Build MkDocs
-        run: mkdocs build --strict
+      - name: Deploy to GitHub Pages
+        run: mkdocs gh-deploy --force

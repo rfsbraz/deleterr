@@ -1,0 +1,61 @@
+site_name: Deleterr
+site_url: https://rfsbraz.github.io/deleterr/
+repo_url: https://github.com/rfsbraz/deleterr
+repo_name: rfsbraz/deleterr
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started.md
+    - Configuration: CONFIGURATION.md
+    - Templates: templates.md
+  - Features:
+    - Leaving Soon: features/leaving-soon.md
+    - Notifications: features/notifications.md
+  - Operations:
+    - Troubleshooting: troubleshooting.md

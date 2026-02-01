@@ -1,77 +1,68 @@
----
-title: Templates
----
-
 # Configuration Templates
 
 Ready-to-use configurations for common scenarios. Copy, paste, and customize.
 
 ---
 
-* TOC
-{:toc}
-
----
-
 ## Docker Compose Examples
 
-### Built-in Scheduler (Recommended)
+=== "Built-in Scheduler (Recommended)"
 
-Single container with integrated scheduling:
+    Single container with integrated scheduling:
 
-```yaml
-version: "3.9"
-services:
-  deleterr:
-    image: ghcr.io/rfsbraz/deleterr:latest
-    container_name: deleterr
-    environment:
-      LOG_LEVEL: INFO
-      TZ: America/New_York
-    volumes:
-      - ./config:/config
-      - ./logs:/config/logs
-    restart: unless-stopped
-```
+    ```yaml
+    version: "3.9"
+    services:
+      deleterr:
+        image: ghcr.io/rfsbraz/deleterr:latest
+        container_name: deleterr
+        environment:
+          LOG_LEVEL: INFO
+          TZ: America/New_York
+        volumes:
+          - ./config:/config
+          - ./logs:/config/logs
+        restart: unless-stopped
+    ```
 
-Add to your `settings.yaml`:
-```yaml
-scheduler:
-  enabled: true
-  schedule: "weekly"
-  timezone: "America/New_York"
-```
+    Add to your `settings.yaml`:
+    ```yaml
+    scheduler:
+      enabled: true
+      schedule: "weekly"
+      timezone: "America/New_York"
+    ```
 
-### External Scheduler (Ofelia)
+=== "External Scheduler (Ofelia)"
 
-For advanced scheduling with Docker socket access:
+    For advanced scheduling with Docker socket access:
 
-```yaml
-version: "3.9"
-services:
-  deleterr:
-    image: ghcr.io/rfsbraz/deleterr:latest
-    container_name: deleterr
-    environment:
-      LOG_LEVEL: INFO
-    volumes:
-      - ./config:/config
-      - ./logs:/config/logs
-    restart: no
+    ```yaml
+    version: "3.9"
+    services:
+      deleterr:
+        image: ghcr.io/rfsbraz/deleterr:latest
+        container_name: deleterr
+        environment:
+          LOG_LEVEL: INFO
+        volumes:
+          - ./config:/config
+          - ./logs:/config/logs
+        restart: no
 
-  scheduler:
-    image: mcuadros/ofelia:latest
-    container_name: scheduler
-    depends_on:
-      - deleterr
-    command: daemon --docker
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    restart: unless-stopped
-    labels:
-      ofelia.job-run.deleterr.schedule: "@weekly"
-      ofelia.job-run.deleterr.container: "deleterr"
-```
+      scheduler:
+        image: mcuadros/ofelia:latest
+        container_name: scheduler
+        depends_on:
+          - deleterr
+        command: daemon --docker
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock:ro
+        restart: unless-stopped
+        labels:
+          ofelia.job-run.deleterr.schedule: "@weekly"
+          ofelia.job-run.deleterr.container: "deleterr"
+    ```
 
 ---
 
@@ -365,6 +356,7 @@ libraries:
 ```
 
 **What it does**:
+
 - Main library: Preserves movies not available on any streaming service
 - Streaming copies: More aggressive deletion of content available on your subscribed services
 
@@ -428,7 +420,7 @@ libraries:
 
 **What it does**: Protects all content that was requested through Overseerr (approved or pending). Only deletes content that wasn't explicitly requested by a user. This ensures users don't lose content they asked for before they've had a chance to watch it.
 
-**Variations**:
+### Variations
 
 Protect requests from specific users only:
 ```yaml
@@ -544,5 +536,5 @@ libraries:
 
 ## Next Steps
 
-- [Configuration Reference](CONFIGURATION) - Detailed documentation of all options
-- [Getting Started](getting-started) - Installation and setup guide
+- [Configuration Reference](CONFIGURATION.md) - Detailed documentation of all options
+- [Getting Started](getting-started.md) - Installation and setup guide
