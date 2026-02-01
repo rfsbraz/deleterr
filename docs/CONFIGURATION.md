@@ -56,6 +56,31 @@ services:
 
 > **Note**: If an environment variable is not set, Deleterr will fail to start with an error message indicating which variable is missing.
 
+### Log Level
+
+Control the verbosity of Deleterr's logging output using the `LOG_LEVEL` environment variable.
+
+| Value | Description |
+|-------|-------------|
+| `INFO` | Default. Shows progress, actions taken, and important messages |
+| `DEBUG` | Verbose output including API calls, timing details, and troubleshooting info |
+
+```yaml
+services:
+  deleterr:
+    image: ghcr.io/rfsbraz/deleterr:latest
+    environment:
+      LOG_LEVEL: DEBUG  # Enable verbose logging for troubleshooting
+```
+
+Or via command line:
+
+```bash
+docker run -e LOG_LEVEL=DEBUG ghcr.io/rfsbraz/deleterr:latest
+```
+
+> **Tip**: Use `DEBUG` when troubleshooting issues. The debug logs include API response details, timing information, and detailed error context.
+
 ---
 
 ## General Settings
