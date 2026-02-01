@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0](https://github.com/rfsbraz/deleterr/compare/v0.1.5...v0.2.0) (2026-02-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* The built-in scheduler is now enabled by default. Deleterr will run as a long-lived daemon process instead of running once and exiting.
+
+### Features
+
+* add leaving_soon collection and labels for scheduled deletions ([#200](https://github.com/rfsbraz/deleterr/issues/200)) ([ea23877](https://github.com/rfsbraz/deleterr/commit/ea23877b9c211ee160f28456fbd72097c81d8ffb))
+* add notification system for Slack, Discord, Telegram, and webhooks ([#198](https://github.com/rfsbraz/deleterr/issues/198)) ([e0f44b1](https://github.com/rfsbraz/deleterr/commit/e0f44b11d6bbe82aa77fbbde615bcc0aabc88598))
+* add preview_next option to show upcoming deletions ([#197](https://github.com/rfsbraz/deleterr/issues/197)) ([85a0824](https://github.com/rfsbraz/deleterr/commit/85a0824529e8fffa9742d64d71f0ac2cfa37d924))
+* enable scheduler by default ([#188](https://github.com/rfsbraz/deleterr/issues/188)) ([c39ac38](https://github.com/rfsbraz/deleterr/commit/c39ac3826246bc9340a4435b971bf6338ac95b78))
+
+
+### Bug Fixes
+
+* add dry-run indicator to summary log messages ([#196](https://github.com/rfsbraz/deleterr/issues/196)) ([4d7c6d8](https://github.com/rfsbraz/deleterr/commit/4d7c6d8d1ec9dc674078e9fd7c13460fb418e29d))
+* **tests:** add polling for Sonarr tag updates ([#193](https://github.com/rfsbraz/deleterr/issues/193)) ([36f7c61](https://github.com/rfsbraz/deleterr/commit/36f7c61b694806e5afe4395af6637ce39b008531))
+
 ## [Unreleased]
 
 ### Added
