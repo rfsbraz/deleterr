@@ -5,6 +5,7 @@ Helper utilities for Plex integration testing.
 Provides a test helper class that works with real PlexAPI for integration tests.
 """
 
+import time
 from typing import Optional, List
 from plexapi.server import PlexServer
 from plexapi.library import LibrarySection, MovieSection, ShowSection
@@ -137,13 +138,29 @@ class PlexTestHelper:
 
     # Label operations
 
-    def add_label(self, item, label: str) -> None:
-        """Add a label to an item."""
-        item.addLabel(label)
+    def add_label(self, item, label: str, wait: float = 0.5) -> None:
+        """Add a label to an item.
 
-    def remove_label(self, item, label: str) -> None:
-        """Remove a label from an item."""
+        Args:
+            item: The Plex item to label
+            label: The label to add
+            wait: Seconds to wait for Plex to process (default 0.5)
+        """
+        item.addLabel(label)
+        if wait:
+            time.sleep(wait)
+
+    def remove_label(self, item, label: str, wait: float = 0.5) -> None:
+        """Remove a label from an item.
+
+        Args:
+            item: The Plex item to unlabel
+            label: The label to remove
+            wait: Seconds to wait for Plex to process (default 0.5)
+        """
         item.removeLabel(label)
+        if wait:
+            time.sleep(wait)
 
     def get_labels(self, item) -> List[str]:
         """Get all labels on an item."""
