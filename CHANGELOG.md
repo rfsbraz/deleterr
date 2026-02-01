@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4](https://github.com/rfsbraz/deleterr/compare/v0.2.3...v0.2.4) (2026-02-01)
+
+
+### Bug Fixes
+
+* **leaving_soon:** improve logging when disk threshold not met ([#211](https://github.com/rfsbraz/deleterr/issues/211)) ([ef7f156](https://github.com/rfsbraz/deleterr/commit/ef7f156f26f3cdf6fbde7a7103be586a59ca821d))
+
 ## [0.2.3](https://github.com/rfsbraz/deleterr/compare/v0.2.2...v0.2.3) (2026-02-01)
 
 
