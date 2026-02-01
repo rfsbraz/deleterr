@@ -6,6 +6,8 @@ title: Configuration Reference
 
 Complete reference for all Deleterr configuration options.
 
+Deleterr's **Leaving Soon** feature implements a "death row" pattern—items are first tagged to a Plex collection, users receive notifications, and deletion happens on the next run. See [Leaving Soon](#leaving-soon) and [Leaving Soon Notifications](#leaving-soon-notifications) for details.
+
 > **Note**: This documentation is auto-generated from the [Pydantic schema](../app/schema.py).
 > Run `python -m scripts.generate_docs` to regenerate after schema changes.
 
@@ -345,6 +347,111 @@ notifications:
     timeout: 30
 ```
 
+### Email
+
+Send notifications via SMTP email with HTML formatting.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `smtp_server` | string | No | - | SMTP server hostname |
+| `smtp_port` | integer | No | `587` | SMTP port (587 for TLS, 465 for SSL) |
+| `smtp_username` | string | No | - | SMTP username for authentication |
+| `smtp_password` | string | No | - | SMTP password for authentication |
+| `use_tls` | boolean | No | `true` | Use TLS encryption (STARTTLS on port 587) |
+| `use_ssl` | boolean | No | `false` | Use SSL encryption (implicit SSL on port 465) |
+| `from_address` | string | No | - | Sender email address |
+| `to_addresses` | array[string] | No | `[]` | Recipient email addresses |
+| `subject` | string | No | `"Deleterr Run Complete"` | Email subject line |
+
+```yaml
+notifications:
+  email:
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    smtp_username: !env SMTP_USERNAME
+    smtp_password: !env SMTP_PASSWORD
+    use_tls: true
+    from_address: "deleterr@yourdomain.com"
+    to_addresses:
+      - "admin@yourdomain.com"
+    subject: "Deleterr Run Complete"
+```
+
+**Gmail Setup:**
+1. Enable [2-Step Verification](https://myaccount.google.com/signinoptions/two-step-verification) on your Google account
+2. Create an [App Password](https://myaccount.google.com/apppasswords) for Deleterr
+3. Use the app password as `smtp_password`
+
+### Leaving Soon Notifications
+
+User-facing notifications specifically for items scheduled for deletion. These are **separate** from the admin deletion notifications above - they're designed to alert your users about content they should watch before it's removed.
+
+> **Note:** Providers configured under `leaving_soon` do NOT inherit from the parent notification config. You must explicitly configure each provider you want to use.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `leaving_soon.template` | string | No | - | Path to custom HTML template for emails. Uses built-in template if not specified |
+| `leaving_soon.subject` | string | No | `"Leaving Soon - Content scheduled for removal"` | Email subject for leaving soon notifications |
+| `leaving_soon.email` | EmailNotificationConfig | No | - | Email notification settings for leaving soon alerts |
+| `leaving_soon.discord` | DiscordNotificationConfig | No | - | Discord webhook settings for leaving soon alerts |
+| `leaving_soon.slack` | SlackNotificationConfig | No | - | Slack webhook settings for leaving soon alerts |
+| `leaving_soon.telegram` | TelegramNotificationConfig | No | - | Telegram settings for leaving soon alerts |
+| `leaving_soon.webhook` | WebhookNotificationConfig | No | - | Generic webhook settings for leaving soon alerts |
+
+**Basic example (email only):**
+```yaml
+notifications:
+  # Admin notifications (what was deleted)
+  discord:
+    webhook_url: !env DISCORD_ADMIN_WEBHOOK
+
+  # User-facing leaving soon notifications
+  leaving_soon:
+    subject: "🎬 Content leaving your Plex server soon!"
+    email:
+      smtp_server: "smtp.gmail.com"
+      smtp_port: 587
+      smtp_username: !env SMTP_USERNAME
+      smtp_password: !env SMTP_PASSWORD
+      use_tls: true
+      from_address: "plex@yourdomain.com"
+      to_addresses:
+        - "user1@example.com"
+        - "user2@example.com"
+        - "family@example.com"
+```
+
+**With custom template:**
+```yaml
+notifications:
+  leaving_soon:
+    template: "/config/my-custom-template.html"
+    subject: "Watch Before It's Gone!"
+    email:
+      smtp_server: "smtp.gmail.com"
+      # ... email settings
+```
+
+**Multiple providers for leaving soon:**
+```yaml
+notifications:
+  leaving_soon:
+    email:
+      # Email for detailed notifications
+      smtp_server: "smtp.gmail.com"
+      # ... email settings
+    discord:
+      # Discord for quick alerts
+      webhook_url: !env DISCORD_USERS_WEBHOOK
+```
+
+The built-in template includes:
+- Warning explaining items will be removed
+- Tip box explaining how watching keeps items
+- Grouped sections for Movies and TV Shows
+- Links to Plex (if configured)
+- Links to Overseerr for re-requesting (if configured)
+
 ### Multiple Providers
 
 You can configure multiple notification providers simultaneously:
@@ -360,6 +467,33 @@ notifications:
     bot_token: !env TELEGRAM_BOT_TOKEN
     chat_id: !env TELEGRAM_CHAT_ID
 ```
+
+### Testing Notifications
+
+Test your notification configuration with sample data before relying on it:
+
+```bash
+# Test leaving_soon notifications (default)
+docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications
+
+# Test run summary notifications
+docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications --type run_summary
+
+# Test a specific provider only
+docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications --provider email
+
+# Preview without sending (dry run)
+docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications --dry-run
+
+# Show configuration status
+docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications --status
+```
+
+The test script sends notifications with sample movie and TV show data so you can verify:
+- Email formatting and delivery
+- Discord/Slack/Telegram message appearance
+- Webhook payload structure
+- Template rendering (for leaving_soon)
 
 ---
 
@@ -383,6 +517,7 @@ Configuration for each Plex library to manage.
 | `preview_next` | integer | No | - | Number of items to preview for next run. Defaults to max_actions_per_run. Set to 0 to disable |
 | `disk_size_threshold` | array | No | `[]` | Only delete when disk space is below threshold |
 | `sort` | object | No | - | Sorting configuration for deletion order |
+| `leaving_soon` | object | No | - | Configuration for 'death row' deletion pattern. Items are first tagged to collection/label, then deleted on the next run. Presence of this config enables the feature (no 'enabled' field needed) |
 
 *One of `radarr` or `sonarr` is required per library.
 
@@ -399,6 +534,63 @@ Configuration for each Plex library to manage.
 |----------|------|----------|---------|-------------|
 | `field` | string (`title`, `size`, `release_year`, `runtime`, `added_date`, `rating`, `seasons`, `episodes`) | No | `"title"` | Field to sort by: title, size, release_year, runtime, added_date, rating, seasons, episodes |
 | `order` | string (`asc`, `desc`) | No | `"asc"` | Sort order: asc (ascending), desc (descending) |
+
+### Leaving Soon
+
+Mark media scheduled for deletion with a Plex collection and/or labels.
+This implements a "death row" pattern where items are tagged on one run, then deleted on the next run.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `leaving_soon.collection` | LeavingSoonCollectionConfig | No | - | Configuration for the Leaving Soon collection |
+| `leaving_soon.labels` | LeavingSoonLabelConfig | No | - | Configuration for the Leaving Soon labels |
+
+**Collection Settings:**
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `leaving_soon.collection.name` | string | No | `"Leaving Soon"` | Name of the collection to create in Plex |
+
+**Label Settings:**
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `leaving_soon.labels.name` | string | No | `"leaving-soon"` | Label/tag to add to items scheduled for deletion |
+
+**How it works:**
+1. **First run:** Items matching deletion criteria are tagged (added to collection/labeled), but NOT deleted
+2. **Subsequent runs:** Previously tagged items are deleted, new candidates are tagged
+3. This gives users a "warning period" to watch items before they're deleted
+
+**Basic configuration with collection only:**
+```yaml
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 20
+    preview_next: 10
+    leaving_soon:
+      collection:
+        name: "Leaving Soon"
+```
+
+**With both collection and labels:**
+```yaml
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 20
+    preview_next: 10
+    leaving_soon:
+      collection:
+        name: "Leaving Soon"
+      labels:
+        name: "leaving-soon"
+```
+
+> **Note:** `preview_next` cannot be set to `0` when `leaving_soon` is configured, as the feature needs to tag upcoming deletions.
 
 ```yaml
 libraries:

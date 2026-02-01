@@ -26,9 +26,10 @@ from app.modules.sonarr import DSonarr
 from tests.integration.fixtures.seeders import (
     RadarrSeeder,
     SonarrSeeder,
-    PlexMockSeeder,
     TautulliSeeder,
 )
+from tests.integration.fixtures.plex_bootstrap import bootstrap_plex, setup_media
+from tests.integration.fixtures.plex_test_helper import PlexTestHelper
 
 # Directory containing docker-compose file
 INTEGRATION_DIR = Path(__file__).parent
@@ -38,7 +39,7 @@ COMPOSE_FILE = INTEGRATION_DIR / "docker-compose.integration.yml"
 RADARR_URL = os.getenv("RADARR_URL", "http://localhost:7878")
 SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989")
 TAUTULLI_URL = os.getenv("TAUTULLI_URL", "http://localhost:8181")
-PLEX_MOCK_URL = os.getenv("PLEX_MOCK_URL", "http://localhost:32400")
+PLEX_URL = os.getenv("PLEX_URL", "http://localhost:32400")
 WEBHOOK_RECEIVER_URL = os.getenv("WEBHOOK_RECEIVER_URL", "http://localhost:8080")
 JUSTWATCH_PROXY_URL = os.getenv("JUSTWATCH_PROXY_URL", "http://localhost:8888")
 
@@ -128,11 +129,11 @@ def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
 
     start = time.time()
 
-    # Wait for Plex mock first (it's fastest)
+    # Wait for Plex server
     plex_ready = False
     while time.time() - start < timeout and not plex_ready:
         try:
-            resp = requests.get(f"{PLEX_MOCK_URL}/health", timeout=5)
+            resp = requests.get(f"{PLEX_URL}/identity", timeout=5)
             if resp.status_code == 200:
                 plex_ready = True
         except requests.RequestException:
@@ -142,7 +143,19 @@ def wait_for_services(timeout: int = STARTUP_TIMEOUT) -> dict:
             time.sleep(2)
 
     if not plex_ready:
-        raise RuntimeError("Plex mock did not start in time")
+        raise RuntimeError("Plex server did not start in time")
+
+    # Bootstrap Plex with media files and libraries
+    print("Bootstrapping Plex with test media...")
+    media_path = INTEGRATION_DIR / "seed_data" / "media"
+    plex_result = bootstrap_plex(
+        plex_url=PLEX_URL,
+        media_path=media_path,
+        container_media_path="/data/media",
+    )
+    if not plex_result["success"]:
+        raise RuntimeError("Failed to bootstrap Plex")
+    api_keys["plex_token"] = plex_result["token"]
 
     # Wait for Radarr
     radarr_ready = False
@@ -359,10 +372,82 @@ def sonarr_seeder(sonarr_api_key) -> SonarrSeeder:
 
 
 @pytest.fixture(scope="session")
-def plex_mock_seeder(docker_services) -> PlexMockSeeder:
-    """Provides a mock Plex data seeder."""
-    seeder = PlexMockSeeder(PLEX_MOCK_URL)
-    return seeder
+def plex_token(docker_services) -> str:
+    """Get Plex token from bootstrap."""
+    return docker_services.get("plex_token", "")
+
+
+@pytest.fixture(scope="session")
+def plex_server(plex_token):
+    """
+    Provides a real PlexServer instance for integration testing.
+
+    This uses the actual PlexAPI library against a real Plex server,
+    enabling true integration testing of Plex operations.
+    """
+    from plexapi.server import PlexServer
+
+    # For unclaimed servers, we connect without a token
+    if plex_token:
+        server = PlexServer(PLEX_URL, plex_token)
+    else:
+        # Unclaimed server - connect without auth
+        server = PlexServer(PLEX_URL)
+
+    return server
+
+
+@pytest.fixture(scope="session")
+def plex_movies_library(plex_server):
+    """Get the Movies library section."""
+    from plexapi.exceptions import NotFound
+    try:
+        return plex_server.library.section("Movies")
+    except NotFound:
+        pytest.skip("Movies library not found - Plex bootstrap may have failed")
+
+
+@pytest.fixture(scope="session")
+def plex_tvshows_library(plex_server):
+    """Get the TV Shows library section."""
+    from plexapi.exceptions import NotFound
+    try:
+        return plex_server.library.section("TV Shows")
+    except NotFound:
+        pytest.skip("TV Shows library not found - Plex bootstrap may have failed")
+
+
+@pytest.fixture(scope="session")
+def plex_test_helper(plex_server) -> PlexTestHelper:
+    """
+    Provides a PlexTestHelper for integration testing.
+
+    This helper provides convenient methods for:
+    - Collection operations (create, add, remove, delete)
+    - Label operations (add, remove, check)
+    - Library queries
+    """
+    return PlexTestHelper(plex_server)
+
+
+@pytest.fixture
+def clean_plex_test_data(plex_test_helper):
+    """
+    Clean up test collections and labels before and after each test.
+
+    This ensures test isolation for Plex-related tests.
+    """
+    # Cleanup before test
+    plex_test_helper.cleanup_test_collections("Test")
+    plex_test_helper.cleanup_test_collections("Leaving Soon")
+    plex_test_helper.cleanup_test_labels(["leaving-soon", "test-label"])
+
+    yield plex_test_helper
+
+    # Cleanup after test
+    plex_test_helper.cleanup_test_collections("Test")
+    plex_test_helper.cleanup_test_collections("Leaving Soon")
+    plex_test_helper.cleanup_test_labels(["leaving-soon", "test-label"])
 
 
 @pytest.fixture(scope="session")
@@ -457,8 +542,8 @@ def integration_config(docker_services):
         "dry_run": True,  # Default to dry run for safety
         "action_delay": 0,
         "plex": {
-            "url": PLEX_MOCK_URL,
-            "token": PLEX_TOKEN
+            "url": PLEX_URL,
+            "token": docker_services.get("plex_token", PLEX_TOKEN)
         },
         "tautulli": {
             "url": TAUTULLI_URL,

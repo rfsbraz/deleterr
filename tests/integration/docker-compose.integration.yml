@@ -57,19 +57,29 @@ services:
       retries: 12
       start_period: 30s
 
-  plex-mock:
-    build:
-      context: ./fixtures
-      dockerfile: Dockerfile.plex-mock
-    container_name: deleterr-test-plex-mock
+  plex:
+    image: plexinc/pms-docker:latest
+    container_name: deleterr-test-plex
+    environment:
+      - PLEX_UID=1000
+      - PGID=1000
+      - TZ=UTC
+      - PLEX_CLAIM=${PLEX_CLAIM:-}
+      - ADVERTISE_IP=http://localhost:32400/
+      # Disable some features for faster startup
+      - ALLOWED_NETWORKS=0.0.0.0/0
+    volumes:
+      - plex-config:/config
+      - plex-transcode:/transcode
+      - ./seed_data/media:/data/media
     ports:
       - "32400:32400"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:32400/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
+      test: ["CMD", "curl", "-f", "http://localhost:32400/identity"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 
   webhook-receiver:
     build:
@@ -105,6 +115,8 @@ services:
 volumes:
   radarr-config:
   sonarr-config:
+  plex-config:
+  plex-transcode:
 
 networks:
   default:

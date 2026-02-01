@@ -22,10 +22,14 @@ tests/integration/
 │   ├── collection_threshold.yaml   # Collection protection
 │   └── combined_exclusions.yaml    # Multiple exclusion rules
 ├── fixtures/
-│   ├── seeders.py                  # API-based data seeding
-│   ├── plex_mock.py                # Mock Plex server (Flask app)
-│   └── Dockerfile.plex-mock        # Dockerfile for mock Plex
+│   ├── seeders.py                  # API-based data seeding for Radarr/Sonarr
+│   ├── plex_bootstrap.py           # Plex bootstrap script (creates libraries, seeds media)
+│   ├── plex_test_helper.py         # PlexAPI test helper for integration tests
+│   └── justwatch_proxy.py          # JustWatch caching proxy for testing
 ├── seed_data/
+│   ├── media/                      # Stub media files for Plex
+│   │   ├── movies/                 # Movie stub files
+│   │   └── tvshows/                # TV show stub files
 │   ├── radarr/movies.json          # Test movie definitions
 │   ├── sonarr/series.json          # Test series definitions
 │   └── tautulli/
@@ -67,10 +71,10 @@ docker-compose -f docker-compose.integration.yml up -d --build
 Services need time to initialize. You can check health:
 
 ```bash
-curl http://localhost:32400/health  # Plex mock
-curl http://localhost:7878/ping     # Radarr
-curl http://localhost:8989/ping     # Sonarr
-curl http://localhost:8181/status   # Tautulli
+curl http://localhost:32400/identity  # Plex server
+curl http://localhost:7878/ping       # Radarr
+curl http://localhost:8989/ping       # Sonarr
+curl http://localhost:8181/status     # Tautulli
 ```
 
 ### 4. Run Tests
@@ -192,13 +196,30 @@ The `configs/` directory contains sample YAML configuration files for testing va
 | `multi_instance.yaml` | Multiple Radarr/Sonarr instances (regular + 4K) |
 | `add_list_exclusion.yaml` | Add deleted items to Radarr exclusion list |
 
-## Mock Plex Server
+## Plex Server
 
-Since Plex requires authentication tokens and is complex to automate, we use a Flask-based mock server that:
-- Simulates Plex API responses
-- Provides controllable test data
-- Runs without authentication requirements
-- Supports extended metadata (labels, studio, directors, writers, actors, producers)
+Integration tests use a **real Plex server** (`plexinc/pms-docker`) for true integration testing:
+
+- Uses the official Plex Docker image
+- Bootstrap script creates stub media files (tiny valid MP4s)
+- Creates Movies and TV Shows libraries automatically
+- Runs in unclaimed mode (no Plex account needed for CI)
+- Tests actual PlexAPI behavior (collections, labels, metadata)
+
+### Stub Media Files
+
+The bootstrap script creates minimal valid MP4 files (~1KB each) that Plex can scan:
+- 5 movies with various test scenarios
+- 3 TV shows with multiple seasons/episodes
+
+### Plex Bootstrap
+
+The `plex_bootstrap.py` script handles:
+1. Creating stub media files in `seed_data/media/`
+2. Waiting for Plex server to be ready
+3. Creating library sections (Movies, TV Shows)
+4. Triggering library scans
+5. Waiting for scans to complete
 
 ## Environment Variables
 
@@ -207,7 +228,8 @@ Since Plex requires authentication tokens and is complex to automate, we use a F
 | `RADARR_URL` | `http://localhost:7878` | Radarr API URL |
 | `SONARR_URL` | `http://localhost:8989` | Sonarr API URL |
 | `TAUTULLI_URL` | `http://localhost:8181` | Tautulli API URL |
-| `PLEX_MOCK_URL` | `http://localhost:32400` | Mock Plex URL |
+| `PLEX_URL` | `http://localhost:32400` | Plex server URL |
+| `PLEX_CLAIM` | (empty) | Plex claim token (optional, for claimed servers) |
 | `USE_EXTERNAL_SERVICES` | `false` | Skip Docker, use external services |
 
 ## CI/CD

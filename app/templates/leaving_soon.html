@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leaving Soon</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+    .container { max-width: 700px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .header { background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 30px; text-align: center; }
+    .header h1 { margin: 0; font-size: 28px; }
+    .header p { margin: 10px 0 0 0; opacity: 0.9; }
+    .content { padding: 30px; }
+    .warning { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 20px; margin-bottom: 25px; }
+    .warning-title { color: #856404; font-weight: bold; font-size: 16px; margin-bottom: 8px; }
+    .warning-text { color: #856404; font-size: 14px; line-height: 1.5; }
+    .tip { background: #d4edda; border: 1px solid #28a745; border-radius: 6px; padding: 20px; margin-bottom: 25px; }
+    .tip-title { color: #155724; font-weight: bold; font-size: 16px; margin-bottom: 8px; }
+    .tip-text { color: #155724; font-size: 14px; line-height: 1.5; }
+    .section-title { font-size: 20px; font-weight: bold; color: #333; margin: 25px 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #e74c3c; }
+    .media-list { margin: 0; padding: 0; list-style: none; }
+    .media-item { display: flex; gap: 15px; padding: 15px; margin-bottom: 15px; background: #f9f9f9; border-radius: 8px; flex-wrap: wrap; }
+    .media-info { flex-grow: 1; min-width: 200px; }
+    .media-title { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 5px; }
+    .media-meta { font-size: 13px; color: #666; margin-bottom: 8px; }
+    .media-links { margin-top: 8px; }
+    .watch-link { display: inline-block; margin-right: 15px; color: #e74c3c; text-decoration: none; font-weight: 500; font-size: 13px; }
+    .watch-link:hover { text-decoration: underline; }
+    .request-link { display: inline-block; color: #3498db; text-decoration: none; font-weight: 500; font-size: 13px; }
+    .request-link:hover { text-decoration: underline; }
+    .summary { margin-top: 25px; padding: 15px; background: #f0f0f0; border-radius: 6px; text-align: center; color: #666; }
+    .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>⏰ Leaving Soon</h1>
+      <p>The following titles are scheduled for removal</p>
+    </div>
+    <div class="content">
+      <div class="warning">
+        <div class="warning-title">⚠️ These titles will be removed soon</div>
+        <div class="warning-text">
+          The items below are scheduled for deletion on the next cleanup cycle.
+          If you want to keep any of them, <strong>watch them before then!</strong>
+        </div>
+      </div>
+
+      <div class="tip">
+        <div class="tip-title">💡 How to Keep a Title</div>
+        <div class="tip-text">
+          Simply start watching! Any title you watch will automatically be removed
+          from the deletion list. If something does get deleted, you can always
+          request it again{% if overseerr_url %} through <a href="{{ overseerr_url }}">Overseerr</a>{% endif %}.
+        </div>
+      </div>
+
+      {% if movies %}
+      <div class="section-title">🎬 Movies ({{ movies|length }})</div>
+      <ul class="media-list">
+        {% for movie in movies %}
+        <li class="media-item">
+          <div class="media-info">
+            <div class="media-title">{{ movie.title }}{% if movie.year %} ({{ movie.year }}){% endif %}</div>
+            <div class="media-meta">{{ movie.size }}{% if movie.library %} • {{ movie.library }}{% endif %}</div>
+            <div class="media-links">
+              {% if movie.plex_url %}
+              <a href="{{ movie.plex_url }}" class="watch-link">▶ Watch Now</a>
+              {% elif plex_url %}
+              <a href="{{ plex_url }}" class="watch-link">▶ Open Plex</a>
+              {% endif %}
+              {% if overseerr_url %}
+              <a href="{{ overseerr_url }}" class="request-link">Request Again</a>
+              {% endif %}
+            </div>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      {% if shows %}
+      <div class="section-title">📺 TV Shows ({{ shows|length }})</div>
+      <ul class="media-list">
+        {% for show in shows %}
+        <li class="media-item">
+          <div class="media-info">
+            <div class="media-title">{{ show.title }}{% if show.year %} ({{ show.year }}){% endif %}</div>
+            <div class="media-meta">{{ show.size }}{% if show.library %} • {{ show.library }}{% endif %}</div>
+            <div class="media-links">
+              {% if show.plex_url %}
+              <a href="{{ show.plex_url }}" class="watch-link">▶ Watch Now</a>
+              {% elif plex_url %}
+              <a href="{{ plex_url }}" class="watch-link">▶ Open Plex</a>
+              {% endif %}
+              {% if overseerr_url %}
+              <a href="{{ overseerr_url }}" class="request-link">Request Again</a>
+              {% endif %}
+            </div>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      <div class="summary">
+        <strong>Total:</strong> {{ total_count }} item{% if total_count != 1 %}s{% endif %}, {{ total_size }}
+      </div>
+
+    </div>
+    <div class="footer">
+      This is an automated message from your Plex server.
+      <br>Powered by Deleterr
+    </div>
+  </div>
+</body>
+</html>

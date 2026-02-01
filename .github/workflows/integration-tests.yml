@@ -60,9 +60,9 @@ jobs:
         run: |
           echo "Waiting for services to start..."
 
-          echo "Waiting for Plex mock..."
-          timeout 60 bash -c 'until curl -sf http://localhost:32400/health; do sleep 2; done'
-          echo "Plex mock is ready"
+          echo "Waiting for Plex..."
+          timeout 120 bash -c 'until curl -sf http://localhost:32400/identity; do sleep 2; done'
+          echo "Plex is ready"
 
           echo "Waiting for Radarr..."
           timeout 120 bash -c 'until curl -sf http://localhost:7878/ping; do sleep 2; done'
@@ -91,7 +91,7 @@ jobs:
           echo "=== Radarr logs ===" && docker compose -f docker-compose.integration.yml logs radarr || true
           echo "=== Sonarr logs ===" && docker compose -f docker-compose.integration.yml logs sonarr || true
           echo "=== Tautulli logs ===" && docker compose -f docker-compose.integration.yml logs tautulli || true
-          echo "=== Plex mock logs ===" && docker compose -f docker-compose.integration.yml logs plex-mock || true
+          echo "=== Plex logs ===" && docker compose -f docker-compose.integration.yml logs plex || true
 
       - name: Stop Docker Compose services
         if: always()
