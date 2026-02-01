@@ -262,24 +262,26 @@ class Deleterr:
             library, radarr_instance, plex_library
         )
 
-        # Build a map of Plex ratingKey -> Radarr movie for candidates
-        candidate_by_plex_key = {}
-        for radarr_movie in all_deletion_candidates:
-            plex_item = self.media_server.find_item(
-                plex_library,
-                tmdb_id=radarr_movie.get("tmdbId"),
-                imdb_id=radarr_movie.get("imdbId"),
-                title=radarr_movie.get("title"),
-                year=radarr_movie.get("year"),
-            )
-            if plex_item:
-                candidate_by_plex_key[plex_item.ratingKey] = radarr_movie
-
         # Items to delete = intersection of death row AND current candidates
+        # Only build the Plex lookup map if there are death row items to check
         items_to_delete = []
-        for plex_key in death_row_keys:
-            if plex_key in candidate_by_plex_key:
-                items_to_delete.append(candidate_by_plex_key[plex_key])
+        if death_row_keys:
+            # Build a map of Plex ratingKey -> Radarr movie for candidates
+            candidate_by_plex_key = {}
+            for radarr_movie in all_deletion_candidates:
+                plex_item = self.media_server.find_item(
+                    plex_library,
+                    tmdb_id=radarr_movie.get("tmdbId"),
+                    imdb_id=radarr_movie.get("imdbId"),
+                    title=radarr_movie.get("title"),
+                    year=radarr_movie.get("year"),
+                )
+                if plex_item:
+                    candidate_by_plex_key[plex_item.ratingKey] = radarr_movie
+
+            for plex_key in death_row_keys:
+                if plex_key in candidate_by_plex_key:
+                    items_to_delete.append(candidate_by_plex_key[plex_key])
 
         saved_space = 0
         deleted_items = []
@@ -378,23 +380,25 @@ class Deleterr:
             library, sonarr_instance, plex_library, unfiltered_all_show_data
         )
 
-        # Build a map of Plex ratingKey -> Sonarr show for candidates
-        candidate_by_plex_key = {}
-        for sonarr_show in all_deletion_candidates:
-            plex_item = self.media_server.find_item(
-                plex_library,
-                tvdb_id=sonarr_show.get("tvdbId"),
-                imdb_id=sonarr_show.get("imdbId"),
-                title=sonarr_show.get("title"),
-            )
-            if plex_item:
-                candidate_by_plex_key[plex_item.ratingKey] = sonarr_show
-
         # Items to delete = intersection of death row AND current candidates
+        # Only build the Plex lookup map if there are death row items to check
         items_to_delete = []
-        for plex_key in death_row_keys:
-            if plex_key in candidate_by_plex_key:
-                items_to_delete.append(candidate_by_plex_key[plex_key])
+        if death_row_keys:
+            # Build a map of Plex ratingKey -> Sonarr show for candidates
+            candidate_by_plex_key = {}
+            for sonarr_show in all_deletion_candidates:
+                plex_item = self.media_server.find_item(
+                    plex_library,
+                    tvdb_id=sonarr_show.get("tvdbId"),
+                    imdb_id=sonarr_show.get("imdbId"),
+                    title=sonarr_show.get("title"),
+                )
+                if plex_item:
+                    candidate_by_plex_key[plex_item.ratingKey] = sonarr_show
+
+            for plex_key in death_row_keys:
+                if plex_key in candidate_by_plex_key:
+                    items_to_delete.append(candidate_by_plex_key[plex_key])
 
         saved_space = 0
         deleted_items = []
