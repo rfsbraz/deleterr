@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7](https://github.com/rfsbraz/deleterr/compare/v0.2.6...v0.2.7) (2026-02-01)
+
+
+### Bug Fixes
+
+* **media_cleaner:** handle None titles in Plex item lookups ([#218](https://github.com/rfsbraz/deleterr/issues/218)) ([3038509](https://github.com/rfsbraz/deleterr/commit/3038509e4aa945d9c8b57ad709a61942cf344ffd))
+
 ## [0.2.6](https://github.com/rfsbraz/deleterr/compare/v0.2.5...v0.2.6) (2026-02-01)
 
 
