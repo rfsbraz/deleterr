@@ -1,10 +1,14 @@
 # encoding: utf-8
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
 from tautulli import RawAPI
 
 from app import logger
+
+# Maximum concurrent workers for metadata fetching to avoid overwhelming Tautulli
+MAX_METADATA_WORKERS = 10
 
 HISTORY_PAGE_SIZE = 300
 
@@ -50,13 +54,51 @@ class Tautulli:
         key = self._determine_key(raw_data)
         filtered_data = filter_by_most_recent(raw_data, key, "stopped")
 
-        for index, entry in enumerate(filtered_data):
-            metadata = self.api.get_metadata(entry[key])
+        last_activity = self._fetch_metadata_parallel(filtered_data, key)
+
+        return last_activity
+
+    def _fetch_metadata_parallel(self, filtered_data, key):
+        """
+        Fetch metadata for all entries in parallel using ThreadPoolExecutor.
+
+        Args:
+            filtered_data: List of history entries to fetch metadata for
+            key: The key to use for rating_key lookup ('rating_key' or 'grandparent_rating_key')
+
+        Returns:
+            Dictionary mapping GUID to activity entry data
+        """
+        last_activity = {}
+        total = len(filtered_data)
+
+        def fetch_single_metadata(entry):
+            """Fetch metadata for a single entry."""
+            rating_key = entry[key]
+            metadata = self.api.get_metadata(rating_key)
             if metadata:
-                last_activity[metadata["guid"]] = self._prepare_activity_entry(
-                    entry, metadata
-                )
-            logger.debug("[%s/%s] Processed items", index + 1, len(filtered_data))
+                return metadata["guid"], self._prepare_activity_entry(entry, metadata)
+            return None, None
+
+        with ThreadPoolExecutor(max_workers=MAX_METADATA_WORKERS) as executor:
+            future_to_entry = {
+                executor.submit(fetch_single_metadata, entry): entry
+                for entry in filtered_data
+            }
+
+            completed = 0
+            for future in as_completed(future_to_entry):
+                completed += 1
+                try:
+                    guid, activity_entry = future.result()
+                    if guid:
+                        last_activity[guid] = activity_entry
+                except Exception as e:
+                    entry = future_to_entry[future]
+                    logger.warning(
+                        f"Failed to fetch metadata for rating_key {entry.get(key)}: {e}"
+                    )
+                logger.debug("[%s/%s] Processed items", completed, total)
 
         return last_activity
 
