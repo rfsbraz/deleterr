@@ -176,23 +176,15 @@ def generate_example(model: type[BaseModel], indent: int = 0) -> str:
 def main():
     output_path = Path(__file__).parent.parent / "docs" / "CONFIGURATION.md"
 
-    doc = """---
-title: Configuration Reference
----
-
-# Configuration Reference
+    doc = """# Configuration Reference
 
 Complete reference for all Deleterr configuration options.
 
 Deleterr's **Leaving Soon** feature implements a "death row" pattern—items are first tagged to a Plex collection, users receive notifications, and deletion happens on the next run. See [Leaving Soon](#leaving-soon) and [Leaving Soon Notifications](#leaving-soon-notifications) for details.
 
-> **Note**: This documentation is auto-generated from the [Pydantic schema](../app/schema.py).
-> Run `python -m scripts.generate_docs` to regenerate after schema changes.
-
----
-
-* TOC
-{{:toc}}
+!!! note "Auto-generated Documentation"
+    This documentation is auto-generated from the [Pydantic schema](https://github.com/rfsbraz/deleterr/blob/main/app/schema.py).
+    Run `python -m scripts.generate_docs` to regenerate after schema changes.
 
 ---
 
@@ -232,7 +224,8 @@ services:
       - TAUTULLI_API_KEY=your_key
 ```
 
-> **Note**: If an environment variable is not set, Deleterr will fail to start with an error message indicating which variable is missing.
+!!! warning
+    If an environment variable is not set, Deleterr will fail to start with an error message indicating which variable is missing.
 
 ---
 
@@ -497,7 +490,8 @@ notifications:
 
 User-facing notifications specifically for items scheduled for deletion. These are **separate** from the admin deletion notifications above - they're designed to alert your users about content they should watch before it's removed.
 
-> **Note:** Providers configured under `leaving_soon` do NOT inherit from the parent notification config. You must explicitly configure each provider you want to use.
+!!! note
+    Providers configured under `leaving_soon` do NOT inherit from the parent notification config. You must explicitly configure each provider you want to use.
 
 {leaving_soon_notification_table}
 
@@ -664,7 +658,8 @@ libraries:
         name: "leaving-soon"
 ```
 
-> **Note:** `preview_next` cannot be set to `0` when `leaving_soon` is configured, as the feature needs to tag upcoming deletions.
+!!! warning
+    `preview_next` cannot be set to `0` when `leaving_soon` is configured, as the feature needs to tag upcoming deletions.
 
 ```yaml
 libraries:
@@ -914,8 +909,8 @@ libraries:
 
 ## Next Steps
 
-- [Templates](templates) - Ready-to-use configuration examples
-- [Getting Started](getting-started) - Installation guide
+- [Templates](templates.md) - Ready-to-use configuration examples
+- [Getting Started](getting-started.md) - Installation guide
 """
 
     # Generate general settings table (subset of DeleterrConfig)

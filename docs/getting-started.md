@@ -1,7 +1,3 @@
----
-title: Getting Started
----
-
 # Getting Started
 
 This guide walks you through deploying Deleterr and running your first cleanup.
@@ -23,64 +19,76 @@ Before starting, ensure you have:
 
 There are two ways to schedule Deleterr: using the **built-in scheduler** (recommended for simplicity) or an **external scheduler** like Ofelia.
 
-### Option A: Built-in Scheduler (Recommended)
+=== "Built-in Scheduler (Recommended)"
 
-The simplest setup - Deleterr handles its own scheduling:
+    The simplest setup - Deleterr handles its own scheduling:
 
-```yaml
-version: "3.9"
-services:
-  deleterr:
-    image: ghcr.io/rfsbraz/deleterr:latest
-    container_name: deleterr
-    environment:
-      LOG_LEVEL: INFO
-    volumes:
-      - ./config:/config
-      - ./logs:/config/logs
-    restart: unless-stopped
-```
+    ```yaml
+    version: "3.9"
+    services:
+      deleterr:
+        image: ghcr.io/rfsbraz/deleterr:latest
+        container_name: deleterr
+        environment:
+          LOG_LEVEL: INFO
+        volumes:
+          - ./config:/config
+          - ./logs:/config/logs
+        restart: unless-stopped
+    ```
 
-Add to your `settings.yaml`:
-```yaml
-scheduler:
-  enabled: true
-  schedule: "weekly"  # or "daily", "hourly", "monthly", or cron expression
-  timezone: "America/New_York"
-```
+    Add to your `settings.yaml`:
+    ```yaml
+    scheduler:
+      enabled: true
+      schedule: "weekly"  # or "daily", "hourly", "monthly", or cron expression
+      timezone: "America/New_York"
+    ```
 
-### Option B: External Scheduler (Ofelia)
+=== "External Scheduler (Ofelia)"
 
-For more advanced scheduling control, use [Ofelia](https://github.com/mcuadros/ofelia):
+    For more advanced scheduling control, use [Ofelia](https://github.com/mcuadros/ofelia):
 
-```yaml
-version: "3.9"
-services:
-  deleterr:
-    image: ghcr.io/rfsbraz/deleterr:latest
-    container_name: deleterr
-    environment:
-      LOG_LEVEL: INFO
-    volumes:
-      - ./config:/config
-      - ./logs:/config/logs
-    restart: no
+    ```yaml
+    version: "3.9"
+    services:
+      deleterr:
+        image: ghcr.io/rfsbraz/deleterr:latest
+        container_name: deleterr
+        environment:
+          LOG_LEVEL: INFO
+        volumes:
+          - ./config:/config
+          - ./logs:/config/logs
+        restart: no
 
-  scheduler:
-    image: mcuadros/ofelia:latest
-    container_name: scheduler
-    depends_on:
-      - deleterr
-    command: daemon --docker
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    restart: unless-stopped
-    labels:
-      ofelia.job-run.deleterr.schedule: "@weekly"
-      ofelia.job-run.deleterr.container: "deleterr"
-```
+      scheduler:
+        image: mcuadros/ofelia:latest
+        container_name: scheduler
+        depends_on:
+          - deleterr
+        command: daemon --docker
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock:ro
+        restart: unless-stopped
+        labels:
+          ofelia.job-run.deleterr.schedule: "@weekly"
+          ofelia.job-run.deleterr.container: "deleterr"
+    ```
 
-### Create settings.yaml
+=== "Standalone Docker"
+
+    Run Deleterr manually without a scheduler:
+
+    ```bash
+    docker run -v ./config:/config -v ./logs:/config/logs \
+      -e LOG_LEVEL=DEBUG \
+      ghcr.io/rfsbraz/deleterr:latest
+    ```
+
+---
+
+## Create settings.yaml
 
 Create `config/settings.yaml` with your configuration. Start with dry run enabled:
 
@@ -108,7 +116,9 @@ libraries:
     added_at_threshold: 180
 ```
 
-### 3. Start the stack
+---
+
+## Start the Stack
 
 ```bash
 docker compose up -d
@@ -158,45 +168,33 @@ See [Ofelia documentation](https://github.com/mcuadros/ofelia#jobs) for full syn
 
 When deploying with Portainer, you may encounter bind mount errors because Portainer doesn't auto-create host directories.
 
-**Solution 1: Enable path creation**
+=== "Enable Path Creation"
 
-In Portainer CE 2.19+: Stacks > Add stack > Advanced options > Enable "Create path on host if it doesn't exist"
+    In Portainer CE 2.19+: Stacks > Add stack > Advanced options > Enable "Create path on host if it doesn't exist"
 
-**Solution 2: Create directories manually**
+=== "Create Directories Manually"
 
-```bash
-mkdir -p /path/to/deleterr/config
-mkdir -p /path/to/deleterr/logs
-```
+    ```bash
+    mkdir -p /path/to/deleterr/config
+    mkdir -p /path/to/deleterr/logs
+    ```
 
-Then use absolute paths in your stack.
+    Then use absolute paths in your stack.
 
-**Solution 3: Named volumes**
+=== "Named Volumes"
 
-```yaml
-volumes:
-  - deleterr_config:/config
-  - deleterr_logs:/config/logs
+    ```yaml
+    volumes:
+      - deleterr_config:/config
+      - deleterr_logs:/config/logs
 
-# Add at bottom of compose file:
-volumes:
-  deleterr_config:
-  deleterr_logs:
-```
+    # Add at bottom of compose file:
+    volumes:
+      deleterr_config:
+      deleterr_logs:
+    ```
 
-Note: With named volumes, copy settings.yaml using: `docker cp settings.yaml deleterr:/config/settings.yaml`
-
----
-
-## Standalone Docker
-
-Run Deleterr manually without a scheduler:
-
-```bash
-docker run -v ./config:/config -v ./logs:/config/logs \
-  -e LOG_LEVEL=DEBUG \
-  ghcr.io/rfsbraz/deleterr:latest
-```
+    Note: With named volumes, copy settings.yaml using: `docker cp settings.yaml deleterr:/config/settings.yaml`
 
 ---
 
@@ -207,7 +205,7 @@ docker run -v ./config:/config -v ./logs:/config/logs \
 3. **Adjust thresholds** - Modify `last_watched_threshold` and `added_at_threshold` based on results
 4. **Add exclusions** - Protect important media with exclusion rules
 5. **Disable dry_run** - Set `dry_run: false` when satisfied with the preview
-6. **Enable scheduling** - Let Ofelia run Deleterr automatically
+6. **Enable scheduling** - Let Deleterr run automatically
 
 ---
 
@@ -220,6 +218,7 @@ docker compose run --rm deleterr
 ```
 
 Check the logs for:
+
 - Successful connections to Plex, Tautulli, Radarr/Sonarr
 - Media items identified for deletion
 - Any errors or warnings
@@ -228,5 +227,6 @@ Check the logs for:
 
 ## Next Steps
 
-- [Configuration Reference](CONFIGURATION) - Full list of all settings
-- [Templates](templates) - Ready-to-use configuration examples
+- [Configuration Reference](CONFIGURATION.md) - Full list of all settings
+- [Templates](templates.md) - Ready-to-use configuration examples
+- [Leaving Soon](features/leaving-soon.md) - Set up user notifications before deletion
