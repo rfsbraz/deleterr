@@ -868,9 +868,12 @@ class MediaCleaner:
                 collection, home=promote_home, shared=promote_shared
             )
 
-            logger.info(
-                f"Updated collection '{collection_name}' with {len(plex_items)} items"
-            )
+            if plex_items:
+                logger.info(
+                    f"Updated collection '{collection_name}' with {len(plex_items)} items"
+                )
+            else:
+                logger.info(f"Cleared collection '{collection_name}' (no items to tag)")
         except Exception as e:
             logger.error(
                 f"Failed to update leaving_soon collection '{collection_name}': {e}. "
@@ -898,10 +901,12 @@ class MediaCleaner:
         existing_labeled = self.media_server.get_items_with_label(
             plex_library, label_name
         )
+        removed_count = 0
         for item in existing_labeled:
             if item.ratingKey not in current_item_keys:
                 self.media_server.remove_label(item, label_name)
                 logger.debug(f"Removed label '{label_name}' from '{item.title}'")
+                removed_count += 1
 
         # Add labels to current preview items
         for item in plex_items:
@@ -911,7 +916,13 @@ class MediaCleaner:
                 self.media_server.add_label(item, label_name)
                 logger.debug(f"Added label '{label_name}' to '{item.title}'")
 
-        logger.info(f"Updated labels: {len(plex_items)} items now have '{label_name}'")
+        if plex_items:
+            logger.info(f"Updated labels: {len(plex_items)} items now have '{label_name}'")
+        else:
+            if removed_count > 0:
+                logger.info(f"Cleared '{label_name}' label from {removed_count} items")
+            else:
+                logger.debug(f"No items had '{label_name}' label to clear")
 
     def get_library_config(self, config, show):
         return next(
