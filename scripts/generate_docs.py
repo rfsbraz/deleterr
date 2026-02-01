@@ -184,6 +184,8 @@ title: Configuration Reference
 
 Complete reference for all Deleterr configuration options.
 
+Deleterr's **Leaving Soon** feature implements a "death row" pattern—items are first tagged to a Plex collection, users receive notifications, and deletion happens on the next run. See [Leaving Soon](#leaving-soon) and [Leaving Soon Notifications](#leaving-soon-notifications) for details.
+
 > **Note**: This documentation is auto-generated from the [Pydantic schema](../app/schema.py).
 > Run `python -m scripts.generate_docs` to regenerate after schema changes.
 
