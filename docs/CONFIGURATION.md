@@ -219,7 +219,7 @@ When enabled, Deleterr runs as a long-lived process and executes cleanup on the 
 
 | Property | Type | Required | Default | Description |
 |----------|------|----------|---------|-------------|
-| `enabled` | boolean | No | `false` | Enable built-in scheduler. When false, Deleterr runs once and exits (for external schedulers) |
+| `enabled` | boolean | No | `true` | Enable built-in scheduler. Set to false for external schedulers (Ofelia, cron) where Deleterr should run once and exit |
 | `schedule` | string | No | `"weekly"` | Cron expression or preset (hourly, daily, weekly, monthly). Examples: 'weekly', '0 3 * * 0' (Sunday 3 AM) |
 | `timezone` | string | No | `"UTC"` | Timezone for schedule (e.g., 'America/New_York', 'Europe/London') |
 | `run_on_startup` | boolean | No | `false` | Run immediately when container starts, in addition to scheduled runs |
