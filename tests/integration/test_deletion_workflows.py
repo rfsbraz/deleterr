@@ -369,8 +369,9 @@ class TestExclusionRules:
                 pass
 
 
+@pytest.mark.skip(reason="Plex mock has been replaced with real Plex server - use test_plex_integration.py")
 class TestPlexMockIntegration:
-    """Test integration with mock Plex server."""
+    """Test integration with mock Plex server (DEPRECATED - use test_plex_integration.py)."""
 
     def test_plex_mock_returns_library_sections(self, plex_mock_seeder):
         """Verify mock Plex returns library sections."""

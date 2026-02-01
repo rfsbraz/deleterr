@@ -200,8 +200,9 @@ def create_library(
     location: str,
     scanner: str = "",
     agent: str = "",
+    retries: int = 3,
 ) -> bool:
-    """Create a library section in Plex."""
+    """Create a library section in Plex with retry logic."""
     headers = {"X-Plex-Token": token} if token else {}
 
     # Get scanner and agent defaults
@@ -221,23 +222,28 @@ def create_library(
         "location": location,
     }
 
-    try:
-        resp = requests.post(
-            f"{plex_url}/library/sections",
-            params=params,
-            headers=headers,
-            timeout=30,
-        )
-        if resp.status_code in (200, 201):
-            print(f"  Created library: {name}")
-            return True
-        else:
-            print(f"  Failed to create library {name}: {resp.status_code}")
-            print(f"    Response: {resp.text[:200]}")
-            return False
-    except requests.RequestException as e:
-        print(f"  Error creating library {name}: {e}")
-        return False
+    for attempt in range(retries):
+        try:
+            resp = requests.post(
+                f"{plex_url}/library/sections",
+                params=params,
+                headers=headers,
+                timeout=30,
+            )
+            if resp.status_code in (200, 201):
+                print(f"  Created library: {name}")
+                return True
+            else:
+                print(f"  Attempt {attempt + 1}/{retries}: Failed to create library {name}: {resp.status_code}")
+                print(f"    Response: {resp.text[:200]}")
+                if attempt < retries - 1:
+                    time.sleep(5)  # Wait before retry
+        except requests.RequestException as e:
+            print(f"  Attempt {attempt + 1}/{retries}: Error creating library {name}: {e}")
+            if attempt < retries - 1:
+                time.sleep(5)
+
+    return False
 
 
 def get_library_sections(plex_url: str, token: str) -> list:
@@ -342,6 +348,10 @@ def bootstrap_plex(
         print("ERROR: Plex did not start in time")
         return result
 
+    # Give Plex a moment to fully initialize after responding to /identity
+    print("Waiting for Plex to fully initialize...")
+    time.sleep(10)
+
     # Get token (for unclaimed server, this is empty)
     token = get_plex_token(plex_url) or ""
     result["token"] = token
@@ -349,26 +359,29 @@ def bootstrap_plex(
     # Check existing sections
     existing = get_library_sections(plex_url, token)
     existing_names = {s["title"] for s in existing}
+    print(f"Existing libraries: {existing_names}")
 
     # Create Movies library if not exists
     if "Movies" not in existing_names:
-        create_library(
+        if not create_library(
             plex_url,
             token,
             "Movies",
             "movie",
             f"{container_media_path}/movies",
-        )
+        ):
+            print("WARNING: Failed to create Movies library")
 
     # Create TV Shows library if not exists
     if "TV Shows" not in existing_names:
-        create_library(
+        if not create_library(
             plex_url,
             token,
             "TV Shows",
             "show",
             f"{container_media_path}/tvshows",
-        )
+        ):
+            print("WARNING: Failed to create TV Shows library")
 
     # Get updated sections
     sections = get_library_sections(plex_url, token)

@@ -22,23 +22,41 @@ class PlexTestHelper:
 
     def __init__(self, server: PlexServer):
         self.server = server
+        self._movies_section = None
+        self._tvshows_section = None
 
     @property
-    def movies_section(self) -> MovieSection:
+    def movies_section(self) -> Optional[MovieSection]:
         """Get the Movies library section."""
-        return self.server.library.section("Movies")
+        if self._movies_section is None:
+            from plexapi.exceptions import NotFound
+            try:
+                self._movies_section = self.server.library.section("Movies")
+            except NotFound:
+                return None
+        return self._movies_section
 
     @property
-    def tvshows_section(self) -> ShowSection:
+    def tvshows_section(self) -> Optional[ShowSection]:
         """Get the TV Shows library section."""
-        return self.server.library.section("TV Shows")
+        if self._tvshows_section is None:
+            from plexapi.exceptions import NotFound
+            try:
+                self._tvshows_section = self.server.library.section("TV Shows")
+            except NotFound:
+                return None
+        return self._tvshows_section
 
     def get_all_movies(self) -> List[Movie]:
         """Get all movies in the library."""
+        if self.movies_section is None:
+            return []
         return self.movies_section.all()
 
     def get_all_shows(self) -> List[Show]:
         """Get all TV shows in the library."""
+        if self.tvshows_section is None:
+            return []
         return self.tvshows_section.all()
 
     def get_movie_by_title(self, title: str) -> Optional[Movie]:

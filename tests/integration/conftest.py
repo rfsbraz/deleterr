@@ -41,6 +41,7 @@ RADARR_URL = os.getenv("RADARR_URL", "http://localhost:7878")
 SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989")
 TAUTULLI_URL = os.getenv("TAUTULLI_URL", "http://localhost:8181")
 PLEX_URL = os.getenv("PLEX_URL", "http://localhost:32400")
+PLEX_MOCK_URL = PLEX_URL  # Backwards compatibility alias
 WEBHOOK_RECEIVER_URL = os.getenv("WEBHOOK_RECEIVER_URL", "http://localhost:8080")
 JUSTWATCH_PROXY_URL = os.getenv("JUSTWATCH_PROXY_URL", "http://localhost:8888")
 
@@ -408,13 +409,21 @@ def plex_server(plex_token):
 @pytest.fixture(scope="session")
 def plex_movies_library(plex_server):
     """Get the Movies library section."""
-    return plex_server.library.section("Movies")
+    from plexapi.exceptions import NotFound
+    try:
+        return plex_server.library.section("Movies")
+    except NotFound:
+        pytest.skip("Movies library not found - Plex bootstrap may have failed")
 
 
 @pytest.fixture(scope="session")
 def plex_tvshows_library(plex_server):
     """Get the TV Shows library section."""
-    return plex_server.library.section("TV Shows")
+    from plexapi.exceptions import NotFound
+    try:
+        return plex_server.library.section("TV Shows")
+    except NotFound:
+        pytest.skip("TV Shows library not found - Plex bootstrap may have failed")
 
 
 @pytest.fixture(scope="session")

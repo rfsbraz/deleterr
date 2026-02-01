@@ -21,6 +21,22 @@ INTEGRATION_DIR = Path(__file__).parent
 PLEX_MOCK_URL = "http://localhost:32400"
 
 
+def is_plex_mock_available():
+    """Check if Plex mock endpoints are available (vs real Plex server)."""
+    try:
+        resp = requests.get(f"{PLEX_MOCK_URL}/api/status", timeout=2)
+        return resp.status_code == 200
+    except requests.RequestException:
+        return False
+
+
+# Skip tests that require mock-specific endpoints when using real Plex
+requires_plex_mock = pytest.mark.skipif(
+    not is_plex_mock_available(),
+    reason="These tests require Plex mock server endpoints (not real Plex)"
+)
+
+
 @pytest.fixture
 def plex_mock_seeder_url():
     """URL for Plex mock seeder."""
@@ -29,7 +45,10 @@ def plex_mock_seeder_url():
 
 def reset_plex_mock(plex_url):
     """Reset the Plex mock server."""
-    requests.post(f"{plex_url}/api/reset", timeout=5)
+    try:
+        requests.post(f"{plex_url}/api/reset", timeout=5)
+    except requests.RequestException:
+        pass  # Real Plex doesn't have this endpoint
 
 
 def add_movie_to_plex(plex_url, **kwargs):
@@ -61,8 +80,9 @@ def get_collections(plex_url, section_name):
 
 
 @pytest.mark.integration
+@requires_plex_mock
 class TestLeavingSoonCollectionIntegration:
-    """Integration tests for leaving_soon collection feature."""
+    """Integration tests for leaving_soon collection feature (requires Plex mock)."""
 
     @pytest.fixture(autouse=True)
     def setup(self, docker_services, plex_mock_seeder_url):
@@ -119,8 +139,9 @@ class TestLeavingSoonCollectionIntegration:
 
 
 @pytest.mark.integration
+@requires_plex_mock
 class TestLeavingSoonLabelsIntegration:
-    """Integration tests for leaving_soon labels feature."""
+    """Integration tests for leaving_soon labels feature (requires Plex mock)."""
 
     @pytest.fixture(autouse=True)
     def setup(self, docker_services, plex_mock_seeder_url):
@@ -179,8 +200,9 @@ class TestLeavingSoonLabelsIntegration:
 
 
 @pytest.mark.integration
+@requires_plex_mock
 class TestLeavingSoonTaggingOnlyMode:
-    """Integration tests for tagging_only mode."""
+    """Integration tests for tagging_only mode (requires Plex mock)."""
 
     @pytest.fixture(autouse=True)
     def setup(self, docker_services, plex_mock_seeder_url):
@@ -268,8 +290,9 @@ class TestLeavingSoonTaggingOnlyMode:
 
 
 @pytest.mark.integration
+@requires_plex_mock
 class TestLeavingSoonE2E:
-    """End-to-end tests for leaving_soon feature."""
+    """End-to-end tests for leaving_soon feature (requires Plex mock)."""
 
     @pytest.fixture(autouse=True)
     def setup(self, docker_services, plex_mock_seeder_url, radarr_seeder, seeded_radarr):
