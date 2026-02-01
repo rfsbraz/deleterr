@@ -8,10 +8,52 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=rfsbraz_deleterr&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=rfsbraz_deleterr)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=rfsbraz_deleterr&metric=coverage)](https://sonarcloud.io/summary/new_code?id=rfsbraz_deleterr)
 
+**Intelligent media library cleanup for Plex with user-friendly "Leaving Soon" notifications.**
 
-Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files based on user-specified criteria. Deleterr is customizable, allowing you to specify metadata based rules for different libraries and sonarr/radarr instances.
+Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files based on user-specified criteria. Its **Leaving Soon** system warns your users before content is removed—giving them a chance to watch it first.
 
-Setup Deleterr to run on a schedule and it will automatically delete media files that meet your criteria. This allows to keep your library fresh and clean, without having to manually manage it to free up space.
+## Key Features
+
+- **Leaving Soon Collections** - Automatically create Plex collections showing content scheduled for deletion
+- **User Notifications** - Email, Discord, Slack, or Telegram alerts to your users about expiring content
+- **Smart Exclusions** - Protect content by genre, actor, collection, streaming availability (JustWatch), Trakt lists, and more
+- **Watch-Based Rules** - Delete only unwatched content, or content not watched in X days
+- **Multi-Instance Support** - Manage multiple Radarr/Sonarr instances (regular + 4K libraries)
+- **Dry Run Mode** - Preview what would be deleted before enabling real deletions
+
+## Leaving Soon: Give Users Time to Watch
+
+The **Leaving Soon** feature implements a "death row" pattern:
+
+1. **First run**: Items matching deletion criteria are tagged with a "Leaving Soon" collection/label
+2. **Users get notified**: Via email, Discord, Slack, or Telegram with a beautiful list of expiring content
+3. **Grace period**: Users can watch the content before the next scheduled run
+4. **Next run**: Previously tagged items are deleted, new candidates are tagged
+
+This creates a Netflix-like experience where users see what's leaving and can prioritize their watchlist accordingly.
+
+```yaml
+# Example: Enable Leaving Soon with email notifications
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 20
+    leaving_soon:
+      collection:
+        name: "Leaving Soon"
+      labels:
+        name: "leaving-soon"
+
+notifications:
+  leaving_soon:
+    subject: "Content leaving your Plex server soon!"
+    email:
+      smtp_server: "smtp.gmail.com"
+      to_addresses: ["family@example.com"]
+```
+
+Setup Deleterr to run on a schedule and it will automatically delete media files that meet your criteria while keeping your users informed. This allows you to keep your library fresh and clean, without surprising anyone with missing content.
 
 ## Documentation
 
