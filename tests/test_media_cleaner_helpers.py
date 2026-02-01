@@ -1,13 +1,8 @@
 """
-Unit-style tests for MediaCleaner helper functions.
+Unit tests for MediaCleaner helper functions.
 
 These tests verify the standalone helper functions in media_cleaner.py work correctly
-with mock data. While they use the integration test fixtures (docker_services, etc.)
-to ensure they run in the integration test context, they primarily test the decision
-logic functions in isolation.
-
-For full end-to-end tests that actually seed Radarr/Sonarr and run the complete
-deletion workflow, see test_deleterr_e2e.py.
+with mock data. They test the decision logic functions in isolation.
 
 Test categories:
 - Exclusion functions: check_excluded_titles, check_excluded_genres, etc.
@@ -19,16 +14,6 @@ Test categories:
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
-from pathlib import Path
-
-from pyarr.radarr import RadarrAPI
-from pyarr.sonarr import SonarrAPI
-
-# Mark all tests in this module as integration tests
-pytestmark = pytest.mark.integration
-
-# Path to config files
-CONFIGS_DIR = Path(__file__).parent / "configs"
 
 
 class MockPlexMediaItem:
@@ -68,9 +53,7 @@ class MockPlexMediaItem:
 class TestExclusionsByTitle:
     """Test title-based exclusion rules."""
 
-    def test_excluded_title_is_protected(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_excluded_title_is_protected(self):
         """Test that movies with excluded titles are protected from deletion."""
         from app.media_cleaner import check_excluded_titles
 
@@ -87,9 +70,7 @@ class TestExclusionsByTitle:
         result = check_excluded_titles(media_data, plex_item, exclude)
         assert result is False, "The Matrix should be excluded by title"
 
-    def test_non_excluded_title_is_actionable(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_non_excluded_title_is_actionable(self):
         """Test that movies without excluded titles are actionable."""
         from app.media_cleaner import check_excluded_titles
 
@@ -100,9 +81,7 @@ class TestExclusionsByTitle:
         result = check_excluded_titles(media_data, plex_item, exclude)
         assert result is True, "Non-excluded title should be actionable"
 
-    def test_title_exclusion_is_case_insensitive(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_title_exclusion_is_case_insensitive(self):
         """Test that title exclusion is case-insensitive."""
         from app.media_cleaner import check_excluded_titles
 
@@ -117,9 +96,7 @@ class TestExclusionsByTitle:
 class TestExclusionsByGenre:
     """Test genre-based exclusion rules."""
 
-    def test_excluded_genre_is_protected(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_excluded_genre_is_protected(self):
         """Test that movies with excluded genres are protected."""
         from app.media_cleaner import check_excluded_genres
 
@@ -132,9 +109,7 @@ class TestExclusionsByGenre:
         result = check_excluded_genres(media_data, plex_item, exclude)
         assert result is False, "Movie with Horror genre should be excluded"
 
-    def test_non_excluded_genre_is_actionable(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_non_excluded_genre_is_actionable(self):
         """Test that movies without excluded genres are actionable."""
         from app.media_cleaner import check_excluded_genres
 
@@ -151,9 +126,7 @@ class TestExclusionsByGenre:
 class TestExclusionsByCollection:
     """Test collection-based exclusion rules."""
 
-    def test_excluded_collection_is_protected(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_excluded_collection_is_protected(self):
         """Test that movies in excluded collections are protected."""
         from app.media_cleaner import check_excluded_collections
 
@@ -168,9 +141,7 @@ class TestExclusionsByCollection:
         result = check_excluded_collections(media_data, plex_item, exclude)
         assert result is False, "Movie in MCU collection should be excluded"
 
-    def test_non_excluded_collection_is_actionable(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_non_excluded_collection_is_actionable(self):
         """Test that movies not in excluded collections are actionable."""
         from app.media_cleaner import check_excluded_collections
 
@@ -187,9 +158,7 @@ class TestExclusionsByCollection:
 class TestExclusionsByLabel:
     """Test Plex label-based exclusion rules."""
 
-    def test_excluded_label_is_protected(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_excluded_label_is_protected(self):
         """Test that movies with excluded Plex labels are protected."""
         from app.media_cleaner import check_excluded_labels
 
@@ -202,9 +171,7 @@ class TestExclusionsByLabel:
         result = check_excluded_labels(media_data, plex_item, exclude)
         assert result is False, "Movie with 'children' label should be excluded"
 
-    def test_non_excluded_label_is_actionable(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_non_excluded_label_is_actionable(self):
         """Test that movies without excluded labels are actionable."""
         from app.media_cleaner import check_excluded_labels
 
@@ -221,9 +188,7 @@ class TestExclusionsByLabel:
 class TestExclusionsByReleaseYear:
     """Test release year-based exclusion rules."""
 
-    def test_recent_release_is_protected(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_recent_release_is_protected(self):
         """Test that recently released movies are protected."""
         from app.media_cleaner import check_excluded_release_years
 
@@ -235,9 +200,7 @@ class TestExclusionsByReleaseYear:
         result = check_excluded_release_years(media_data, plex_item, exclude)
         assert result is False, "Movie from current year should be excluded"
 
-    def test_old_release_is_actionable(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_old_release_is_actionable(self):
         """Test that older releases are actionable."""
         from app.media_cleaner import check_excluded_release_years
 
@@ -253,9 +216,7 @@ class TestExclusionsByReleaseYear:
 class TestExclusionsByStudio:
     """Test studio-based exclusion rules."""
 
-    def test_excluded_studio_is_protected(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_excluded_studio_is_protected(self):
         """Test that movies from excluded studios are protected."""
         from app.media_cleaner import check_excluded_studios
 
@@ -272,9 +233,7 @@ class TestExclusionsByStudio:
 class TestExclusionsByDirector:
     """Test director-based exclusion rules."""
 
-    def test_excluded_director_is_protected(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_excluded_director_is_protected(self):
         """Test that movies by excluded directors are protected."""
         from app.media_cleaner import check_excluded_directors
 
@@ -291,9 +250,7 @@ class TestExclusionsByDirector:
 class TestExclusionsByActor:
     """Test actor-based exclusion rules."""
 
-    def test_excluded_actor_is_protected(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_excluded_actor_is_protected(self):
         """Test that movies with excluded actors are protected."""
         from app.media_cleaner import check_excluded_actors
 
@@ -310,9 +267,7 @@ class TestExclusionsByActor:
 class TestAddedAtThreshold:
     """Test added_at_threshold protection."""
 
-    def test_recently_added_is_protected(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_recently_added_is_protected(self):
         """Test that recently added movies are protected."""
         from app.media_cleaner import MediaCleaner
 
@@ -342,9 +297,7 @@ class TestAddedAtThreshold:
 
         assert result is False, "Movie added 3 days ago should be protected (threshold 7)"
 
-    def test_old_added_is_actionable(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_old_added_is_actionable(self):
         """Test that movies added long ago are actionable."""
         from app.media_cleaner import MediaCleaner
 
@@ -375,9 +328,7 @@ class TestAddedAtThreshold:
 class TestWatchedStatusCheck:
     """Test watched status filtering."""
 
-    def test_recently_watched_is_protected(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_recently_watched_is_protected(self):
         """Test that recently watched movies are protected."""
         from app.media_cleaner import MediaCleaner
 
@@ -417,9 +368,7 @@ class TestWatchedStatusCheck:
             result is False
         ), "Movie watched 5 days ago should be protected (threshold 30)"
 
-    def test_old_watched_is_actionable(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_old_watched_is_actionable(self):
         """Test that movies watched long ago are actionable."""
         from app.media_cleaner import MediaCleaner
 
@@ -457,9 +406,7 @@ class TestWatchedStatusCheck:
 
         assert result is True, "Movie watched 60 days ago should be actionable"
 
-    def test_watch_status_filter_watched_only(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_watch_status_filter_watched_only(self):
         """Test watch_status: watched filter (only delete watched items)."""
         from app.media_cleaner import MediaCleaner
 
@@ -492,9 +439,7 @@ class TestWatchedStatusCheck:
             result is False
         ), "Unwatched movie should be protected when watch_status='watched'"
 
-    def test_watch_status_filter_unwatched_only(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_watch_status_filter_unwatched_only(self):
         """Test watch_status: unwatched filter (only delete unwatched items)."""
         from app.media_cleaner import MediaCleaner
 
@@ -537,9 +482,7 @@ class TestWatchedStatusCheck:
 class TestCollectionThreshold:
     """Test apply_last_watch_threshold_to_collections feature."""
 
-    def test_collection_recently_watched_protects_all_items(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_collection_recently_watched_protects_all_items(self):
         """Test that entire collections are protected when any item was recently watched."""
         from app.media_cleaner import MediaCleaner
 
@@ -578,9 +521,7 @@ class TestCollectionThreshold:
 class TestSortingBehavior:
     """Test media sorting functionality."""
 
-    def test_sort_by_size_descending(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_sort_by_size_descending(self):
         """Test sorting by size descending (largest first)."""
         from app.media_cleaner import sort_media
 
@@ -597,9 +538,7 @@ class TestSortingBehavior:
         assert sorted_list[1]["title"] == "Medium Movie"
         assert sorted_list[2]["title"] == "Small Movie"
 
-    def test_sort_by_added_date_ascending(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_sort_by_added_date_ascending(self):
         """Test sorting by added date ascending (oldest first)."""
         from app.media_cleaner import sort_media
 
@@ -616,9 +555,7 @@ class TestSortingBehavior:
         assert sorted_list[1]["title"] == "Middle Movie"
         assert sorted_list[2]["title"] == "Recent Movie"
 
-    def test_sort_by_rating_descending(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_sort_by_rating_descending(self):
         """Test sorting by rating descending (highest rated first)."""
         from app.media_cleaner import sort_media
 
@@ -635,9 +572,7 @@ class TestSortingBehavior:
         assert sorted_list[1]["title"] == "Medium Rated"
         assert sorted_list[2]["title"] == "Low Rated"
 
-    def test_sort_by_multiple_fields(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_sort_by_multiple_fields(self):
         """Test multi-level sorting with comma-separated fields."""
         from app.media_cleaner import sort_media
 
@@ -658,9 +593,7 @@ class TestSortingBehavior:
         assert sorted_list[2]["title"] == "A"
         assert sorted_list[3]["title"] == "C"
 
-    def test_sort_by_multiple_fields_mixed_orders(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_sort_by_multiple_fields_mixed_orders(self):
         """Test multi-level sorting with different orders per field."""
         from app.media_cleaner import sort_media
 
@@ -681,9 +614,7 @@ class TestSortingBehavior:
         assert sorted_list[2]["title"] == "B"
         assert sorted_list[3]["title"] == "C"
 
-    def test_sort_by_last_watched_desc(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_sort_by_last_watched_desc(self):
         """Test sorting by last_watched with unwatched items first."""
         from app.media_cleaner import sort_media
 
@@ -740,9 +671,7 @@ class TestSortingBehavior:
         assert sorted_list[1]["title"] == "Watched Long Ago"
         assert sorted_list[2]["title"] == "Watched Recently"
 
-    def test_sort_by_last_watched_then_size(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_sort_by_last_watched_then_size(self):
         """Test combined last_watched and size sorting."""
         from app.media_cleaner import sort_media
 
@@ -800,9 +729,7 @@ class TestSortingBehavior:
 class TestSeriesTypeFiltering:
     """Test series_type filtering for Sonarr."""
 
-    def test_filter_standard_series(
-        self, docker_services, sonarr_seeder, sonarr_client: SonarrAPI
-    ):
+    def test_filter_standard_series(self):
         """Test that only standard series are processed when series_type=standard."""
         from app.media_cleaner import MediaCleaner
 
@@ -831,9 +758,7 @@ class TestSeriesTypeFiltering:
         assert len(filtered) == 2
         assert all(show["seriesType"] == "standard" for show in filtered)
 
-    def test_filter_anime_series(
-        self, docker_services, sonarr_seeder, sonarr_client: SonarrAPI
-    ):
+    def test_filter_anime_series(self):
         """Test that only anime series are processed when series_type=anime."""
         from app.media_cleaner import MediaCleaner
 
@@ -864,9 +789,7 @@ class TestSeriesTypeFiltering:
 class TestDiskSpaceThreshold:
     """Test disk_size_threshold functionality."""
 
-    def test_library_above_threshold_is_skipped(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_library_above_threshold_is_skipped(self):
         """Test that libraries with disk space above threshold are skipped."""
         from app.media_cleaner import library_meets_disk_space_threshold
 
@@ -884,9 +807,7 @@ class TestDiskSpaceThreshold:
         result = library_meets_disk_space_threshold(library_config, mock_radarr)
         assert result is False, "Library with 500GB free should be skipped (threshold 100GB)"
 
-    def test_library_below_threshold_is_processed(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_library_below_threshold_is_processed(self):
         """Test that libraries with disk space below threshold are processed."""
         from app.media_cleaner import library_meets_disk_space_threshold
 
@@ -908,16 +829,14 @@ class TestDiskSpaceThreshold:
 class TestDryRunMode:
     """Test dry_run mode behavior."""
 
-    def test_dry_run_does_not_call_delete(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_dry_run_does_not_call_delete(self):
         """Test that dry_run mode does not actually delete movies."""
         from app.media_cleaner import MediaCleaner
 
         mock_config = MagicMock()
         mock_config.settings = {
             "dry_run": True,
-                        "plex": {"url": "http://localhost:32400", "token": "test"},
+            "plex": {"url": "http://localhost:32400", "token": "test"},
             "tautulli": {"url": "http://localhost:8181", "api_key": "test"},
         }
 
@@ -944,16 +863,14 @@ class TestDryRunMode:
 class TestMaxActionsPerRun:
     """Test max_actions_per_run limit."""
 
-    def test_stops_at_max_actions(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_stops_at_max_actions(self):
         """Test that processing stops after max_actions_per_run is reached."""
         from app.media_cleaner import MediaCleaner
 
         mock_config = MagicMock()
         mock_config.settings = {
             "dry_run": True,  # Use dry run so we don't actually delete
-                        "action_delay": 0,
+            "action_delay": 0,
             "plex": {"url": "http://localhost:32400", "token": "test"},
             "tautulli": {"url": "http://localhost:8181", "api_key": "test"},
         }
@@ -999,16 +916,14 @@ class TestMaxActionsPerRun:
 class TestAddListExclusion:
     """Test add_list_exclusion_on_delete functionality."""
 
-    def test_add_exclusion_flag_passed_to_radarr(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_add_exclusion_flag_passed_to_radarr(self):
         """Test that add_exclusion flag is correctly passed to Radarr."""
         from app.media_cleaner import MediaCleaner
 
         mock_config = MagicMock()
         mock_config.settings = {
             "dry_run": False,
-                        "plex": {"url": "http://localhost:32400", "token": "test"},
+            "plex": {"url": "http://localhost:32400", "token": "test"},
             "tautulli": {"url": "http://localhost:8181", "api_key": "test"},
         }
 
@@ -1042,9 +957,7 @@ class TestAddListExclusion:
 class TestCombinedExclusions:
     """Test that multiple exclusion rules work together correctly."""
 
-    def test_all_exclusion_checks_must_pass(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_all_exclusion_checks_must_pass(self):
         """Test that media must pass ALL exclusion checks to be actionable."""
         from app.media_cleaner import MediaCleaner
 
@@ -1086,9 +999,7 @@ class TestCombinedExclusions:
 
         assert result is False, "Movie with excluded genre should fail exclusion check"
 
-    def test_media_passing_all_checks_is_actionable(
-        self, docker_services, radarr_seeder, radarr_client: RadarrAPI
-    ):
+    def test_media_passing_all_checks_is_actionable(self):
         """Test that media passing all exclusion checks is actionable."""
         from app.media_cleaner import MediaCleaner
 
