@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2](https://github.com/rfsbraz/deleterr/compare/v0.2.1...v0.2.2) (2026-02-01)
+
+
+### Bug Fixes
+
+* improve Plex item matching with normalized titles and filename fallback ([#205](https://github.com/rfsbraz/deleterr/issues/205)) ([6c6653b](https://github.com/rfsbraz/deleterr/commit/6c6653bc2043b6f1b4563d8362b9d1f4f78cb303))
+* prevent duplicate items in leaving_soon and deletion preview ([#207](https://github.com/rfsbraz/deleterr/issues/207)) ([c53ff3d](https://github.com/rfsbraz/deleterr/commit/c53ff3de7ee5a60fc2de6c566209e4c1a6a35908))
+
 ## [0.2.1](https://github.com/rfsbraz/deleterr/compare/v0.2.0...v0.2.1) (2026-02-01)
 
 
