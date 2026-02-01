@@ -335,7 +335,7 @@ class TestExclusionRules:
     ):
         """Test that items in excluded collections are protected."""
         # This test validates the concept - actual collection checking
-        # requires Plex mock integration which provides collection data
+        # requires Plex integration which provides collection data
         # Using real TMDb ID for Schindler's List
         test_movie = {
             "title": "Schindler's List",
