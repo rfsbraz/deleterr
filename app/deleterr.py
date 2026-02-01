@@ -259,6 +259,14 @@ class Deleterr:
         from app.media_cleaner import library_meets_disk_space_threshold
 
         if not library_meets_disk_space_threshold(library, media_instance):
+            library_name = library.get("name", "Unknown")
+            leaving_soon_config = library.get("leaving_soon")
+            if leaving_soon_config:
+                logger.info(
+                    "Disk space above threshold for library '%s' - "
+                    "death row will be cleared (no deletions needed)",
+                    library_name,
+                )
             return 0, [], []
 
         library_name = library.get("name", "Unknown")
@@ -572,9 +580,10 @@ class Deleterr:
                         item.get("year", "Unknown")
                     )
             else:
-                logger.debug(
-                    "[DRY-RUN] No items would be added to leaving_soon "
-                    "(collection/labels would be cleared)"
+                logger.info(
+                    "[DRY-RUN] No items match deletion criteria for library '%s' - "
+                    "leaving_soon collection/labels would be cleared",
+                    library.get("name", "Unknown"),
                 )
             return
 

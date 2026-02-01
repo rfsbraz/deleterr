@@ -1160,3 +1160,187 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
             f"Expected normal library preview, got: {log_preview_calls[0]}"
         assert "Movie for Tagging" not in log_preview_calls[0], \
             f"leaving_soon preview should not appear in deletion preview: {log_preview_calls[0]}"
+
+
+class TestThresholdNotMetClearsDeathRow:
+    """Tests for death row clearing when disk threshold is not met.
+
+    When disk has sufficient free space (threshold not met), the death row
+    collection/labels should be cleared. This ensures users don't see stale
+    "Leaving Soon" items when no deletions are pending.
+    """
+
+    @pytest.fixture
+    def mock_config(self):
+        """Create a mock config for Deleterr."""
+        return MagicMock(
+            settings={
+                "dry_run": False,
+                "plex": {"url": "http://localhost:32400", "token": "test_token"},
+                "radarr": [{"name": "Radarr", "url": "http://localhost:7878", "api_key": "test"}],
+                "sonarr": [],
+                "libraries": [],
+                "ssl_verify": False,
+            }
+        )
+
+    @pytest.fixture
+    def deleterr_instance(self, mock_config):
+        """Create a Deleterr instance with mocked dependencies."""
+        with patch("app.deleterr.PlexMediaServer"), \
+             patch("app.deleterr.MediaCleaner"), \
+             patch("app.deleterr.NotificationManager"), \
+             patch("app.deleterr.DRadarr"), \
+             patch("app.deleterr.DSonarr"):
+
+            from app.deleterr import Deleterr
+
+            instance = object.__new__(Deleterr)
+            instance.config = mock_config
+            instance.media_server = MagicMock()
+            instance.media_cleaner = MagicMock()
+            instance.notifications = MagicMock()
+            instance.run_result = MagicMock()
+            instance.radarr = {"Radarr": MagicMock()}
+            instance.sonarr = {}
+            instance.libraries_processed = 0
+            instance.libraries_failed = 0
+
+            return instance
+
+    def test_threshold_not_met_clears_collection(self, deleterr_instance, mock_config):
+        """Verify collection is cleared when disk threshold is not met (non-dry-run).
+
+        When library_meets_disk_space_threshold returns False:
+        - _process_death_row returns (0, [], [])
+        - _process_library_leaving_soon is called with empty preview
+        - process_leaving_soon clears the collection
+        """
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        mock_config.settings["libraries"] = [library]
+
+        # Threshold NOT met (disk has space) - returns (0, [], [])
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=False):
+            from app.deleterr import Deleterr
+            # Call the actual method
+            saved_space, deleted, preview = deleterr_instance._process_death_row(
+                library, deleterr_instance.radarr["Radarr"], "movie"
+            )
+
+        # Should return empty results
+        assert saved_space == 0
+        assert deleted == []
+        assert preview == []
+
+    def test_threshold_not_met_clears_labels(self, media_cleaner, mock_media_server):
+        """Verify labels are cleared when threshold not met (non-dry-run).
+
+        When process_leaving_soon is called with empty plex_items:
+        - Existing labels should be removed from all items
+        - No new labels should be added
+        """
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {"labels": {"name": "leaving-soon"}},
+        }
+        plex_library = MagicMock()
+
+        # Existing items with the label (simulating stale death row)
+        old_item_1 = MagicMock()
+        old_item_1.ratingKey = "1001"
+        old_item_2 = MagicMock()
+        old_item_2.ratingKey = "1002"
+
+        mock_media_server.get_items_with_label.return_value = [old_item_1, old_item_2]
+
+        # Call with empty list (clearing death row)
+        media_cleaner.process_leaving_soon(library_config, plex_library, [], "movie")
+
+        # Should remove labels from both old items
+        assert mock_media_server.remove_label.call_count == 2
+        mock_media_server.remove_label.assert_any_call(old_item_1, "leaving-soon")
+        mock_media_server.remove_label.assert_any_call(old_item_2, "leaving-soon")
+
+        # Should NOT add any new labels
+        mock_media_server.add_label.assert_not_called()
+
+    def test_threshold_not_met_logs_correctly_dry_run(self, deleterr_instance, mock_config, caplog):
+        """Verify INFO-level log appears in dry-run mode when threshold not met.
+
+        In dry-run mode, users should see an INFO log indicating that the
+        collection/labels WOULD be cleared.
+        """
+        import logging
+
+        mock_config.settings["dry_run"] = True
+
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+
+        # Empty preview (threshold not met scenario)
+        preview = []
+
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+
+        with caplog.at_level(logging.INFO):
+            deleterr_instance._process_library_leaving_soon(library, preview, "movie")
+
+        # Should log INFO about clearing
+        assert any(
+            "[DRY-RUN]" in record.message and "would be cleared" in record.message
+            for record in caplog.records
+        ), f"Expected dry-run clearing log, got: {[r.message for r in caplog.records]}"
+
+    def test_threshold_not_met_no_modify_in_dry_run(self, deleterr_instance, mock_config):
+        """Verify collection/labels are NOT modified in dry-run mode.
+
+        In dry-run mode, even when threshold is not met, the collection
+        and labels should remain unchanged.
+        """
+        mock_config.settings["dry_run"] = True
+
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+                "labels": {"name": "leaving-soon"},
+            },
+        }
+
+        # Empty preview (threshold not met scenario)
+        preview = []
+
+        deleterr_instance._process_library_leaving_soon(library, preview, "movie")
+
+        # In dry-run, process_leaving_soon should NOT be called
+        deleterr_instance.media_cleaner.process_leaving_soon.assert_not_called()
+
+    def test_threshold_not_met_logs_library_name(self, deleterr_instance, mock_config, caplog):
+        """Verify log includes library name when threshold not met."""
+        import logging
+
+        library = {
+            "name": "My Movies Library",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=False):
+            with caplog.at_level(logging.INFO):
+                deleterr_instance._process_death_row(
+                    library, deleterr_instance.radarr["Radarr"], "movie"
+                )
+
+        # Should log with library name
+        assert any(
+            "My Movies Library" in record.message
+            for record in caplog.records
+        ), f"Expected library name in log, got: {[r.message for r in caplog.records]}"
