@@ -704,12 +704,24 @@ class Deleterr:
 
         is_dry_run = self.config.settings.get("dry_run", True)
 
-        # In dry_run mode, skip tagging to avoid confusion
+        # In dry_run mode, log what would be tagged but don't actually tag
         if is_dry_run:
-            logger.debug(
-                "Skipping leaving_soon tagging in dry-run mode "
-                "(collection/labels won't be updated)"
-            )
+            if preview:
+                logger.info(
+                    "[DRY-RUN] %d items would be added to leaving_soon collection/labels:",
+                    len(preview)
+                )
+                for item in preview:
+                    logger.info(
+                        "[DRY-RUN]   - %s (%s)",
+                        item.get("title", "Unknown"),
+                        item.get("year", "Unknown")
+                    )
+            else:
+                logger.debug(
+                    "[DRY-RUN] No items would be added to leaving_soon "
+                    "(collection/labels would be cleared)"
+                )
             return
 
         if not preview:

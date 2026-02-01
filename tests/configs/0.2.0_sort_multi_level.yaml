@@ -1,0 +1,69 @@
+# Config regression test for v0.2.0
+# Tests new sort features: last_watched field and comma-separated multi-level sorting
+
+plex:
+  url: "http://localhost:32400"
+  token: "YOUR_PLEX_TOKEN"
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "YOUR_RADARR_API_KEY"
+
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "YOUR_SONARR_API_KEY"
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "YOUR_TAUTULLI_API_KEY"
+
+dry_run: true
+
+libraries:
+  # Test single last_watched field
+  - name: "Movies - Unwatched First"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 10
+    sort:
+      field: last_watched
+      order: desc  # Unwatched items first (infinity days), then longest-ago watched
+
+  # Test multi-level sort: last_watched, then size
+  - name: "Movies - Unwatched Then Largest"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 10
+    sort:
+      field: last_watched,size
+      order: desc  # Both descending
+
+  # Test mixed orders: unwatched first (desc), then smallest (asc)
+  - name: "Movies - Unwatched Then Smallest"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 10
+    sort:
+      field: last_watched,size
+      order: desc,asc  # Different orders per field
+
+  # Test three-level sort
+  - name: "TV Shows - Complex Sort"
+    sonarr: "Sonarr"
+    action_mode: "delete"
+    max_actions_per_run: 5
+    series_type: standard
+    sort:
+      field: last_watched,seasons,episodes
+      order: desc,desc,desc  # Unwatched shows with most seasons/episodes first
+
+  # Test last_watched with release_year secondary sort
+  - name: "Movies - Unwatched Then Oldest"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 10
+    sort:
+      field: last_watched,release_year
+      order: desc,asc  # Unwatched first, then oldest releases

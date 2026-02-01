@@ -112,3 +112,17 @@ class BaseMediaServer(ABC):
             The media item if found, None otherwise.
         """
         pass
+
+    def set_collection_visibility(
+        self, collection: Any, home: bool = False, shared: bool = True
+    ) -> None:
+        """Set collection visibility on home screens.
+
+        Optional method - not all media servers support this.
+
+        Args:
+            collection: The collection object.
+            home: Whether to show on owner's Home page.
+            shared: Whether to show on shared users' Home pages.
+        """
+        pass  # Default no-op for servers that don't support visibility

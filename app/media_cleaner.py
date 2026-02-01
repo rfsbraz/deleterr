@@ -611,12 +611,20 @@ class MediaCleaner:
             collection_config: Collection configuration dict
         """
         collection_name = collection_config.get("name", "Leaving Soon")
+        promote_home = collection_config.get("promote_home", True)
+        promote_shared = collection_config.get("promote_shared", True)
 
         try:
             collection = self.media_server.get_or_create_collection(
                 plex_library, collection_name
             )
             self.media_server.set_collection_items(collection, plex_items)
+
+            # Set visibility on home screens (shared users by default)
+            self.media_server.set_collection_visibility(
+                collection, home=promote_home, shared=promote_shared
+            )
+
             logger.info(
                 f"Updated collection '{collection_name}' with {len(plex_items)} items"
             )
@@ -801,7 +809,7 @@ class MediaCleaner:
                     }
 
         unmatched = 0
-        for media_data in sort_media(all_data, library_config.get("sort", {})):
+        for media_data in sort_media(all_data, library_config.get("sort", {}), activity_data, plex_guid_item_pair):
             plex_media_item = self.get_plex_item(
                 plex_guid_item_pair,
                 title=media_data["title"],
@@ -1357,19 +1365,67 @@ def title_and_year_match(plex_media_item, history):
     )
 
 
-def sort_media(media_list, sort_config):
-    sort_field = sort_config.get("field", "title")
-    sort_order = sort_config.get("order", "asc")
+def sort_media(media_list, sort_config, activity_data=None, plex_guid_item_pair=None):
+    """Sort media by one or more fields with configurable order per field."""
+    from functools import cmp_to_key
 
-    logger.debug(f"Sorting media by {sort_field} {sort_order}")
+    field_str = sort_config.get("field", "title")
+    order_str = sort_config.get("order", "asc")
 
-    sort_key = get_sort_key_function(sort_field)
+    fields = [f.strip() for f in field_str.split(",")]
+    orders = [o.strip() for o in order_str.split(",")]
 
-    sorted_media = sorted(media_list, key=sort_key, reverse=(sort_order == "desc"))
-    return sorted_media
+    # Extend orders to match fields length (reuse last order)
+    while len(orders) < len(fields):
+        orders.append(orders[-1])
+
+    logger.debug(f"Sorting media by {fields} with orders {orders}")
+
+    def compare_items(a, b):
+        """Compare two media items using multi-level sort criteria."""
+        for field, order in zip(fields, orders):
+            key_func = get_sort_key_function(field, activity_data, plex_guid_item_pair)
+            val_a = key_func(a)
+            val_b = key_func(b)
+
+            if val_a == val_b:
+                continue
+
+            # Handle None values - push to end
+            if val_a is None:
+                return 1 if order == "asc" else -1
+            if val_b is None:
+                return -1 if order == "asc" else 1
+
+            # Compare values
+            if val_a < val_b:
+                return -1 if order == "asc" else 1
+            else:
+                return 1 if order == "asc" else -1
+
+        return 0
+
+    return sorted(media_list, key=cmp_to_key(compare_items))
 
 
-def get_sort_key_function(sort_field):
+def get_sort_key_function(sort_field, activity_data=None, plex_guid_item_pair=None):
+    """Get the sort key function for a given field."""
+
+    def get_last_watched_days(media_item):
+        """Return days since last watched, or infinity for unwatched items."""
+        if activity_data is None or plex_guid_item_pair is None:
+            return float('inf')
+
+        plex_item = get_plex_item_for_sort(media_item, plex_guid_item_pair)
+        if plex_item is None:
+            return float('inf')
+
+        watched_data = find_watched_data(plex_item, activity_data)
+        if watched_data is None:
+            return float('inf')
+
+        return (datetime.now() - watched_data["last_watched"]).days
+
     sort_key_functions = {
         "title": lambda media_item: media_item.get("sortTitle", ""),
         "size": lambda media_item: media_item.get("sizeOnDisk")
@@ -1384,9 +1440,32 @@ def get_sort_key_function(sort_field):
         "episodes": lambda media_item: media_item.get("statistics", {}).get(
             "totalEpisodeCount", 1
         ),
+        "last_watched": get_last_watched_days,
     }
 
     return sort_key_functions.get(sort_field, sort_key_functions["title"])
+
+
+def get_plex_item_for_sort(media_data, plex_guid_item_pair):
+    """Lightweight Plex item lookup for sorting purposes."""
+    for plex_guid, plex_item in plex_guid_item_pair:
+        # Try GUID-based matching (most reliable)
+        if media_data.get("imdbId") and f"imdb://{media_data['imdbId']}" in plex_guid:
+            return plex_item
+        if media_data.get("tmdbId") and f"tmdb://{media_data['tmdbId']}" in plex_guid:
+            return plex_item
+        if media_data.get("tvdbId") and f"tvdb://{media_data['tvdbId']}" in plex_guid:
+            return plex_item
+
+    # Fallback to title+year matching
+    for plex_guid, plex_item in plex_guid_item_pair:
+        if (plex_item.title.lower() == media_data["title"].lower()
+            and media_data.get("year")
+            and plex_item.year
+            and abs(plex_item.year - media_data["year"]) <= 2):
+            return plex_item
+
+    return None
 
 
 def get_rating(media_item):
