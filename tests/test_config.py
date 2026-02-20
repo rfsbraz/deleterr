@@ -341,13 +341,111 @@ test_key: !env {test_env_var}
 def test_env_constructor_with_missing_variable():
     """Test that env_constructor raises ValueError when the environment variable doesn't exist."""
     test_env_var = "TEST_VAR_MISSING"
-    
+
     if test_env_var in os.environ:
         del os.environ[test_env_var]
-    
+
     yaml_content = f"""
 test_key: !env {test_env_var}
 """
-    
+
     with pytest.raises(ValueError):
         load_yaml(StringIO(yaml_content))
+
+
+class TestRootLevelKeyValidation:
+    """Tests for warning when library-level keys are placed at root level."""
+
+    def test_warns_on_root_level_exclude(self, caplog):
+        """Verify WARNING is logged when 'exclude' is at root level."""
+        import logging
+
+        config = Config({
+            "exclude": {"titles": ["The Fifth Element"]},
+            "libraries": [],
+        })
+
+        with caplog.at_level(logging.WARNING):
+            config.validate_root_level_keys()
+
+        assert any(
+            "'exclude' found at root level" in record.message
+            and "IGNORED" in record.message
+            for record in caplog.records
+        ), f"Expected root-level exclude warning, got: {[r.message for r in caplog.records]}"
+
+    def test_warns_on_root_level_leaving_soon(self, caplog):
+        """Verify WARNING is logged when 'leaving_soon' is at root level."""
+        import logging
+
+        config = Config({
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "libraries": [],
+        })
+
+        with caplog.at_level(logging.WARNING):
+            config.validate_root_level_keys()
+
+        assert any(
+            "'leaving_soon' found at root level" in record.message
+            for record in caplog.records
+        ), f"Expected root-level leaving_soon warning, got: {[r.message for r in caplog.records]}"
+
+    def test_warns_on_root_level_sort(self, caplog):
+        """Verify WARNING is logged when 'sort' is at root level."""
+        import logging
+
+        config = Config({
+            "sort": {"field": "title", "order": "asc"},
+            "libraries": [],
+        })
+
+        with caplog.at_level(logging.WARNING):
+            config.validate_root_level_keys()
+
+        assert any(
+            "'sort' found at root level" in record.message
+            for record in caplog.records
+        ), f"Expected root-level sort warning, got: {[r.message for r in caplog.records]}"
+
+    def test_no_warning_when_exclude_under_library(self, caplog):
+        """Verify no false positives when exclude is correctly under library."""
+        import logging
+
+        config = Config({
+            "libraries": [
+                {
+                    "name": "Movies",
+                    "action_mode": "delete",
+                    "radarr": "test",
+                    "exclude": {"titles": ["The Fifth Element"]},
+                }
+            ],
+            "radarr": [{"name": "test", "url": "http://localhost:7878", "api_key": "API_KEY"}],
+        })
+
+        with caplog.at_level(logging.WARNING):
+            config.validate_root_level_keys()
+
+        assert not any(
+            "found at root level" in record.message
+            for record in caplog.records
+        ), f"Should not warn when exclude is under library, got: {[r.message for r in caplog.records]}"
+
+    def test_warns_on_multiple_root_level_keys(self, caplog):
+        """Verify warnings for multiple misplaced keys."""
+        import logging
+
+        config = Config({
+            "exclude": {"titles": ["Movie"]},
+            "leaving_soon": {"collection": {"name": "LS"}},
+            "sort": {"field": "title"},
+            "libraries": [],
+        })
+
+        with caplog.at_level(logging.WARNING):
+            config.validate_root_level_keys()
+
+        warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert len(warning_messages) == 3, \
+            f"Expected 3 warnings for 3 misplaced keys, got {len(warning_messages)}: {warning_messages}"
