@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8](https://github.com/rfsbraz/deleterr/compare/v0.2.7...v0.2.8) (2026-02-20)
+
+
+### Bug Fixes
+
+* **config:** warn when library-level keys are placed at root level ([#228](https://github.com/rfsbraz/deleterr/issues/228)) ([ae1b3d3](https://github.com/rfsbraz/deleterr/commit/ae1b3d330b7f349c8271cdde8a7dbfe7cb29dd16)), closes [#227](https://github.com/rfsbraz/deleterr/issues/227)
+* **deleterr:** handle death row movie deletion errors gracefully ([#231](https://github.com/rfsbraz/deleterr/issues/231)) ([3f7fa8e](https://github.com/rfsbraz/deleterr/commit/3f7fa8e75b9e68950dad7eb451142b659854caa1)), closes [#227](https://github.com/rfsbraz/deleterr/issues/227)
+* **media_cleaner:** fix watch data matching, collection creation, and death row logging ([#229](https://github.com/rfsbraz/deleterr/issues/229)) ([b4c426d](https://github.com/rfsbraz/deleterr/commit/b4c426d393249feca67298d4a320bde686f382a9))
+
 ## [0.2.7](https://github.com/rfsbraz/deleterr/compare/v0.2.6...v0.2.7) (2026-02-01)
 
 
