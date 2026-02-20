@@ -121,7 +121,7 @@ class TestLeavingSoonMediaCleaner:
         # Verify media server methods were called
         mock_media_server.find_item.assert_called_once()
         mock_media_server.get_or_create_collection.assert_called_once_with(
-            mock_plex_library, "Leaving Soon"
+            mock_plex_library, "Leaving Soon", items=[mock_plex_item]
         )
         mock_media_server.add_label.assert_called_once_with(mock_plex_item, "leaving-soon")
 
