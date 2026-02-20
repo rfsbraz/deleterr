@@ -28,7 +28,7 @@ def test_extract_list_path(url, expected):
 def test_get_all_items_for_url_valid_types(media_type):
     mdblist = Mdblist("test_api_key")
     mdblist._fetch_list_items = MagicMock(return_value=[
-        {"tmdbid": 123, "tvdbid": 456, "title": "Test Item"}
+        {"id": 123, "tvdb_id": 456, "title": "Test Item"}
     ])
 
     config = {
@@ -39,7 +39,7 @@ def test_get_all_items_for_url_valid_types(media_type):
     result = mdblist.get_all_items_for_url(media_type, config)
 
     mdblist._fetch_list_items.assert_called_once_with(
-        "https://mdblist.com/lists/user/mylist", 1000
+        "https://mdblist.com/lists/user/mylist", media_type, 1000
     )
     assert len(result) == 1
 
@@ -57,19 +57,25 @@ def test_fetch_list_items_pagination(mock_get):
 
     # First page: has more
     first_response = MagicMock()
-    first_response.json.return_value = [{"tmdbid": i, "title": f"Movie {i}"} for i in range(1000)]
+    first_response.json.return_value = {
+        "movies": [{"id": i, "title": f"Movie {i}"} for i in range(1000)],
+        "shows": [],
+    }
     first_response.headers = {"X-Has-More": "true"}
     first_response.raise_for_status = MagicMock()
 
     # Second page: no more
     second_response = MagicMock()
-    second_response.json.return_value = [{"tmdbid": 1001, "title": "Movie 1001"}]
+    second_response.json.return_value = {
+        "movies": [{"id": 1001, "title": "Movie 1001"}],
+        "shows": [],
+    }
     second_response.headers = {"X-Has-More": "false"}
     second_response.raise_for_status = MagicMock()
 
     mock_get.side_effect = [first_response, second_response]
 
-    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/biglist", 2000)
+    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/biglist", "movie", 2000)
 
     assert len(result) == 1001
     assert mock_get.call_count == 2
@@ -89,13 +95,16 @@ def test_fetch_list_items_max_items(mock_get):
     mdblist = Mdblist("test_api_key")
 
     response = MagicMock()
-    response.json.return_value = [{"tmdbid": i, "title": f"Movie {i}"} for i in range(1000)]
+    response.json.return_value = {
+        "movies": [{"id": i, "title": f"Movie {i}"} for i in range(1000)],
+        "shows": [],
+    }
     response.headers = {"X-Has-More": "true"}
     response.raise_for_status = MagicMock()
 
     mock_get.return_value = response
 
-    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", 500)
+    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", "movie", 500)
 
     assert len(result) == 500
     # Should only make one request since first batch >= max_items
@@ -103,11 +112,11 @@ def test_fetch_list_items_max_items(mock_get):
 
 
 def test_process_mdblist_item_list_movies():
-    """Test indexing by tmdbid for movies."""
+    """Test indexing by tmdb id for movies (API 'id' field)."""
     items = {}
     list_items = [
-        {"tmdbid": 123, "tvdbid": 456, "title": "Movie 1"},
-        {"tmdbid": 789, "tvdbid": 101, "title": "Movie 2"},
+        {"id": 123, "tvdb_id": 456, "title": "Movie 1"},
+        {"id": 789, "tvdb_id": 101, "title": "Movie 2"},
     ]
     url = "https://mdblist.com/lists/user/mylist"
 
@@ -120,11 +129,11 @@ def test_process_mdblist_item_list_movies():
 
 
 def test_process_mdblist_item_list_shows():
-    """Test indexing by tvdbid for shows."""
+    """Test indexing by tvdb_id for shows."""
     items = {}
     list_items = [
-        {"tmdbid": 123, "tvdbid": 456, "title": "Show 1"},
-        {"tmdbid": 789, "tvdbid": 101, "title": "Show 2"},
+        {"id": 123, "tvdb_id": 456, "title": "Show 1"},
+        {"id": 789, "tvdb_id": 101, "title": "Show 2"},
     ]
     url = "https://mdblist.com/lists/user/mylist"
 
@@ -140,8 +149,8 @@ def test_process_mdblist_item_list_missing_id():
     """Test that items without the expected ID are skipped."""
     items = {}
     list_items = [
-        {"title": "No IDs"},  # No tmdbid or tvdbid
-        {"tmdbid": 123, "title": "Has TMDB"},
+        {"title": "No IDs"},  # No id or tvdb_id
+        {"id": 123, "title": "Has ID"},
     ]
     url = "https://mdblist.com/lists/user/mylist"
 
@@ -152,11 +161,11 @@ def test_process_mdblist_item_list_missing_id():
 
 
 def test_process_mdblist_item_list_show_missing_tvdbid():
-    """Test that show items without tvdbid are skipped."""
+    """Test that show items without tvdb_id are skipped."""
     items = {}
     list_items = [
-        {"tmdbid": 123, "title": "No TVDB ID"},  # Has tmdb but no tvdb
-        {"tmdbid": 456, "tvdbid": 789, "title": "Has Both"},
+        {"id": 123, "title": "No TVDB ID"},  # Has id but no tvdb_id
+        {"id": 456, "tvdb_id": 789, "title": "Has Both"},
     ]
     url = "https://mdblist.com/lists/user/mylist"
 
@@ -173,7 +182,7 @@ def test_fetch_list_items_error_handling(mock_get):
 
     mock_get.side_effect = requests.exceptions.ConnectionError("Connection failed")
 
-    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", 1000)
+    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", "movie", 1000)
 
     assert result == []
 
@@ -187,7 +196,7 @@ def test_fetch_list_items_http_error(mock_get):
     response.raise_for_status.side_effect = requests.exceptions.HTTPError("429 Too Many Requests")
     mock_get.return_value = response
 
-    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", 1000)
+    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", "movie", 1000)
 
     assert result == []
 
@@ -196,7 +205,7 @@ def test_fetch_list_items_invalid_url():
     """Test that invalid URLs return empty list."""
     mdblist = Mdblist("test_api_key")
 
-    result = mdblist._fetch_list_items("https://example.com/not-mdblist", 1000)
+    result = mdblist._fetch_list_items("https://example.com/not-mdblist", "movie", 1000)
 
     assert result == []
 
@@ -207,25 +216,90 @@ def test_fetch_list_items_empty_response(mock_get):
     mdblist = Mdblist("test_api_key")
 
     response = MagicMock()
-    response.json.return_value = []
+    response.json.return_value = {"movies": [], "shows": []}
     response.headers = {"X-Has-More": "false"}
     response.raise_for_status = MagicMock()
     mock_get.return_value = response
 
-    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", 1000)
+    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", "movie", 1000)
 
     assert result == []
     assert mock_get.call_count == 1
 
 
-def test_process_mdblist_item_list_uses_id_fallback():
-    """Test that 'id' field is used as fallback for tmdbid in movies."""
+def test_process_mdblist_item_list_uses_ids_fallback():
+    """Test that nested 'ids.tmdb' field is used as fallback for movies."""
     items = {}
     list_items = [
-        {"id": 999, "title": "Movie with id field only"},
+        {"ids": {"tmdb": 999}, "title": "Movie with nested ids only"},
     ]
     url = "https://mdblist.com/lists/user/mylist"
 
     _process_mdblist_item_list(items, list_items, url, "movie")
 
     assert 999 in items
+
+
+def test_process_mdblist_item_list_shows_uses_ids_fallback():
+    """Test that nested 'ids.tvdb' field is used as fallback for shows."""
+    items = {}
+    list_items = [
+        {"ids": {"tvdb": 888}, "title": "Show with nested ids only"},
+    ]
+    url = "https://mdblist.com/lists/user/mylist"
+
+    _process_mdblist_item_list(items, list_items, url, "show")
+
+    assert 888 in items
+
+
+@patch("app.modules.mdblist.requests.get")
+def test_fetch_list_items_dict_response(mock_get):
+    """Test that dict response format (real API) is handled correctly."""
+    mdblist = Mdblist("test_api_key")
+
+    response = MagicMock()
+    response.json.return_value = {
+        "movies": [
+            {"id": 917496, "title": "Test Movie", "imdb_id": "tt2049403", "tvdb_id": None},
+        ],
+        "shows": [
+            {"id": 258902, "title": "Test Show", "imdb_id": "tt20782190", "tvdb_id": 421968},
+        ],
+    }
+    response.headers = {"X-Has-More": "false"}
+    response.raise_for_status = MagicMock()
+    mock_get.return_value = response
+
+    # Fetch movies
+    movies = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", "movie", 1000)
+    assert len(movies) == 1
+    assert movies[0]["id"] == 917496
+
+    # Fetch shows
+    mock_get.reset_mock()
+    mock_get.return_value = response
+    shows = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", "show", 1000)
+    assert len(shows) == 1
+    assert shows[0]["tvdb_id"] == 421968
+
+
+@patch("app.modules.mdblist.requests.get")
+def test_fetch_list_items_show_pagination(mock_get):
+    """Test pagination for shows uses the 'shows' key."""
+    mdblist = Mdblist("test_api_key")
+
+    first_response = MagicMock()
+    first_response.json.return_value = {
+        "movies": [],
+        "shows": [{"id": i, "tvdb_id": i + 1000, "title": f"Show {i}"} for i in range(5)],
+    }
+    first_response.headers = {"X-Has-More": "false"}
+    first_response.raise_for_status = MagicMock()
+
+    mock_get.return_value = first_response
+
+    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", "show", 1000)
+
+    assert len(result) == 5
+    assert result[0]["tvdb_id"] == 1000

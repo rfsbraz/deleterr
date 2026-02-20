@@ -19,16 +19,18 @@ class Mdblist:
         items = {}
         max_items_per_list = mdblist_config.get("max_items_per_list", 1000)
         for url in mdblist_config.get("lists", []):
-            list_items = self._fetch_list_items(url, max_items_per_list)
+            list_items = self._fetch_list_items(url, media_type, max_items_per_list)
             _process_mdblist_item_list(items, list_items, url, media_type)
         return items
 
-    def _fetch_list_items(self, list_url, max_items_per_list):
+    def _fetch_list_items(self, list_url, media_type, max_items_per_list):
         list_path = extract_list_path(list_url)
         if not list_path:
             logger.error(f"Could not extract list path from URL: {list_url}")
             return []
 
+        # API returns {"movies": [...], "shows": [...]}
+        response_key = "movies" if media_type == "movie" else "shows"
         all_items = []
         offset = 0
         limit = 1000
@@ -46,7 +48,15 @@ class Mdblist:
                 )
                 response.raise_for_status()
 
-                items = response.json()
+                data = response.json()
+                if isinstance(data, dict):
+                    items = data.get(response_key, [])
+                elif isinstance(data, list):
+                    items = data
+                else:
+                    logger.warning(f"Unexpected mdblist response type from {list_url}: {type(data)}")
+                    break
+
                 if not items:
                     break
 
@@ -78,15 +88,17 @@ def extract_list_path(url):
 
 
 def _process_mdblist_item_list(items, list_items, url, media_type):
-    """Index Mdblist items by tmdbid (movies) or tvdbid (shows)."""
+    """Index Mdblist items by tmdb id (movies) or tvdb id (shows)."""
     for item in list_items:
         try:
             if media_type == "movie":
-                item_id = item.get("tmdbid") or item.get("id")
+                # API fields: "id" is tmdb id; also check nested "ids.tmdb"
+                item_id = item.get("id") or (item.get("ids") or {}).get("tmdb")
                 if item_id is not None:
                     items[int(item_id)] = {"mdblist": item, "list": url}
             else:
-                item_id = item.get("tvdbid")
+                # API fields: "tvdb_id" or nested "ids.tvdb"
+                item_id = item.get("tvdb_id") or (item.get("ids") or {}).get("tvdb")
                 if item_id is not None:
                     items[int(item_id)] = {"mdblist": item, "list": url}
         except (TypeError, ValueError):
