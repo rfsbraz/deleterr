@@ -83,8 +83,8 @@ class TestPlexMediaServerCollections:
         mock_library.collection.assert_called_once_with("Leaving Soon")
         assert result == mock_collection
 
-    def test_create_collection_when_not_found(self, plex_server):
-        """Test creating a collection when it doesn't exist."""
+    def test_create_collection_when_not_found_with_items(self, plex_server):
+        """Test creating a collection when it doesn't exist and items are provided."""
         from plexapi.exceptions import NotFound
 
         plex, _ = plex_server
@@ -92,13 +92,27 @@ class TestPlexMediaServerCollections:
         mock_library.collection.side_effect = NotFound("Not found")
         mock_new_collection = MagicMock()
         mock_library.createCollection.return_value = mock_new_collection
+        mock_items = [MagicMock(), MagicMock()]
+
+        result = plex.get_or_create_collection(mock_library, "Leaving Soon", items=mock_items)
+
+        mock_library.createCollection.assert_called_once_with(
+            title="Leaving Soon", smart=False, items=mock_items
+        )
+        assert result == mock_new_collection
+
+    def test_create_collection_when_not_found_no_items_returns_none(self, plex_server):
+        """Test that None is returned when collection doesn't exist and no items provided."""
+        from plexapi.exceptions import NotFound
+
+        plex, _ = plex_server
+        mock_library = MagicMock()
+        mock_library.collection.side_effect = NotFound("Not found")
 
         result = plex.get_or_create_collection(mock_library, "Leaving Soon")
 
-        mock_library.createCollection.assert_called_once_with(
-            title="Leaving Soon", smart=False, items=[]
-        )
-        assert result == mock_new_collection
+        mock_library.createCollection.assert_not_called()
+        assert result is None
 
     def test_set_collection_items_replaces_all(self, plex_server):
         """Test that set_collection_items replaces all items."""

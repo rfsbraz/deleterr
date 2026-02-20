@@ -860,11 +860,20 @@ class MediaCleaner:
 
         try:
             collection = self.media_server.get_or_create_collection(
-                plex_library, collection_name
+                plex_library, collection_name, items=plex_items if plex_items else None
             )
-            self.media_server.set_collection_items(collection, plex_items)
 
-            # Set visibility on home screens (shared users by default)
+            if collection is None:
+                # No existing collection and no items - nothing to do
+                logger.debug(f"Collection '{collection_name}' does not exist and no items to tag")
+                return
+
+            if not plex_items:
+                # Collection exists but no items - clear it
+                self.media_server.set_collection_items(collection, [])
+            else:
+                self.media_server.set_collection_items(collection, plex_items)
+
             self.media_server.set_collection_visibility(
                 collection, home=promote_home, shared=promote_shared
             )
@@ -1728,11 +1737,10 @@ def guid_matches(plex_media_item, guid):
 
 
 def title_and_year_match(plex_media_item, history):
-    return (
+    return bool(
             history["title"] == plex_media_item.title
             and history["year"]
             and plex_media_item.year
-            and plex_media_item.year != history["year"]
             and (abs(plex_media_item.year - history["year"])) <= 1
     )
 

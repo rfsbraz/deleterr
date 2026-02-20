@@ -141,7 +141,7 @@ class TestProcessLeavingSoon:
         media_cleaner.process_leaving_soon(library_config, plex_library, items_to_tag, "movie")
 
         mock_media_server.get_or_create_collection.assert_called_once_with(
-            plex_library, "Leaving Soon"
+            plex_library, "Leaving Soon", items=[mock_plex_item]
         )
         mock_media_server.set_collection_items.assert_called_once_with(
             mock_collection, [mock_plex_item]
@@ -261,7 +261,7 @@ class TestProcessLeavingSoon:
         media_cleaner.process_leaving_soon(library_config, plex_library, [], "movie")
 
         mock_media_server.get_or_create_collection.assert_called_once_with(
-            plex_library, "Leaving Soon"
+            plex_library, "Leaving Soon", items=None
         )
 
     def test_uses_default_label_name(self, media_cleaner, mock_media_server):
@@ -1344,3 +1344,170 @@ class TestThresholdNotMetClearsDeathRow:
             "My Movies Library" in record.message
             for record in caplog.records
         ), f"Expected library name in log, got: {[r.message for r in caplog.records]}"
+
+
+class TestCollectionCreationEdgeCases:
+    """Tests for collection creation edge cases (empty items, recreation)."""
+
+    def test_collection_creation_with_items(self, media_cleaner, mock_media_server):
+        """Test creating a new collection with items works."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+            },
+        }
+        plex_library = MagicMock()
+        mock_plex_item = MagicMock()
+        mock_collection = MagicMock()
+        mock_media_server.find_item.return_value = mock_plex_item
+        mock_media_server.get_or_create_collection.return_value = mock_collection
+
+        items_to_tag = [{"title": "Movie 1", "year": 2020}]
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, items_to_tag, "movie")
+
+        mock_media_server.get_or_create_collection.assert_called_once()
+        mock_media_server.set_collection_items.assert_called_once()
+
+    def test_collection_not_created_when_no_items(self, media_cleaner, mock_media_server):
+        """Test that no collection is created when there are no items and collection doesn't exist."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+            },
+        }
+        plex_library = MagicMock()
+        # Simulate: collection doesn't exist, no items to create with → returns None
+        mock_media_server.get_or_create_collection.return_value = None
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, [], "movie")
+
+        mock_media_server.get_or_create_collection.assert_called_once()
+        # set_collection_items should NOT be called since collection is None
+        mock_media_server.set_collection_items.assert_not_called()
+
+    def test_existing_collection_cleared_when_no_items(self, media_cleaner, mock_media_server):
+        """Test that an existing collection is cleared when there are no items to tag."""
+        library_config = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+            },
+        }
+        plex_library = MagicMock()
+        mock_collection = MagicMock()
+        # Simulate: collection exists but no items
+        mock_media_server.get_or_create_collection.return_value = mock_collection
+
+        media_cleaner.process_leaving_soon(library_config, plex_library, [], "movie")
+
+        # Should clear the existing collection
+        mock_media_server.set_collection_items.assert_called_once_with(mock_collection, [])
+
+
+class TestDeathRowLogging:
+    """Tests for enhanced death row logging."""
+
+    @pytest.fixture
+    def mock_config(self):
+        return MagicMock(
+            settings={
+                "dry_run": False,
+                "plex": {"url": "http://localhost:32400", "token": "test_token"},
+                "radarr": [{"name": "Radarr", "url": "http://localhost:7878", "api_key": "test"}],
+                "sonarr": [],
+                "libraries": [],
+                "ssl_verify": False,
+            }
+        )
+
+    @pytest.fixture
+    def deleterr_instance(self, mock_config):
+        with patch("app.deleterr.PlexMediaServer"), \
+             patch("app.deleterr.MediaCleaner"), \
+             patch("app.deleterr.NotificationManager"), \
+             patch("app.deleterr.DRadarr"), \
+             patch("app.deleterr.DSonarr"):
+
+            from app.deleterr import Deleterr
+
+            instance = object.__new__(Deleterr)
+            instance.config = mock_config
+            instance.media_server = MagicMock()
+            instance.media_cleaner = MagicMock()
+            instance.notifications = MagicMock()
+            instance.run_result = MagicMock()
+            instance.radarr = {"Radarr": MagicMock()}
+            instance.sonarr = {}
+            instance.libraries_processed = 0
+            instance.libraries_failed = 0
+
+            return instance
+
+    def test_death_row_logging_shows_filtered_count(self, deleterr_instance, caplog):
+        """Verify enhanced logging shows why items were filtered out."""
+        import logging
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        # 3 items in death row
+        plex_items = [MagicMock(ratingKey=i) for i in range(3)]
+
+        # Only 1 still matches deletion rules (2 filtered out)
+        radarr_movie = {"id": 1, "title": "Movie A", "tmdbId": 550, "sizeOnDisk": 1000}
+
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=plex_items)
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[radarr_movie])
+
+        plex_item_match = MagicMock(ratingKey=0)
+        deleterr_instance.media_server.find_item.return_value = plex_item_match
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            with caplog.at_level(logging.INFO):
+                deleterr_instance._process_death_row(
+                    library, deleterr_instance.radarr["Radarr"], "movie"
+                )
+
+        assert any(
+            "protected by thresholds, exclusions, or watch activity" in record.message
+            for record in caplog.records
+        ), f"Expected enhanced logging about filtered items, got: {[r.message for r in caplog.records]}"
+
+    def test_death_row_logging_no_filtered_message_when_all_match(self, deleterr_instance, caplog):
+        """Verify no 'protected' message when all death row items still match."""
+        import logging
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        # 1 item in death row, 1 still matches
+        plex_item = MagicMock(ratingKey=1001)
+        radarr_movie = {"id": 1, "title": "Movie A", "tmdbId": 550, "sizeOnDisk": 1000}
+
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item])
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[radarr_movie])
+        deleterr_instance.media_server.find_item.return_value = plex_item
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            with caplog.at_level(logging.INFO):
+                deleterr_instance._process_death_row(
+                    library, deleterr_instance.radarr["Radarr"], "movie"
+                )
+
+        assert not any(
+            "protected by" in record.message
+            for record in caplog.records
+        ), f"Should not show 'protected' message when all items match, got: {[r.message for r in caplog.records]}"

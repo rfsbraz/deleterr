@@ -45,24 +45,26 @@ class PlexMediaServer(BaseMediaServer):
         """
         return self.server.library.section(name)
 
-    def get_or_create_collection(self, library: Any, name: str) -> Any:
+    def get_or_create_collection(self, library: Any, name: str, items: Optional[list] = None) -> Optional[Any]:
         """Get existing collection or create a new one.
 
         Args:
             library: The Plex library section.
             name: The name of the collection.
+            items: Optional list of items to create the collection with.
 
         Returns:
-            The collection object.
+            The collection object, or None if it doesn't exist and no items to create with.
         """
         try:
             return library.collection(name)
         except NotFound:
-            # Create an empty collection
-            # PlexAPI's createCollection requires items, so we create with smart=True
-            # which allows an empty collection
-            logger.debug(f"Creating new collection '{name}' in library '{library.title}'")
-            return library.createCollection(title=name, smart=False, items=[])
+            if items:
+                logger.debug(f"Creating new collection '{name}' with {len(items)} items")
+                return library.createCollection(title=name, smart=False, items=items)
+            else:
+                logger.debug(f"Collection '{name}' does not exist and no items to add, skipping creation")
+                return None
 
     def set_collection_visibility(
         self, collection: Any, home: bool = False, shared: bool = True
