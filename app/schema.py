@@ -99,6 +99,16 @@ class TraktConfig(BaseModel):
     )
 
 
+class MdblistConfig(BaseModel):
+    """Mdblist API credentials. Required only for Mdblist list exclusions."""
+
+    api_key: str = Field(
+        ...,
+        description="Mdblist API key from https://mdblist.com/preferences/",
+        json_schema_extra={"example": "YOUR_MDBLIST_API_KEY"},
+    )
+
+
 class JustWatchGlobalConfig(BaseModel):
     """Global JustWatch settings for streaming availability lookups."""
 
@@ -252,6 +262,20 @@ class TraktExclusions(BaseModel):
         default_factory=list,
         description="Trakt list URLs to exclude. Supports official lists (trending, popular) and user lists",
         json_schema_extra={"example": ["https://trakt.tv/movies/trending", "https://trakt.tv/users/justin/lists/imdb-top-rated-movies"]},
+    )
+
+
+class MdblistExclusions(BaseModel):
+    """Mdblist list exclusions."""
+
+    max_items_per_list: int = Field(
+        default=1000,
+        description="Maximum items to fetch from each Mdblist list",
+    )
+    lists: list[str] = Field(
+        default_factory=list,
+        description="Mdblist list URLs to exclude",
+        json_schema_extra={"example": ["https://mdblist.com/lists/username/listname"]},
     )
 
 
@@ -440,6 +464,10 @@ class Exclusions(BaseModel):
     trakt: Optional[TraktExclusions] = Field(
         default=None,
         description="Trakt list exclusions",
+    )
+    mdblist: Optional[MdblistExclusions] = Field(
+        default=None,
+        description="Mdblist list exclusions",
     )
     justwatch: Optional[JustWatchExclusions] = Field(
         default=None,
@@ -826,6 +854,10 @@ class DeleterrConfig(BaseModel):
     trakt: Optional[TraktConfig] = Field(
         default=None,
         description="Trakt API credentials. Required only for Trakt list exclusions",
+    )
+    mdblist: Optional[MdblistConfig] = Field(
+        default=None,
+        description="Mdblist API credentials. Required only for Mdblist list exclusions",
     )
     justwatch: Optional[JustWatchGlobalConfig] = Field(
         default=None,
