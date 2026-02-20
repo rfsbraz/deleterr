@@ -1511,3 +1511,213 @@ class TestDeathRowLogging:
             "protected by" in record.message
             for record in caplog.records
         ), f"Should not show 'protected' message when all items match, got: {[r.message for r in caplog.records]}"
+
+
+class TestDeathRowDeletionErrorHandling:
+    """Tests for error handling during death row deletions.
+
+    Ensures that when a deletion fails (network error, API error, etc.),
+    the loop continues processing remaining items instead of crashing.
+    See: https://github.com/rfsbraz/deleterr/issues/227
+    """
+
+    @pytest.fixture
+    def mock_config(self):
+        return MagicMock(
+            settings={
+                "dry_run": False,
+                "plex": {"url": "http://localhost:32400", "token": "test_token"},
+                "radarr": [{"name": "Radarr", "url": "http://localhost:7878", "api_key": "test"}],
+                "sonarr": [{"name": "Sonarr", "url": "http://localhost:8989", "api_key": "test"}],
+                "libraries": [],
+                "ssl_verify": False,
+            }
+        )
+
+    @pytest.fixture
+    def deleterr_instance(self, mock_config):
+        with patch("app.deleterr.PlexMediaServer"), \
+             patch("app.deleterr.MediaCleaner"), \
+             patch("app.deleterr.NotificationManager"), \
+             patch("app.deleterr.DRadarr"), \
+             patch("app.deleterr.DSonarr"):
+
+            from app.deleterr import Deleterr
+
+            instance = object.__new__(Deleterr)
+            instance.config = mock_config
+            instance.media_server = MagicMock()
+            instance.media_cleaner = MagicMock()
+            instance.notifications = MagicMock()
+            instance.run_result = MagicMock()
+            instance.radarr = {"Radarr": MagicMock()}
+            instance.sonarr = {"Sonarr": MagicMock()}
+            instance.libraries_processed = 0
+            instance.libraries_failed = 0
+
+            return instance
+
+    def test_movie_deletion_failure_continues_to_next(self, deleterr_instance):
+        """When del_movie() raises for one movie, remaining movies are still processed."""
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        plex_item_a = MagicMock(ratingKey=1001)
+        plex_item_b = MagicMock(ratingKey=1002)
+
+        radarr_movie_a = {"id": 101, "title": "Movie A", "tmdbId": 550, "sizeOnDisk": 1000}
+        radarr_movie_b = {"id": 102, "title": "Movie B", "tmdbId": 551, "sizeOnDisk": 2000}
+
+        radarr_instance = deleterr_instance.radarr["Radarr"]
+        # First call raises, second succeeds
+        radarr_instance.del_movie.side_effect = [Exception("Connection timeout"), None]
+
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(
+            return_value=[plex_item_a, plex_item_b]
+        )
+        deleterr_instance._get_deletion_candidates = MagicMock(
+            return_value=[radarr_movie_a, radarr_movie_b]
+        )
+
+        def find_item_side_effect(lib, tmdb_id=None, imdb_id=None, title=None, year=None):
+            if tmdb_id == 550:
+                return plex_item_a
+            elif tmdb_id == 551:
+                return plex_item_b
+            return None
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted, preview = deleterr_instance._process_death_row(
+                library, radarr_instance, "movie"
+            )
+
+        # Both movies should have been attempted
+        assert radarr_instance.del_movie.call_count == 2
+        # Only Movie B should be in deleted (Movie A failed)
+        assert len(deleted) == 1
+        assert deleted[0]["title"] == "Movie B"
+
+    def test_movie_deletion_failure_not_in_deleted_items(self, deleterr_instance):
+        """A movie that fails deletion is NOT counted as deleted."""
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        plex_item = MagicMock(ratingKey=1001)
+        radarr_movie = {"id": 101, "title": "Failing Movie", "tmdbId": 550, "sizeOnDisk": 1000}
+
+        radarr_instance = deleterr_instance.radarr["Radarr"]
+        radarr_instance.del_movie.side_effect = Exception("API error 500")
+
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item])
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[radarr_movie])
+        deleterr_instance.media_server.find_item.return_value = plex_item
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted, preview = deleterr_instance._process_death_row(
+                library, radarr_instance, "movie"
+            )
+
+        # Failed movie should NOT be in deleted items
+        assert len(deleted) == 0
+
+    def test_movie_deletion_failure_logged(self, deleterr_instance, caplog):
+        """Error is logged with movie title when deletion fails."""
+        import logging
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        plex_item = MagicMock(ratingKey=1001)
+        radarr_movie = {"id": 101, "title": "Broken Movie", "tmdbId": 550, "sizeOnDisk": 1000}
+
+        radarr_instance = deleterr_instance.radarr["Radarr"]
+        radarr_instance.del_movie.side_effect = Exception("Network unreachable")
+
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item])
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[radarr_movie])
+        deleterr_instance.media_server.find_item.return_value = plex_item
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            with caplog.at_level(logging.ERROR):
+                deleterr_instance._process_death_row(
+                    library, radarr_instance, "movie"
+                )
+
+        assert any(
+            "Broken Movie" in record.message
+            and "Radarr" in record.message
+            and "Network unreachable" in record.message
+            for record in caplog.records
+        ), f"Expected error log with movie title and error, got: {[r.message for r in caplog.records]}"
+
+    def test_show_deletion_failure_continues(self, deleterr_instance):
+        """When delete_series() raises for one show, remaining shows are still processed."""
+        library = {
+            "name": "TV Shows",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        plex_item_a = MagicMock(ratingKey=2001)
+        plex_item_b = MagicMock(ratingKey=2002)
+
+        sonarr_show_a = {
+            "id": 201, "title": "Show A", "tvdbId": 81189,
+            "statistics": {"sizeOnDisk": 5000, "episodeFileCount": 10},
+        }
+        sonarr_show_b = {
+            "id": 202, "title": "Show B", "tvdbId": 81190,
+            "statistics": {"sizeOnDisk": 3000, "episodeFileCount": 5},
+        }
+
+        sonarr_instance = deleterr_instance.sonarr["Sonarr"]
+        # First call raises, second succeeds
+        deleterr_instance.media_cleaner.delete_series.side_effect = [
+            Exception("Sonarr API timeout"), None
+        ]
+
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(
+            return_value=[plex_item_a, plex_item_b]
+        )
+        deleterr_instance._get_deletion_candidates = MagicMock(
+            return_value=[sonarr_show_a, sonarr_show_b]
+        )
+
+        def find_item_side_effect(lib, tmdb_id=None, tvdb_id=None, imdb_id=None, title=None, year=None):
+            if tvdb_id == 81189:
+                return plex_item_a
+            elif tvdb_id == 81190:
+                return plex_item_b
+            return None
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted, preview = deleterr_instance._process_death_row(
+                library, sonarr_instance, "show"
+            )
+
+        # Both shows should have been attempted
+        assert deleterr_instance.media_cleaner.delete_series.call_count == 2
+        # Only Show B should be in deleted (Show A failed)
+        assert len(deleted) == 1
+        assert deleted[0]["title"] == "Show B"
