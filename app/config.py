@@ -118,13 +118,31 @@ class Config:
 
     def validate_config(self):
         return (
-                self.validate_trakt()
+                self.validate_root_level_keys()
+                and self.validate_trakt()
                 and self.validate_sonarr_and_radarr_instances()
                 and self.validate_tautulli()
                 and self.validate_overseerr()
                 and self.validate_notifications()
                 and self.validate_libraries()
         )
+
+    def validate_root_level_keys(self):
+        """Warn about library-level settings placed at root level."""
+        library_only_keys = {
+            "exclude": "exclusion rules",
+            "leaving_soon": "leaving soon configuration",
+            "sort": "sort configuration",
+        }
+        for key, description in library_only_keys.items():
+            if key in self.settings:
+                logger.warning(
+                    f"'{key}' found at root level in settings.yaml, but {description} "
+                    f"must be configured under each library. "
+                    f"Move '{key}' inside the library configuration where it should apply. "
+                    f"The current root-level '{key}' will be IGNORED."
+                )
+        return True
 
     def validate_trakt(self):
         if not self.settings.get("trakt"):
