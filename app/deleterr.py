@@ -353,16 +353,24 @@ class Deleterr:
             )
 
             if not is_dry_run:
-                if media_type == "movie":
-                    media_instance.del_movie(
-                        media_item["id"],
-                        delete_files=True,
-                        add_exclusion=library.get("add_list_exclusion_on_delete", False),
+                try:
+                    if media_type == "movie":
+                        media_instance.del_movie(
+                            media_item["id"],
+                            delete_files=True,
+                            add_exclusion=library.get("add_list_exclusion_on_delete", False),
+                        )
+                        self.media_cleaner._update_overseerr_status(library, media_item, "movie")
+                    else:
+                        self.media_cleaner.delete_series(media_instance, media_item)
+                        self.media_cleaner._update_overseerr_status(library, media_item, "tv")
+                except Exception as e:
+                    logger.error(
+                        f"Failed to delete '{media_item['title']}' from "
+                        f"{'Radarr' if media_type == 'movie' else 'Sonarr'}: {e}. "
+                        "Will retry on next run."
                     )
-                    self.media_cleaner._update_overseerr_status(library, media_item, "movie")
-                else:
-                    self.media_cleaner.delete_series(media_instance, media_item)
-                    self.media_cleaner._update_overseerr_status(library, media_item, "tv")
+                    continue
 
             deleted_items.append(media_item)
 
