@@ -1041,3 +1041,55 @@ class TestCombinedExclusions:
             result = cleaner.check_exclusions(library, media_data, plex_item)
 
         assert result is True, "Movie passing all exclusion checks should be actionable"
+
+
+class TestTitleAndYearMatch:
+    """Tests for title_and_year_match fallback watch data matching."""
+
+    def test_exact_year_match_should_find_watch_data(self):
+        """Regression: exact same year should match (was broken - year != check)."""
+        from app.media_cleaner import title_and_year_match
+
+        plex_item = MockPlexMediaItem(title="Game of Thrones", year=2011)
+        history = {"title": "Game of Thrones", "year": 2011}
+        assert title_and_year_match(plex_item, history) is True
+
+    def test_off_by_one_year_still_matches(self):
+        """Year off by 1 should still match (existing behavior, keep working)."""
+        from app.media_cleaner import title_and_year_match
+
+        plex_item = MockPlexMediaItem(title="Some Movie", year=2020)
+        history = {"title": "Some Movie", "year": 2021}
+        assert title_and_year_match(plex_item, history) is True
+
+    def test_year_off_by_two_rejects(self):
+        """Year off by 2+ should not match."""
+        from app.media_cleaner import title_and_year_match
+
+        plex_item = MockPlexMediaItem(title="Some Movie", year=2020)
+        history = {"title": "Some Movie", "year": 2022}
+        assert title_and_year_match(plex_item, history) is False
+
+    def test_different_title_rejects(self):
+        """Different titles should not match even with same year."""
+        from app.media_cleaner import title_and_year_match
+
+        plex_item = MockPlexMediaItem(title="Movie A", year=2020)
+        history = {"title": "Movie B", "year": 2020}
+        assert title_and_year_match(plex_item, history) is False
+
+    def test_none_year_on_plex_item_rejects(self):
+        """Missing year on plex item should not match."""
+        from app.media_cleaner import title_and_year_match
+
+        plex_item = MockPlexMediaItem(title="Some Movie", year=None)
+        history = {"title": "Some Movie", "year": 2020}
+        assert title_and_year_match(plex_item, history) is False
+
+    def test_none_year_on_history_rejects(self):
+        """Missing year in history should not match."""
+        from app.media_cleaner import title_and_year_match
+
+        plex_item = MockPlexMediaItem(title="Some Movie", year=2020)
+        history = {"title": "Some Movie", "year": None}
+        assert title_and_year_match(plex_item, history) is False

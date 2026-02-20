@@ -322,9 +322,11 @@ class Deleterr:
         is_dry_run = self.config.settings.get("dry_run", True)
 
         if death_row_plex_items:
+            filtered_out = len(death_row_plex_items) - len(items_to_delete)
             logger.info(
                 f"Found {len(death_row_plex_items)} items in leaving_soon, "
                 f"{len(items_to_delete)} still match deletion criteria"
+                + (f" ({filtered_out} protected by thresholds, exclusions, or watch activity since tagging)" if filtered_out > 0 else "")
             )
         else:
             logger.info("No items in leaving_soon (first run or empty death row)")
