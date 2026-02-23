@@ -52,10 +52,19 @@ nav:
   - Home: index.md
   - Getting Started:
     - Installation: getting-started.md
-    - Configuration: CONFIGURATION.md
-    - Templates: templates.md
+    - Configuration Reference: CONFIGURATION.md
+  - Templates: templates.md
   - Features:
     - Leaving Soon: features/leaving-soon.md
     - Notifications: features/notifications.md
+    - Exclusions: features/exclusions.md
+    - Sorting & Prioritization: features/sorting.md
+    - Disk Thresholds: features/disk-thresholds.md
+    - Multi-Instance Support: features/multi-instance.md
+  - Integrations:
+    - Trakt: integrations/trakt.md
+    - MDBList: integrations/mdblist.md
+    - JustWatch: integrations/justwatch.md
+    - Overseerr / Seerr: integrations/overseerr.md
   - Operations:
     - Troubleshooting: troubleshooting.md

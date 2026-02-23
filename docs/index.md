@@ -14,6 +14,8 @@ Deleterr identifies and deletes media files based on user-specified criteria. Se
 - [Getting Started](getting-started.md) - Docker setup and first run
 - [Configuration Reference](CONFIGURATION.md) - All settings explained
 - [Templates](templates.md) - Copy-paste ready configurations
+- [Exclusions](features/exclusions.md) - Protect content from deletion
+- [Integrations](integrations/trakt.md) - Trakt, MDBList, JustWatch, Overseerr
 
 ---
 
@@ -56,15 +58,21 @@ Alert your users via Email, Discord, Slack, or Telegram about content that's exp
 
 ### Smart Exclusions
 
-Protect content by genre, actor, Plex labels, streaming availability (JustWatch), Trakt lists, and more.
+Protect content by genre, actor, Plex labels, streaming availability (JustWatch), Trakt lists, MDBList lists, and more.
+
+[Learn more about Exclusions](features/exclusions.md)
 
 ### Multi-Instance Support
 
 Configure multiple Radarr/Sonarr instances (e.g., separate 4K libraries) with different retention policies.
 
+[Learn more about Multi-Instance Support](features/multi-instance.md)
+
 ### Disk Thresholds
 
 Only delete when disk space falls below a specified limit - perfect for space-constrained systems.
+
+[Learn more about Disk Thresholds](features/disk-thresholds.md)
 
 ---
 
