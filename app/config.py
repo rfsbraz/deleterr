@@ -20,7 +20,7 @@ from app.modules.tautulli import Tautulli
 from app.modules.radarr import DRadarr
 from app.modules.sonarr import DSonarr
 from app.modules.trakt import Trakt
-from app.modules.overseerr import Overseerr
+from app.modules.seerr import Seerr
 from app.utils import validate_units
 
 def env_constructor(loader, node):
@@ -106,11 +106,47 @@ class Config:
         self.settings = config_file
 
     def validate(self):
+        self._normalize_seerr_config()
+
         if not self.validate_config():
             self.log_and_exit("Invalid configuration, exiting.")
 
         if self.settings.get("dry_run"):
             logger.info("Running in dry-run mode, no changes will be made.")
+
+    def _normalize_seerr_config(self):
+        """Normalize 'overseerr' config keys to 'seerr' for backward compatibility."""
+        # Top-level: overseerr → seerr
+        if "overseerr" in self.settings and "seerr" not in self.settings:
+            logger.info(
+                "Config key 'overseerr' is deprecated, use 'seerr' instead. "
+                "Overseerr configs will continue to work."
+            )
+            self.settings["seerr"] = self.settings.pop("overseerr")
+        elif "overseerr" in self.settings and "seerr" in self.settings:
+            logger.warning(
+                "Both 'seerr' and 'overseerr' are configured at root level. "
+                "Using 'seerr' and ignoring 'overseerr'."
+            )
+            del self.settings["overseerr"]
+
+        # Library-level exclusions: exclude.overseerr → exclude.seerr
+        for library in self.settings.get("libraries", []):
+            exclude = library.get("exclude", {})
+            if not exclude:
+                continue
+            if "overseerr" in exclude and "seerr" not in exclude:
+                logger.info(
+                    f"Library '{library.get('name')}': exclusion key 'overseerr' is deprecated, "
+                    "use 'seerr' instead. Overseerr configs will continue to work."
+                )
+                exclude["seerr"] = exclude.pop("overseerr")
+            elif "overseerr" in exclude and "seerr" in exclude:
+                logger.warning(
+                    f"Library '{library.get('name')}': both 'seerr' and 'overseerr' exclusions configured. "
+                    "Using 'seerr' and ignoring 'overseerr'."
+                )
+                del exclude["overseerr"]
 
 
     def log_and_exit(self, msg):
@@ -122,7 +158,7 @@ class Config:
                 and self.validate_trakt()
                 and self.validate_sonarr_and_radarr_instances()
                 and self.validate_tautulli()
-                and self.validate_overseerr()
+                and self.validate_seerr()
                 and self.validate_notifications()
                 and self.validate_libraries()
         )
@@ -210,53 +246,53 @@ class Config:
 
         return True
 
-    def validate_overseerr(self):
-        """Validate Overseerr connection if configured."""
-        overseerr_config = self.settings.get("overseerr")
-        if not overseerr_config:
+    def validate_seerr(self):
+        """Validate Seerr connection if configured."""
+        seerr_config = self.settings.get("seerr")
+        if not seerr_config:
             return True
 
-        if not overseerr_config.get("url"):
-            logger.error("Overseerr URL is required when overseerr is configured.")
+        if not seerr_config.get("url"):
+            logger.error("Seerr URL is required when seerr is configured.")
             return False
 
-        if not overseerr_config.get("api_key"):
-            logger.error("Overseerr API key is required when overseerr is configured.")
+        if not seerr_config.get("api_key"):
+            logger.error("Seerr API key is required when seerr is configured.")
             return False
 
         try:
             ssl_verify = self.settings.get("ssl_verify", False)
-            overseerr = Overseerr(
-                overseerr_config.get("url"),
-                overseerr_config.get("api_key"),
+            seerr = Seerr(
+                seerr_config.get("url"),
+                seerr_config.get("api_key"),
                 ssl_verify=ssl_verify,
             )
-            if not overseerr.test_connection():
+            if not seerr.test_connection():
                 logger.error(
-                    f"Failed to connect to Overseerr at {overseerr_config.get('url')}, check your configuration."
+                    f"Failed to connect to Seerr at {seerr_config.get('url')}, check your configuration."
                 )
                 return False
             return True
         except Exception as err:
             error_msg = str(err).lower()
-            url = overseerr_config.get('url')
+            url = seerr_config.get('url')
             if "401" in error_msg or "403" in error_msg or "unauthorized" in error_msg:
                 logger.error(
-                    f"Overseerr authentication failed at {url}: {err}. "
+                    f"Seerr authentication failed at {url}: {err}. "
                     "Verify your API key is correct."
                 )
             elif "timeout" in error_msg or "connection" in error_msg:
                 logger.error(
-                    f"Cannot reach Overseerr at {url}: {err}. "
-                    "Check the URL and ensure Overseerr is running."
+                    f"Cannot reach Seerr at {url}: {err}. "
+                    "Check the URL and ensure Seerr is running."
                 )
             elif "ssl" in error_msg or "certificate" in error_msg:
                 logger.error(
-                    f"SSL error connecting to Overseerr at {url}: {err}. "
+                    f"SSL error connecting to Seerr at {url}: {err}. "
                     "Try setting ssl_verify: false in your config if using self-signed certificates."
                 )
             else:
-                logger.error(f"Overseerr connection failed at {url}: {err}")
+                logger.error(f"Seerr connection failed at {url}: {err}")
             return False
 
     def validate_settings_for_instance(self, library):
@@ -388,7 +424,7 @@ class Config:
             self.validate_justwatch_exclusions(library)
             self.validate_radarr_exclusions(library)
             self.validate_sonarr_exclusions(library)
-            self.validate_overseerr_exclusions(library)
+            self.validate_seerr_exclusions(library)
 
         return True
 
@@ -617,58 +653,58 @@ class Config:
 
         return True
 
-    def validate_overseerr_exclusions(self, library):
-        """Validate Overseerr exclusion configuration for a library."""
-        overseerr_exclusions = library.get("exclude", {}).get("overseerr", {})
-        if not overseerr_exclusions:
+    def validate_seerr_exclusions(self, library):
+        """Validate Seerr exclusion configuration for a library."""
+        seerr_exclusions = library.get("exclude", {}).get("seerr", {})
+        if not seerr_exclusions:
             return True
 
-        # Require global Overseerr config if exclusions are used
-        if not self.settings.get("overseerr"):
+        # Require global Seerr config if exclusions are used
+        if not self.settings.get("seerr"):
             self.log_and_exit(
-                f"Overseerr exclusions in library '{library.get('name')}' require a global 'overseerr' configuration. "
-                "Add overseerr.url and overseerr.api_key to your config."
+                f"Seerr exclusions in library '{library.get('name')}' require a global 'seerr' configuration. "
+                "Add seerr.url and seerr.api_key to your config."
             )
 
         # Validate mode
         valid_modes = ["exclude", "include_only"]
-        mode = overseerr_exclusions.get("mode", "exclude")
+        mode = seerr_exclusions.get("mode", "exclude")
         if mode not in valid_modes:
             self.log_and_exit(
-                f"Invalid Overseerr exclusion mode '{mode}' in library '{library.get('name')}'. "
+                f"Invalid Seerr exclusion mode '{mode}' in library '{library.get('name')}'. "
                 f"Supported values are {valid_modes}."
             )
 
         # Validate users list format
-        users = overseerr_exclusions.get("users")
+        users = seerr_exclusions.get("users")
         if users is not None and not isinstance(users, list):
             self.log_and_exit(
-                f"Overseerr exclusions in library '{library.get('name')}': "
+                f"Seerr exclusions in library '{library.get('name')}': "
                 "'users' must be a list of usernames or emails."
             )
 
         # Validate request_status list format
-        request_status = overseerr_exclusions.get("request_status")
+        request_status = seerr_exclusions.get("request_status")
         if request_status is not None:
             if not isinstance(request_status, list):
                 self.log_and_exit(
-                    f"Overseerr exclusions in library '{library.get('name')}': "
+                    f"Seerr exclusions in library '{library.get('name')}': "
                     "'request_status' must be a list of status values."
                 )
             valid_statuses = ["pending", "approved", "declined"]
             for status in request_status:
                 if status.lower() not in valid_statuses:
                     self.log_and_exit(
-                        f"Invalid Overseerr request_status '{status}' in library '{library.get('name')}'. "
+                        f"Invalid Seerr request_status '{status}' in library '{library.get('name')}'. "
                         f"Supported values are {valid_statuses}."
                     )
 
         # Validate min_request_age_days format
-        min_request_age_days = overseerr_exclusions.get("min_request_age_days")
+        min_request_age_days = seerr_exclusions.get("min_request_age_days")
         if min_request_age_days is not None:
             if not isinstance(min_request_age_days, int) or min_request_age_days < 0:
                 self.log_and_exit(
-                    f"Overseerr exclusions in library '{library.get('name')}': "
+                    f"Seerr exclusions in library '{library.get('name')}': "
                     "'min_request_age_days' must be a non-negative integer."
                 )
 

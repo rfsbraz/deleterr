@@ -64,7 +64,7 @@ class EmailProvider(BaseNotificationProvider):
             items: List of items scheduled for deletion
             template_path: Optional path to custom HTML template
             subject: Email subject (uses config default if not specified)
-            context: Additional template context (e.g., overseerr_url, plex_url)
+            context: Additional template context (e.g., seerr_url, plex_url)
 
         Returns:
             True if email was sent successfully, False otherwise.
@@ -299,7 +299,7 @@ class EmailProvider(BaseNotificationProvider):
             "show_count": len(shows),
         }
 
-        # Merge extra context (e.g., plex_url, overseerr_url)
+        # Merge extra context (e.g., plex_url, seerr_url)
         context.update(extra_context)
 
         return context

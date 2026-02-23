@@ -766,7 +766,7 @@ class TestLeavingSoonNotifications:
             settings={
                 "dry_run": False,
                 "plex": {"url": "http://localhost:32400", "token": "test_token"},
-                "overseerr": {"url": "http://localhost:5055", "api_key": "test_key"},
+                "seerr": {"url": "http://localhost:5055", "api_key": "test_key"},
                 "radarr": [{"name": "Radarr", "url": "http://localhost:7878", "api_key": "test"}],
                 "sonarr": [],
                 "libraries": [],
@@ -831,7 +831,7 @@ class TestLeavingSoonNotifications:
         # Verify context was passed
         kwargs = call_args[1]
         assert kwargs["plex_url"] == "http://localhost:32400"
-        assert kwargs["overseerr_url"] == "http://localhost:5055"
+        assert kwargs["seerr_url"] == "http://localhost:5055"
 
     def test_send_leaving_soon_notification_not_called_when_disabled(
         self, deleterr_with_notifications, mock_notification_manager

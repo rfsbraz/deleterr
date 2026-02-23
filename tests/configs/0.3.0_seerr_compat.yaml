@@ -1,0 +1,61 @@
+# Config file for testing backward compatibility with 'overseerr' config key
+# Validates that 'overseerr' configs are automatically migrated to 'seerr'
+
+# Plex connection details
+plex:
+  url: "http://localhost:32400"
+  token: "YOUR_PLEX_TOKEN"
+
+# Radarr connection details
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "YOUR_RADARR_API_KEY"
+
+# Sonarr connection details
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "YOUR_SONARR_API_KEY"
+
+# Tautulli connection details
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "YOUR_TAUTULLI_API_KEY"
+
+# Uses the deprecated 'overseerr' key (should be auto-migrated to 'seerr')
+overseerr:
+  url: "http://localhost:5055"
+  api_key: "YOUR_OVERSEERR_API_KEY"
+
+dry_run: true
+
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 30
+    added_at_threshold: 90
+    max_actions_per_run: 10
+    exclude:
+      # Uses the deprecated 'overseerr' exclusion key
+      overseerr:
+        mode: "exclude"
+        include_pending: true
+        request_status: ["approved"]
+        update_status: true
+
+  - name: "TV Shows"
+    sonarr: "Sonarr"
+    action_mode: "delete"
+    last_watched_threshold: 365
+    added_at_threshold: 180
+    max_actions_per_run: 10
+    series_type: standard
+    exclude:
+      # Uses the deprecated 'overseerr' exclusion key
+      overseerr:
+        mode: "exclude"
+        users: ["admin"]
+        min_request_age_days: 60
+        update_status: true

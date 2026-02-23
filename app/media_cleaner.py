@@ -9,7 +9,7 @@ from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 
 from app import logger
 from app.modules.justwatch import JustWatch
-from app.modules.overseerr import Overseerr
+from app.modules.seerr import Seerr
 from app.modules.tautulli import Tautulli
 from app.modules.mdblist import Mdblist
 from app.modules.trakt import Trakt
@@ -312,16 +312,16 @@ class MediaCleaner:
         else:
             self.mdblist = None
 
-        # Initialize Overseerr if configured
-        overseerr_config = config.settings.get("overseerr", {})
-        if overseerr_config.get("url") and overseerr_config.get("api_key"):
-            self.overseerr = Overseerr(
-                overseerr_config.get("url"),
-                overseerr_config.get("api_key"),
+        # Initialize Seerr if configured
+        seerr_config = config.settings.get("seerr", {})
+        if seerr_config.get("url") and seerr_config.get("api_key"):
+            self.seerr = Seerr(
+                seerr_config.get("url"),
+                seerr_config.get("api_key"),
                 ssl_verify=ssl_verify,
             )
         else:
-            self.overseerr = None
+            self.seerr = None
 
         # Configure session with SSL verification setting
         session = requests.Session()
@@ -545,8 +545,8 @@ class MediaCleaner:
     ):
         self.delete_series(sonarr_instance, sonarr_show)
 
-        # Update Overseerr status after successful deletion
-        self._update_overseerr_status(library, sonarr_show, "tv")
+        # Update Seerr status after successful deletion
+        self._update_seerr_status(library, sonarr_show, "tv")
 
     def process_library_movies(self, library, radarr_instance):
         """
@@ -738,43 +738,43 @@ class MediaCleaner:
             add_exclusion=library.get("add_list_exclusion_on_delete", False),
         )
 
-        # Update Overseerr status after successful deletion
-        self._update_overseerr_status(library, radarr_movie, "movie")
+        # Update Seerr status after successful deletion
+        self._update_seerr_status(library, radarr_movie, "movie")
 
-    def _update_overseerr_status(self, library, media_data, media_type):
+    def _update_seerr_status(self, library, media_data, media_type):
         """
-        Update Overseerr status after deletion if configured.
+        Update Seerr status after deletion if configured.
 
         Args:
             library: Library configuration
             media_data: Media data from Sonarr/Radarr
             media_type: 'movie' or 'tv'
         """
-        overseerr_config = library.get("exclude", {}).get("overseerr", {})
-        if not overseerr_config.get("update_status") or not self.overseerr:
+        seerr_config = library.get("exclude", {}).get("seerr", {})
+        if not seerr_config.get("update_status") or not self.seerr:
             return
 
         tmdb_id = media_data.get("tmdbId")
         if not tmdb_id:
             logger.debug(
-                f"Cannot update Overseerr status for '{media_data.get('title')}': no TMDB ID"
+                f"Cannot update Seerr status for '{media_data.get('title')}': no TMDB ID"
             )
             return
 
         try:
-            if self.overseerr.mark_as_deleted(tmdb_id, media_type):
+            if self.seerr.mark_as_deleted(tmdb_id, media_type):
                 logger.info(
-                    f"Updated Overseerr status for '{media_data.get('title')}' (TMDB: {tmdb_id})"
+                    f"Updated Seerr status for '{media_data.get('title')}' (TMDB: {tmdb_id})"
                 )
             else:
                 logger.debug(
-                    f"Could not update Overseerr status for '{media_data.get('title')}' - "
-                    "may not have been requested via Overseerr"
+                    f"Could not update Seerr status for '{media_data.get('title')}' - "
+                    "may not have been requested via Seerr"
                 )
         except Exception as e:
             logger.warning(
-                f"Overseerr status update failed for '{media_data.get('title')}': {e}. "
-                "The item will still be deleted but will remain marked as 'available' in Overseerr."
+                f"Seerr status update failed for '{media_data.get('title')}': {e}. "
+                "The item will still be deleted but will remain marked as 'available' in Seerr."
             )
 
     def get_death_row_items(self, library_config, plex_library):
@@ -1406,9 +1406,9 @@ class MediaCleaner:
         ):
             return False
 
-        # Overseerr exclusion check (requires overseerr instance)
-        if not check_excluded_overseerr(
-            media_data, plex_media_item, exclude, self.overseerr
+        # Seerr exclusion check (requires seerr instance)
+        if not check_excluded_seerr(
+            media_data, plex_media_item, exclude, self.seerr
         ):
             return False
 
@@ -1670,43 +1670,43 @@ def check_excluded_justwatch(media_data, plex_media_item, exclude, justwatch_ins
     return True
 
 
-def check_excluded_overseerr(media_data, plex_media_item, exclude, overseerr_instance):
+def check_excluded_seerr(media_data, plex_media_item, exclude, seerr_instance):
     """
-    Check if media should be excluded/included based on Overseerr requests.
+    Check if media should be excluded/included based on Seerr requests.
 
     Args:
         media_data: Media data from Sonarr/Radarr
         plex_media_item: Plex media item
         exclude: Exclusion configuration from library
-        overseerr_instance: Overseerr instance (may be None if not configured)
+        seerr_instance: Seerr instance (may be None if not configured)
 
     Returns:
         True if media should NOT be excluded (i.e., is actionable)
         False if media should be excluded (i.e., skip this media)
     """
-    from app.modules.overseerr import (
+    from app.modules.seerr import (
         REQUEST_STATUS_PENDING,
         REQUEST_STATUS_APPROVED,
         REQUEST_STATUS_DECLINED,
     )
 
-    overseerr_config = exclude.get("overseerr", {})
+    seerr_config = exclude.get("seerr", {})
 
-    if not overseerr_config or not overseerr_instance:
+    if not seerr_config or not seerr_instance:
         return True
 
     tmdb_id = media_data.get("tmdbId")
     if not tmdb_id:
         logger.debug(
-            f"'{media_data.get('title')}' has no TMDB ID, cannot check Overseerr requests"
+            f"'{media_data.get('title')}' has no TMDB ID, cannot check Seerr requests"
         )
         return True
 
-    mode = overseerr_config.get("mode", "exclude")
-    users = overseerr_config.get("users")
-    include_pending = overseerr_config.get("include_pending", True)
-    request_status_filter = overseerr_config.get("request_status")
-    min_request_age_days = overseerr_config.get("min_request_age_days")
+    mode = seerr_config.get("mode", "exclude")
+    users = seerr_config.get("users")
+    include_pending = seerr_config.get("include_pending", True)
+    request_status_filter = seerr_config.get("request_status")
+    min_request_age_days = seerr_config.get("min_request_age_days")
 
     # Map status names to constants
     status_name_map = {
@@ -1716,13 +1716,13 @@ def check_excluded_overseerr(media_data, plex_media_item, exclude, overseerr_ins
     }
 
     # Get request data for advanced filtering
-    request_data = overseerr_instance.get_request_data(tmdb_id)
+    request_data = seerr_instance.get_request_data(tmdb_id)
 
     # Basic request check (considering users and include_pending)
     if users:
-        is_requested = overseerr_instance.is_requested_by(tmdb_id, users, include_pending)
+        is_requested = seerr_instance.is_requested_by(tmdb_id, users, include_pending)
     else:
-        is_requested = overseerr_instance.is_requested(tmdb_id, include_pending)
+        is_requested = seerr_instance.is_requested(tmdb_id, include_pending)
 
     # Apply request_status filter if specified
     if is_requested and request_status_filter and request_data:
@@ -1762,14 +1762,14 @@ def check_excluded_overseerr(media_data, plex_media_item, exclude, overseerr_ins
         # Exclude mode: skip requested items (don't delete them)
         if is_requested:
             logger.debug(
-                f"'{media_data.get('title')}' has Overseerr request, skipping"
+                f"'{media_data.get('title')}' has Seerr request, skipping"
             )
             return False
     elif mode == "include_only":
         # Include-only mode: ONLY delete items that were requested
         if not is_requested:
             logger.debug(
-                f"'{media_data.get('title')}' not requested via Overseerr, skipping"
+                f"'{media_data.get('title')}' not requested via Seerr, skipping"
             )
             return False
 

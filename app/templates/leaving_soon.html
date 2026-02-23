@@ -52,7 +52,7 @@
         <div class="tip-text">
           Simply start watching! Any title you watch will automatically be removed
           from the deletion list. If something does get deleted, you can always
-          request it again{% if overseerr_url %} through <a href="{{ overseerr_url }}">Overseerr</a>{% endif %}.
+          request it again{% if seerr_url %} through <a href="{{ seerr_url }}">Seerr</a>{% elif overseerr_url %} through <a href="{{ overseerr_url }}">Seerr</a>{% endif %}.
         </div>
       </div>
 
@@ -70,7 +70,9 @@
               {% elif plex_url %}
               <a href="{{ plex_url }}" class="watch-link">▶ Open Plex</a>
               {% endif %}
-              {% if overseerr_url %}
+              {% if seerr_url %}
+              <a href="{{ seerr_url }}" class="request-link">Request Again</a>
+              {% elif overseerr_url %}
               <a href="{{ overseerr_url }}" class="request-link">Request Again</a>
               {% endif %}
             </div>
@@ -94,7 +96,9 @@
               {% elif plex_url %}
               <a href="{{ plex_url }}" class="watch-link">▶ Open Plex</a>
               {% endif %}
-              {% if overseerr_url %}
+              {% if seerr_url %}
+              <a href="{{ seerr_url }}" class="request-link">Request Again</a>
+              {% elif overseerr_url %}
               <a href="{{ overseerr_url }}" class="request-link">Request Again</a>
               {% endif %}
             </div>

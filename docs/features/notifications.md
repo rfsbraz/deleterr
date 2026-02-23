@@ -238,7 +238,7 @@ The default leaving soon template includes:
 - Tip explaining how watching content keeps it
 - Grouped sections for Movies and TV Shows
 - Links to Plex (if configured)
-- Links to [Overseerr](../integrations/overseerr.md) for re-requesting (if configured)
+- Links to [Seerr](../integrations/overseerr.md) for re-requesting (if configured)
 
 ### Custom Templates
 
@@ -260,7 +260,7 @@ Template variables available:
 | `{{ movies }}` | List of movie items |
 | `{{ shows }}` | List of TV show items |
 | `{{ plex_url }}` | Plex server URL (if configured) |
-| `{{ overseerr_url }}` | Overseerr URL (if configured) |
+| `{{ seerr_url }}` | Seerr URL (if configured). `{{ overseerr_url }}` is also available for backward compatibility. |
 
 ## Testing Notifications
 

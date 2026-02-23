@@ -33,11 +33,13 @@ trakt:
   client_id: "YOUR_TRAKT_CLIENT_ID"  # Replace with your Trakt client ID
   client_secret: "YOUR_TRAKT_CLIENT_SECRET"  # Replace with your Trakt client secret
 
-# Overseerr connection details (optional)
+# Seerr connection details (optional)
 # Used to exclude/include media based on request status
-# overseerr:
-#   url: "http://localhost:5055"  # Replace with your Overseerr server URL
-#   api_key: "YOUR_OVERSEERR_API_KEY"  # Replace with your Overseerr API key
+# Compatible with both Seerr and Overseerr (they share the same API)
+# Note: 'overseerr' is also accepted as a config key for backward compatibility
+# seerr:
+#   url: "http://localhost:5055"  # Replace with your Seerr/Overseerr server URL
+#   api_key: "YOUR_SEERR_API_KEY"  # Replace with your Seerr/Overseerr API key
 
 # JustWatch global settings (optional)
 # Used to check streaming availability of media
@@ -123,13 +125,13 @@ libraries:
       #   available_on: ["netflix", "disneyplus", "amazon"]  # Keep if available on these
       #   # OR use not_available_on (mutually exclusive with available_on):
       #   # not_available_on: ["any"]  # Keep if available on ANY streaming service
-      # overseerr:  # Exclude media based on Overseerr request status
+      # seerr:  # Exclude media based on Seerr/Overseerr request status
       #   mode: "exclude"  # "exclude" = don't delete requested items, "include_only" = ONLY delete requested items
       #   users: []  # Only consider requests from these users (empty = all users)
       #   include_pending: true  # Include pending (not yet approved) requests
       #   request_status: ["approved"]  # Only consider requests with these statuses (pending, approved, declined)
       #   min_request_age_days: 90  # Only consider requests older than this many days
-      #   update_status: false  # Update Overseerr after deletion (makes media requestable again)
+      #   update_status: false  # Update Seerr after deletion (makes media requestable again)
   - name: "TV Shows"
     action_mode: delete
     last_watched_threshold: 365

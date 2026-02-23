@@ -278,39 +278,39 @@ See [Notifications Troubleshooting](features/notifications.md#troubleshooting) f
 
 See [JustWatch Integration](integrations/justwatch.md) for full setup details.
 
-## Overseerr Issues
+## Seerr / Overseerr Issues
 
-### Overseerr Connection Failed
+### Seerr Connection Failed
 
-**Symptoms**: `Cannot reach Overseerr` or `API authentication failed`
+**Symptoms**: `Cannot reach Seerr` or `API authentication failed`
 
 **Solutions**:
 
 1. **Check URL and API key**:
    ```yaml
-   overseerr:
+   seerr:
      url: "http://localhost:5055"
-     api_key: "YOUR_API_KEY"  # From Overseerr Settings > General
+     api_key: "YOUR_API_KEY"  # From Seerr Settings > General
    ```
 
 2. **Test connection**:
    ```bash
-   curl -H "X-Api-Key: YOUR_KEY" http://overseerr:5055/api/v1/status
+   curl -H "X-Api-Key: YOUR_KEY" http://seerr:5055/api/v1/status
    ```
 
-3. **Seerr users**: The same configuration works for Seerr -- no changes needed.
+3. **Overseerr users**: The same configuration works for Overseerr -- the `overseerr` config key is still accepted for backward compatibility.
 
 ### Deleted Media Still Shows as Available
 
-If deleted media still shows "available" in Overseerr, enable `update_status`:
+If deleted media still shows "available" in Seerr, enable `update_status`:
 
 ```yaml
 exclude:
-  overseerr:
+  seerr:
     update_status: true
 ```
 
-See [Overseerr Integration](integrations/overseerr.md) for full setup details.
+See [Seerr / Overseerr Integration](integrations/overseerr.md) for full setup details.
 
 ## Trakt / MDBList Issues
 

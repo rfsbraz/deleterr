@@ -621,7 +621,7 @@ class TestEmailProvider:
             items,
             context={
                 "plex_url": "http://plex.local:32400",
-                "overseerr_url": "http://overseerr.local:5055",
+                "seerr_url": "http://seerr.local:5055",
             },
         )
 

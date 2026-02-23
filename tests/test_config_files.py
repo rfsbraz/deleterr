@@ -4,11 +4,12 @@ from unittest.mock import patch
 
 from app.config import Config
 from app.deleterr import load_config
-from app.modules import tautulli, trakt, radarr
+from app.modules import tautulli, trakt, radarr, seerr
 
 
 class TestConfigFiles(unittest.TestCase):
     @patch.object(trakt.Trakt, "test_connection")
+    @patch.object(seerr.Seerr, "test_connection", return_value=True)
     @patch.object(Config, "test_api_connection")
     @patch.object(tautulli.Tautulli, "test_connection")
     @patch("app.modules.tautulli.RawAPI")
@@ -20,6 +21,7 @@ class TestConfigFiles(unittest.TestCase):
         mock_tautulli_rawapi,
         mock_tautulli_test_connection,
         mock_arr_test_connection,
+        mock_seerr_test_connection,
         mock_trakt_test_connection,
     ):
         config = load_config(filename)

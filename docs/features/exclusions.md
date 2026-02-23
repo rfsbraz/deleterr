@@ -9,7 +9,7 @@ Exclusions protect media from deletion. If any exclusion rule matches an item, t
 | **Metadata** | `titles`, `genres`, `collections`, `actors`, `directors`, `writers`, `producers`, `studios`, `plex_labels`, `release_years` |
 | **Radarr** | `tags`, `quality_profiles`, `paths`, `monitored` |
 | **Sonarr** | `status`, `tags`, `quality_profiles`, `paths`, `monitored` |
-| **Integrations** | [`trakt`](../integrations/trakt.md), [`mdblist`](../integrations/mdblist.md), [`justwatch`](../integrations/justwatch.md), [`overseerr`](../integrations/overseerr.md) |
+| **Integrations** | [`trakt`](../integrations/trakt.md), [`mdblist`](../integrations/mdblist.md), [`justwatch`](../integrations/justwatch.md), [`seerr`](../integrations/overseerr.md) |
 
 All exclusions are configured under the `exclude` key inside a library block:
 
@@ -170,7 +170,7 @@ Deleterr integrates with external services for more advanced exclusion logic:
 | [Trakt](../integrations/trakt.md) | Protect media on Trakt lists (trending, popular, user lists) | Yes |
 | [MDBList](../integrations/mdblist.md) | Protect media on MDBList lists (aggregates IMDB, TMDB, Trakt, etc.) | Yes |
 | [JustWatch](../integrations/justwatch.md) | Protect based on streaming availability | No |
-| [Overseerr](../integrations/overseerr.md) | Protect or target media based on user requests | Yes |
+| [Seerr / Overseerr](../integrations/overseerr.md) | Protect or target media based on user requests | Yes |
 
 See each integration page for setup details and configuration options.
 
