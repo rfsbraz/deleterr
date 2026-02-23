@@ -187,6 +187,7 @@ def test_process_library(
         mock_get_trakt_items.return_value,
         mock_get_config_value.return_value,
         mock_get_config_value.return_value,  # preview_next defaults to max_actions_per_run
+        mdblist_items={},
     )
     assert result == (5, [{"title": "Show"}], [])
 
@@ -245,7 +246,8 @@ def test_process_shows(mock_process_show, mock_process_library_rules, standard_c
 
     # Assert
     mock_process_library_rules.assert_called_once_with(
-        library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
+        library, plex_library, all_show_data, show_activity, trakt_items,
+        sonarr_instance=sonarr_instance, mdblist_items={}
     )
     mock_process_show.assert_called_once()
     saved_space, deleted_items, preview_candidates = result
@@ -285,7 +287,8 @@ def test_process_shows_with_delay(
 
     # Assert
     mock_process_library_rules.assert_called_once_with(
-        library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
+        library, plex_library, all_show_data, show_activity, trakt_items,
+        sonarr_instance=sonarr_instance, mdblist_items={}
     )
     mock_process_show.assert_called_once()
     mock_sleep.assert_called_once_with(10)
@@ -328,7 +331,8 @@ def test_process_shows_max_actions(
 
     # Assert
     mock_process_library_rules.assert_called_once_with(
-        library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
+        library, plex_library, all_show_data, show_activity, trakt_items,
+        sonarr_instance=sonarr_instance, mdblist_items={}
     )
     assert mock_process_show.call_count == 10
     # Returns 3-tuple (saved_space, deleted_items, preview_candidates) - preview is empty when preview_next=0 (default)
@@ -843,7 +847,8 @@ def test_process_movies(
 
     # Assert
     mock_process_library_rules.assert_called_once_with(
-        library, movies_library, radarr_instance.get_movies(), movie_activity, trakt_movies, radarr_instance=radarr_instance
+        library, movies_library, radarr_instance.get_movies(), movie_activity, trakt_movies,
+        radarr_instance=radarr_instance, mdblist_items={}
     )
     assert mock_process_movie.call_count == max_actions_per_run
     assert mock_sleep.call_count == max_actions_per_run
@@ -1369,6 +1374,7 @@ def test_is_movie_actionable(
     media_cleaner_instance.check_watched_status = MagicMock(return_value=watched_status)
     media_cleaner_instance.check_collections = MagicMock(return_value=collections)
     media_cleaner_instance.check_trakt_movies = MagicMock(return_value=trakt_movies)
+    media_cleaner_instance.check_mdblist_items = MagicMock(return_value=True)
     media_cleaner_instance.check_added_date = MagicMock(return_value=added_date)
     media_cleaner_instance.check_exclusions = MagicMock(return_value=exclusions)
 
@@ -1469,6 +1475,26 @@ def test_check_collections(
 )
 def test_check_trakt_movies(media_data, trakt_movies, expected, media_cleaner):
     result = media_cleaner.check_trakt_movies(media_data, trakt_movies)
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "media_data, mdblist_items, expected",
+    [
+        # Movie found in mdblist by tmdbId → excluded
+        ({"title": "movie1", "tmdbId": 123}, {123: {"mdblist": {}, "list": "https://mdblist.com/lists/user/list"}}, False),
+        # Show found in mdblist by tvdbId → excluded
+        ({"title": "show1", "tvdbId": 456}, {456: {"mdblist": {}, "list": "https://mdblist.com/lists/user/list"}}, False),
+        # Item not found in mdblist → actionable
+        ({"title": "movie2", "tmdbId": 789}, {123: {"mdblist": {}, "list": "url"}}, True),
+        # Empty mdblist dict → actionable
+        ({"title": "movie3", "tmdbId": 999}, {}, True),
+        # None mdblist → actionable
+        ({"title": "movie4", "tmdbId": 111}, None, True),
+    ],
+)
+def test_check_mdblist_items(media_data, mdblist_items, expected, media_cleaner):
+    result = media_cleaner.check_mdblist_items(media_data, mdblist_items)
     assert result == expected
 
 

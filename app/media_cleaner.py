@@ -11,6 +11,7 @@ from app import logger
 from app.modules.justwatch import JustWatch
 from app.modules.overseerr import Overseerr
 from app.modules.tautulli import Tautulli
+from app.modules.mdblist import Mdblist
 from app.modules.trakt import Trakt
 from app.utils import parse_size_to_bytes, print_readable_freed_space
 
@@ -301,6 +302,16 @@ class MediaCleaner:
             config.settings.get("trakt", {}).get("client_secret"),
         )
 
+        # Initialize Mdblist if configured
+        mdblist_config = config.settings.get("mdblist", {})
+        if mdblist_config.get("api_key"):
+            self.mdblist = Mdblist(
+                mdblist_config.get("api_key"),
+                ssl_verify=ssl_verify,
+            )
+        else:
+            self.mdblist = None
+
         # Initialize Overseerr if configured
         overseerr_config = config.settings.get("overseerr", {})
         if overseerr_config.get("url") and overseerr_config.get("api_key"):
@@ -353,6 +364,12 @@ class MediaCleaner:
         return self.trakt.get_all_items_for_url(
             media_type, library.get("exclude", {}).get("trakt", {})
         )
+
+    def get_mdblist_items(self, media_type, library):
+        mdblist_config = library.get("exclude", {}).get("mdblist", {})
+        if not mdblist_config or not self.mdblist:
+            return {}
+        return self.mdblist.get_all_items_for_url(media_type, mdblist_config)
 
     def get_plex_library(self, library):
         return self.plex.library.section(library.get("name"))
@@ -410,6 +427,10 @@ class MediaCleaner:
         trakt_items = self.get_trakt_items("show", library)
         logger.info(f"Got {len(trakt_items)} trakt items to exclude")
 
+        mdblist_items = self.get_mdblist_items("show", library)
+        if mdblist_items:
+            logger.info(f"Got {len(mdblist_items)} mdblist items to exclude")
+
         show_activity = self.get_show_activity(library, plex_library)
         logger.info(f"Got {len(show_activity)} items in tautulli activity")
 
@@ -422,6 +443,7 @@ class MediaCleaner:
             trakt_items,
             max_actions_per_run,
             preview_next,
+            mdblist_items=mdblist_items,
         )
 
     def process_shows(
@@ -434,6 +456,7 @@ class MediaCleaner:
             trakt_items,
             max_actions_per_run,
             preview_next=0,
+            mdblist_items=None,
     ):
         """
         Process shows for deletion.
@@ -441,13 +464,17 @@ class MediaCleaner:
         Returns:
             tuple: (saved_space, deleted_items, preview_candidates)
         """
+        if mdblist_items is None:
+            mdblist_items = {}
+
         saved_space = 0
         actions_performed = 0
         deleted_items = []
         preview_candidates = []
 
         for sonarr_show in self.process_library_rules(
-                library, plex_library, all_show_data, show_activity, trakt_items, sonarr_instance=sonarr_instance
+                library, plex_library, all_show_data, show_activity, trakt_items,
+                sonarr_instance=sonarr_instance, mdblist_items=mdblist_items
         ):
             if max_actions_per_run and actions_performed >= max_actions_per_run:
                 # Continue collecting preview candidates after hitting the limit
@@ -549,6 +576,10 @@ class MediaCleaner:
         logger.info(f"Plex library loaded ({movies_library.totalSize} items)")
 
         trakt_movies = self.get_trakt_items("movie", library)
+        mdblist_movies = self.get_mdblist_items("movie", library)
+        if mdblist_movies:
+            logger.info(f"Got {len(mdblist_movies)} mdblist items to exclude")
+
         movie_activity = self.get_movie_activity(library, movies_library)
 
         return self.process_movies(
@@ -559,6 +590,7 @@ class MediaCleaner:
             trakt_movies,
             max_actions_per_run,
             preview_next,
+            mdblist_items=mdblist_movies,
         )
 
     def process_movies(
@@ -570,6 +602,7 @@ class MediaCleaner:
             trakt_movies,
             max_actions_per_run,
             preview_next=0,
+            mdblist_items=None,
     ):
         """
         Process movies for deletion.
@@ -577,6 +610,9 @@ class MediaCleaner:
         Returns:
             tuple: (saved_space, deleted_items, preview_candidates)
         """
+        if mdblist_items is None:
+            mdblist_items = {}
+
         saved_space = 0
         actions_performed = 0
         deleted_items = []
@@ -585,7 +621,8 @@ class MediaCleaner:
         all_movie_data = radarr_instance.get_movies()
 
         for radarr_movie in self.process_library_rules(
-                library, movies_library, all_movie_data, movie_activity, trakt_movies, radarr_instance=radarr_instance
+                library, movies_library, all_movie_data, movie_activity, trakt_movies,
+                radarr_instance=radarr_instance, mdblist_items=mdblist_items
         ):
             if max_actions_per_run and actions_performed >= max_actions_per_run:
                 # Continue collecting preview candidates after hitting the limit
@@ -1121,7 +1158,8 @@ class MediaCleaner:
         return None
 
     def process_library_rules(
-            self, library_config, plex_library, all_data, activity_data, trakt_movies, radarr_instance=None, sonarr_instance=None
+            self, library_config, plex_library, all_data, activity_data, trakt_movies,
+            radarr_instance=None, sonarr_instance=None, mdblist_items=None
     ):
         # get the time thresholds from the config
         last_watched_threshold = library_config.get("last_watched_threshold", None)
@@ -1214,7 +1252,8 @@ class MediaCleaner:
                     added_at_threshold,
                     apply_last_watch_threshold_to_collections,
                     radarr_instance,
-                    sonarr_instance
+                    sonarr_instance,
+                    mdblist_items=mdblist_items,
             ):
                 continue
 
@@ -1233,7 +1272,8 @@ class MediaCleaner:
             added_at_threshold,
             apply_last_watch_threshold_to_collections,
             radarr_instance=None,
-            sonarr_instance=None
+            sonarr_instance=None,
+            mdblist_items=None,
     ):
         if not self.check_watched_status(
                 library,
@@ -1258,6 +1298,9 @@ class MediaCleaner:
             return False
 
         if not self.check_trakt_movies(media_data, trakt_movies):
+            return False
+
+        if not self.check_mdblist_items(media_data, mdblist_items):
             return False
 
         return True
@@ -1307,6 +1350,20 @@ class MediaCleaner:
         if media_data.get("tvdb_id", media_data.get("tmdbId")) in trakt_movies:
             logger.debug(
                 f"{media_data['title']} found in trakt watched list {trakt_movies[media_data.get('tvdb_id', media_data.get('tmdbId'))]['list']}, skipping"
+            )
+            return False
+
+        return True
+
+    def check_mdblist_items(self, media_data, mdblist_items):
+        if not mdblist_items:
+            return True
+
+        # Check by tmdbId (movies) or tvdbId (shows)
+        media_id = media_data.get("tmdbId") or media_data.get("tvdbId")
+        if media_id and media_id in mdblist_items:
+            logger.debug(
+                f"{media_data['title']} found in mdblist list {mdblist_items[media_id]['list']}, skipping"
             )
             return False
 

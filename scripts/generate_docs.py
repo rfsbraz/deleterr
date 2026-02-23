@@ -26,6 +26,7 @@ from app.schema import (
     RadarrInstance,
     SonarrInstance,
     TraktConfig,
+    MdblistConfig,
     JustWatchGlobalConfig,
     OverseerrConfig,
     SchedulerConfig,
@@ -34,6 +35,7 @@ from app.schema import (
     SortConfig,
     Exclusions,
     TraktExclusions,
+    MdblistExclusions,
     JustWatchExclusions,
     RadarrExclusions,
     SonarrExclusions,
@@ -321,6 +323,21 @@ Create an application at [trakt.tv/oauth/applications](https://trakt.tv/oauth/ap
 trakt:
   client_id: "YOUR_TRAKT_CLIENT_ID"
   client_secret: "YOUR_TRAKT_CLIENT_SECRET"
+```
+
+---
+
+## Mdblist
+
+Optional. Required only for Mdblist list exclusions. [Mdblist](https://mdblist.com/) aggregates ratings and lists from IMDB, TMDB, Trakt, Letterboxd, and others.
+
+{mdblist_table}
+
+Get your API key from [mdblist.com/preferences](https://mdblist.com/preferences/).
+
+```yaml
+mdblist:
+  api_key: "YOUR_MDBLIST_API_KEY"
 ```
 
 ---
@@ -721,6 +738,20 @@ exclude:
       - "https://trakt.tv/users/justin/lists/imdb-top-rated-movies"
 ```
 
+### Mdblist Exclusions
+
+Exclude media appearing on [Mdblist](https://mdblist.com/) lists. Requires global `mdblist` config with API key.
+
+{mdblist_exclusions_table}
+
+```yaml
+exclude:
+  mdblist:
+    max_items_per_list: 1000
+    lists:
+      - "https://mdblist.com/lists/username/listname"
+```
+
 ### JustWatch Exclusions
 
 Exclude based on streaming availability. `available_on` and `not_available_on` are mutually exclusive.
@@ -985,6 +1016,7 @@ libraries:
         radarr_table=generate_table(RadarrInstance),
         sonarr_table=generate_table(SonarrInstance),
         trakt_table=generate_table(TraktConfig),
+        mdblist_table=generate_table(MdblistConfig),
         justwatch_table=generate_table(JustWatchGlobalConfig),
         overseerr_table=generate_table(OverseerrConfig),
         scheduler_table=generate_table(SchedulerConfig),
@@ -1003,6 +1035,7 @@ libraries:
         leaving_soon_labels_table=generate_table(LeavingSoonLabelConfig, "leaving_soon.labels."),
         exclusions_table=exclusions_table,
         trakt_exclusions_table=generate_table(TraktExclusions, "trakt."),
+        mdblist_exclusions_table=generate_table(MdblistExclusions, "mdblist."),
         justwatch_exclusions_table=generate_table(JustWatchExclusions, "justwatch."),
         radarr_exclusions_table=generate_table(RadarrExclusions, "radarr."),
         sonarr_exclusions_table=generate_table(SonarrExclusions, "sonarr."),
