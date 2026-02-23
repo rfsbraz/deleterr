@@ -362,7 +362,7 @@ libraries:
 
 ---
 
-## 6. Protect Unwatched Overseerr Requests
+## 6. Protect Unwatched Seerr Requests
 
 Keep content that users requested but haven't watched yet.
 
@@ -387,9 +387,9 @@ sonarr:
     url: "http://localhost:8989"
     api_key: "YOUR_SONARR_API_KEY"
 
-overseerr:
+seerr:
   url: "http://localhost:5055"
-  api_key: "YOUR_OVERSEERR_API_KEY"
+  api_key: "YOUR_SEERR_API_KEY"
 
 libraries:
   - name: "Movies"
@@ -399,7 +399,7 @@ libraries:
     added_at_threshold: 180
     max_actions_per_run: 20
     exclude:
-      overseerr:
+      seerr:
         mode: "exclude"
         include_pending: true
         request_status: ["approved", "pending"]
@@ -412,20 +412,20 @@ libraries:
     added_at_threshold: 180
     max_actions_per_run: 20
     exclude:
-      overseerr:
+      seerr:
         mode: "exclude"
         include_pending: true
         request_status: ["approved", "pending"]
 ```
 
-**What it does**: Protects all content that was requested through Overseerr (approved or pending). Only deletes content that wasn't explicitly requested by a user. This ensures users don't lose content they asked for before they've had a chance to watch it.
+**What it does**: Protects all content that was requested through Seerr (approved or pending). Only deletes content that wasn't explicitly requested by a user. This ensures users don't lose content they asked for before they've had a chance to watch it.
 
 ### Variations
 
 Protect requests from specific users only:
 ```yaml
 exclude:
-  overseerr:
+  seerr:
     mode: "exclude"
     users: ["admin", "family-member"]
 ```
@@ -433,7 +433,7 @@ exclude:
 Only protect recent requests (give users 30 days to watch):
 ```yaml
 exclude:
-  overseerr:
+  seerr:
     mode: "exclude"
     min_request_age_days: 30  # Requests older than 30 days can be deleted
 ```
@@ -548,4 +548,4 @@ libraries:
 - [Trakt](integrations/trakt.md) - Protect media on Trakt lists
 - [MDBList](integrations/mdblist.md) - Protect media on MDBList lists
 - [JustWatch](integrations/justwatch.md) - Streaming availability exclusions
-- [Overseerr / Seerr](integrations/overseerr.md) - Request-based exclusions
+- [Seerr / Overseerr](integrations/overseerr.md) - Request-based exclusions

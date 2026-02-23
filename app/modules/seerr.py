@@ -4,18 +4,20 @@ import requests
 
 from app import logger
 
-# Request status constants from Overseerr API
+# Request status constants from Seerr/Overseerr API
 REQUEST_STATUS_PENDING = 1
 REQUEST_STATUS_APPROVED = 2
 REQUEST_STATUS_DECLINED = 3
 
-# Media status constants from Overseerr API
+# Media status constants from Seerr/Overseerr API
 MEDIA_STATUS_DELETED = 6
 
 
-class Overseerr:
+class Seerr:
     """
-    Client for interacting with the Overseerr API.
+    Client for interacting with the Seerr API.
+
+    Compatible with both Seerr and Overseerr (they share the same API).
 
     Provides functionality for:
     - Fetching request data to exclude/include media based on user requests
@@ -24,10 +26,10 @@ class Overseerr:
 
     def __init__(self, url, api_key, ssl_verify=True):
         """
-        Initialize Overseerr client.
+        Initialize Seerr client.
 
         Args:
-            url: Base URL of the Overseerr server
+            url: Base URL of the Seerr/Overseerr server
             api_key: API key for authentication
             ssl_verify: Whether to verify SSL certificates
         """
@@ -40,7 +42,7 @@ class Overseerr:
 
     def _make_request(self, method, endpoint, **kwargs):
         """
-        Make an authenticated request to the Overseerr API.
+        Make an authenticated request to the Seerr API.
 
         Args:
             method: HTTP method (get, post, put, delete)
@@ -51,7 +53,7 @@ class Overseerr:
             Response JSON or None on error
         """
         if not self.url or not self.api_key:
-            logger.warning("Overseerr not configured (missing URL or API key)")
+            logger.warning("Seerr not configured (missing URL or API key)")
             return None
 
         headers = {
@@ -73,33 +75,33 @@ class Overseerr:
             response.raise_for_status()
             return response.json() if response.content else {}
         except requests.exceptions.ConnectionError as e:
-            logger.warning(f"Cannot reach Overseerr at {self.url}: Connection refused or host unreachable")
+            logger.warning(f"Cannot reach Seerr at {self.url}: Connection refused or host unreachable")
             logger.debug(f"Connection error details: {e}")
             return None
         except requests.exceptions.Timeout as e:
-            logger.warning(f"Overseerr request to {endpoint} timed out after 30s")
+            logger.warning(f"Seerr request to {endpoint} timed out after 30s")
             logger.debug(f"Timeout details: {e}")
             return None
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code if e.response else "unknown"
             if status_code == 401:
-                logger.warning(f"Overseerr API authentication failed (HTTP 401): Check your API key")
+                logger.warning(f"Seerr API authentication failed (HTTP 401): Check your API key")
             elif status_code == 403:
-                logger.warning(f"Overseerr API access denied (HTTP 403): API key may lack permissions")
+                logger.warning(f"Seerr API access denied (HTTP 403): API key may lack permissions")
             elif status_code == 404:
-                logger.debug(f"Overseerr resource not found (HTTP 404): {endpoint}")
+                logger.debug(f"Seerr resource not found (HTTP 404): {endpoint}")
             elif status_code >= 500:
-                logger.warning(f"Overseerr server error (HTTP {status_code}) on {endpoint}")
+                logger.warning(f"Seerr server error (HTTP {status_code}) on {endpoint}")
             else:
-                logger.warning(f"Overseerr API error (HTTP {status_code}) on {endpoint}: {e}")
+                logger.warning(f"Seerr API error (HTTP {status_code}) on {endpoint}: {e}")
             return None
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Overseerr API request failed: {e}")
+            logger.warning(f"Seerr API request failed: {e}")
             return None
 
     def test_connection(self):
         """
-        Test the connection to Overseerr.
+        Test the connection to Seerr.
 
         Returns:
             True if connection is successful, False otherwise
@@ -107,14 +109,14 @@ class Overseerr:
         result = self._make_request("get", "/status")
         if result is not None:
             logger.debug(
-                f"Connected to Overseerr v{result.get('version', 'unknown')}"
+                f"Connected to Seerr v{result.get('version', 'unknown')}"
             )
             return True
         return False
 
     def get_all_requests(self, status=None):
         """
-        Fetch all requests from Overseerr.
+        Fetch all requests from Seerr.
 
         Args:
             status: Optional status filter (1=pending, 2=approved, 3=declined)
@@ -139,7 +141,7 @@ class Overseerr:
 
             result = self._make_request("get", "/request", params=params)
             if result is None:
-                logger.warning("Failed to fetch requests from Overseerr")
+                logger.warning("Failed to fetch requests from Seerr")
                 break
 
             results = result.get("results", [])
@@ -170,7 +172,7 @@ class Overseerr:
             page += 1
 
         self._requests_cache = requests_data
-        logger.debug(f"Fetched {len(requests_data)} unique media requests from Overseerr")
+        logger.debug(f"Fetched {len(requests_data)} unique media requests from Seerr")
         return requests_data
 
     def _get_user_info(self, user_id):
@@ -193,7 +195,7 @@ class Overseerr:
 
     def is_requested(self, tmdb_id, include_pending=True):
         """
-        Check if media has any request in Overseerr.
+        Check if media has any request in Seerr.
 
         Args:
             tmdb_id: TMDB ID of the media
@@ -283,14 +285,14 @@ class Overseerr:
 
     def _get_media_id(self, tmdb_id, media_type):
         """
-        Get the Overseerr internal media ID for a TMDB ID.
+        Get the Seerr internal media ID for a TMDB ID.
 
         Args:
             tmdb_id: TMDB ID of the media
             media_type: 'movie' or 'tv'
 
         Returns:
-            Overseerr media ID or None
+            Seerr media ID or None
         """
         # First check if we have it from the requests cache
         requests_data = self.get_all_requests()
@@ -310,7 +312,7 @@ class Overseerr:
 
     def mark_as_deleted(self, tmdb_id, media_type):
         """
-        Update media status in Overseerr after deletion.
+        Update media status in Seerr after deletion.
 
         This marks the media as deleted, which allows it to be requested again.
 
@@ -328,7 +330,7 @@ class Overseerr:
         media_id = self._get_media_id(tmdb_id, media_type)
         if not media_id:
             logger.debug(
-                f"Media not found in Overseerr (TMDB: {tmdb_id}) - may not have been requested via Overseerr"
+                f"Media not found in Seerr (TMDB: {tmdb_id}) - may not have been requested via Seerr"
             )
             return False
 
@@ -337,15 +339,15 @@ class Overseerr:
         result = self._make_request("delete", f"/media/{media_id}")
         if result is not None:
             logger.debug(
-                f"Updated Overseerr status for media ID {media_id} (TMDB: {tmdb_id})"
+                f"Updated Seerr status for media ID {media_id} (TMDB: {tmdb_id})"
             )
             # Clear caches since state has changed
             self.clear_cache()
             return True
 
         logger.warning(
-            f"Could not update Overseerr status for TMDB {tmdb_id} (media_id: {media_id}). "
-            "The item will remain marked as 'available' in Overseerr."
+            f"Could not update Seerr status for TMDB {tmdb_id} (media_id: {media_id}). "
+            "The item will remain marked as 'available' in Seerr."
         )
         return False
 
@@ -353,4 +355,8 @@ class Overseerr:
         """Clear all cached data."""
         self._requests_cache = {}
         self._media_cache = {}
-        logger.debug("Overseerr cache cleared")
+        logger.debug("Seerr cache cleared")
+
+
+# Backward compatibility alias
+Overseerr = Seerr

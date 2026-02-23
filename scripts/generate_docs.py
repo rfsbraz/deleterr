@@ -28,7 +28,7 @@ from app.schema import (
     TraktConfig,
     MdblistConfig,
     JustWatchGlobalConfig,
-    OverseerrConfig,
+    SeerrConfig,
     SchedulerConfig,
     LibraryConfig,
     DiskSizeThreshold,
@@ -39,7 +39,7 @@ from app.schema import (
     JustWatchExclusions,
     RadarrExclusions,
     SonarrExclusions,
-    OverseerrExclusions,
+    SeerrExclusions,
     NotificationConfig,
     DiscordNotificationConfig,
     SlackNotificationConfig,
@@ -356,16 +356,16 @@ justwatch:
 
 ---
 
-## Overseerr
+## Seerr / Overseerr
 
-Optional. Connection settings for [Overseerr](https://overseerr.dev/) request-based exclusions.
+Optional. Connection settings for [Seerr](https://seerr.dev/) (or [Overseerr](https://overseerr.dev/)) request-based exclusions. The `overseerr` config key is still accepted for backward compatibility.
 
-{overseerr_table}
+{seerr_table}
 
 ```yaml
-overseerr:
+seerr:
   url: "http://localhost:5055"
-  api_key: "YOUR_OVERSEERR_API_KEY"
+  api_key: "YOUR_SEERR_API_KEY"
 ```
 
 ---
@@ -564,7 +564,7 @@ The built-in template includes:
 - Tip box explaining how watching keeps items
 - Grouped sections for Movies and TV Shows
 - Links to Plex (if configured)
-- Links to Overseerr for re-requesting (if configured)
+- Links to Seerr for re-requesting (if configured)
 
 ### Multiple Providers
 
@@ -814,16 +814,16 @@ exclude:
     monitored: true
 ```
 
-### Overseerr Exclusions
+### Seerr / Overseerr Exclusions
 
-Exclude or include media based on Overseerr request status. Requires global `overseerr` config.
+Exclude or include media based on Seerr/Overseerr request status. Requires global `seerr` config. The `overseerr` config key is still accepted for backward compatibility.
 
-{overseerr_exclusions_table}
+{seerr_exclusions_table}
 
 **Protect requested content:**
 ```yaml
 exclude:
-  overseerr:
+  seerr:
     mode: "exclude"
     include_pending: true
 ```
@@ -831,7 +831,7 @@ exclude:
 **Cleanup old user requests:**
 ```yaml
 exclude:
-  overseerr:
+  seerr:
     mode: "include_only"
     users: ["user1"]
     request_status: ["approved"]
@@ -1018,7 +1018,7 @@ libraries:
         trakt_table=generate_table(TraktConfig),
         mdblist_table=generate_table(MdblistConfig),
         justwatch_table=generate_table(JustWatchGlobalConfig),
-        overseerr_table=generate_table(OverseerrConfig),
+        seerr_table=generate_table(SeerrConfig),
         scheduler_table=generate_table(SchedulerConfig),
         notifications_table=notifications_table,
         discord_table=generate_table(DiscordNotificationConfig),
@@ -1039,7 +1039,7 @@ libraries:
         justwatch_exclusions_table=generate_table(JustWatchExclusions, "justwatch."),
         radarr_exclusions_table=generate_table(RadarrExclusions, "radarr."),
         sonarr_exclusions_table=generate_table(SonarrExclusions, "sonarr."),
-        overseerr_exclusions_table=generate_table(OverseerrExclusions, "overseerr."),
+        seerr_exclusions_table=generate_table(SeerrExclusions, "seerr."),
     )
 
     output_path.write_text(doc, encoding="utf-8")

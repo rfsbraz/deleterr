@@ -15,7 +15,7 @@ Deleterr identifies and deletes media files based on user-specified criteria. Se
 - [Configuration Reference](CONFIGURATION.md) - All settings explained
 - [Templates](templates.md) - Copy-paste ready configurations
 - [Exclusions](features/exclusions.md) - Protect content from deletion
-- [Integrations](integrations/trakt.md) - Trakt, MDBList, JustWatch, Overseerr
+- [Integrations](integrations/trakt.md) - Trakt, MDBList, JustWatch, Seerr
 
 ---
 

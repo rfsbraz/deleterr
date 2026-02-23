@@ -177,7 +177,7 @@ class NotificationManager:
         self,
         items: list[DeletedItem],
         plex_url: Optional[str] = None,
-        overseerr_url: Optional[str] = None,
+        seerr_url: Optional[str] = None,
     ) -> bool:
         """
         Send leaving soon notifications to all configured leaving_soon providers.
@@ -188,7 +188,7 @@ class NotificationManager:
         Args:
             items: List of items scheduled for deletion (preview items)
             plex_url: Optional base Plex URL for "Watch Now" links
-            overseerr_url: Optional Overseerr URL for "Request Again" links
+            seerr_url: Optional Seerr/Overseerr URL for "Request Again" links
 
         Returns:
             True if at least one provider succeeded, False otherwise.
@@ -205,8 +205,10 @@ class NotificationManager:
         context = {}
         if plex_url:
             context["plex_url"] = plex_url
-        if overseerr_url:
-            context["overseerr_url"] = overseerr_url
+        if seerr_url:
+            # Provide both seerr_url and overseerr_url for template backward compatibility
+            context["seerr_url"] = seerr_url
+            context["overseerr_url"] = seerr_url
 
         # Get template and subject from config
         template_path = self._leaving_soon_config.get("template")

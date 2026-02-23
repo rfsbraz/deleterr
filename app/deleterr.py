@@ -360,10 +360,10 @@ class Deleterr:
                             delete_files=True,
                             add_exclusion=library.get("add_list_exclusion_on_delete", False),
                         )
-                        self.media_cleaner._update_overseerr_status(library, media_item, "movie")
+                        self.media_cleaner._update_seerr_status(library, media_item, "movie")
                     else:
                         self.media_cleaner.delete_series(media_instance, media_item)
-                        self.media_cleaner._update_overseerr_status(library, media_item, "tv")
+                        self.media_cleaner._update_seerr_status(library, media_item, "tv")
                 except Exception as e:
                     logger.error(
                         f"Failed to delete '{media_item['title']}' from "
@@ -646,13 +646,13 @@ class Deleterr:
 
         # Get URLs for template context
         plex_url = self.config.settings.get("plex", {}).get("url")
-        overseerr_url = self.config.settings.get("overseerr", {}).get("url")
+        seerr_url = self.config.settings.get("seerr", {}).get("url")
 
         try:
             self.notifications.send_leaving_soon(
                 items,
                 plex_url=plex_url,
-                overseerr_url=overseerr_url,
+                seerr_url=seerr_url,
             )
         except Exception as e:
             logger.error(f"Failed to send leaving_soon notification: {e}")

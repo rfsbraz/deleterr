@@ -309,23 +309,23 @@ class JustWatchExclusions(BaseModel):
         return self
 
 
-class OverseerrConfig(BaseModel):
-    """Overseerr connection settings for request-based exclusions."""
+class SeerrConfig(BaseModel):
+    """Seerr/Overseerr connection settings for request-based exclusions."""
 
     url: str = Field(
         ...,
-        description="URL of your Overseerr server",
+        description="URL of your Seerr (or Overseerr) server",
         json_schema_extra={"example": "http://localhost:5055"},
     )
     api_key: str = Field(
         ...,
-        description="Overseerr API key. Found in Overseerr Settings → General",
-        json_schema_extra={"example": "YOUR_OVERSEERR_API_KEY"},
+        description="Seerr API key. Found in Seerr Settings → General",
+        json_schema_extra={"example": "YOUR_SEERR_API_KEY"},
     )
 
 
-class OverseerrExclusions(BaseModel):
-    """Overseerr request-based exclusions."""
+class SeerrExclusions(BaseModel):
+    """Seerr/Overseerr request-based exclusions."""
 
     mode: Literal["exclude", "include_only"] = Field(
         default="exclude",
@@ -351,7 +351,7 @@ class OverseerrExclusions(BaseModel):
     )
     update_status: bool = Field(
         default=False,
-        description="After deletion, mark the media as deleted in Overseerr so it can be requested again",
+        description="After deletion, mark the media as deleted in Seerr so it can be requested again",
     )
 
 
@@ -481,9 +481,9 @@ class Exclusions(BaseModel):
         default=None,
         description="Sonarr-specific exclusions (TV shows only)",
     )
-    overseerr: Optional[OverseerrExclusions] = Field(
+    seerr: Optional[SeerrExclusions] = Field(
         default=None,
-        description="Overseerr request-based exclusions",
+        description="Seerr/Overseerr request-based exclusions",
     )
 
 
@@ -863,9 +863,9 @@ class DeleterrConfig(BaseModel):
         default=None,
         description="Global JustWatch settings for streaming availability lookups",
     )
-    overseerr: Optional[OverseerrConfig] = Field(
+    seerr: Optional[SeerrConfig] = Field(
         default=None,
-        description="Overseerr connection settings for request-based exclusions",
+        description="Seerr/Overseerr connection settings for request-based exclusions",
     )
 
     # Scheduler
