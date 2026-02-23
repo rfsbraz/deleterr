@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.10](https://github.com/rfsbraz/deleterr/compare/v0.2.9...v0.2.10) (2026-02-23)
+
+
+### Features
+
+* **seerr:** rename Overseerr to Seerr with backward compatibility ([#242](https://github.com/rfsbraz/deleterr/issues/242)) ([36f798c](https://github.com/rfsbraz/deleterr/commit/36f798cb875b0d73e5f702608ec351dfc05ef2a1))
+
 ## [0.2.9](https://github.com/rfsbraz/deleterr/compare/v0.2.8...v0.2.9) (2026-02-23)
 
 
