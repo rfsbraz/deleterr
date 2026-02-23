@@ -104,7 +104,7 @@ jobs:
           from app.modules.trakt import Trakt
           from app.modules.justwatch import JustWatch
           from app.modules.radarr import DRadarr
-          from app.modules.overseerr import Overseerr
+          from app.modules.seerr import Seerr
           print('✅ All modules imported successfully')
           "
 
