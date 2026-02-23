@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.9](https://github.com/rfsbraz/deleterr/compare/v0.2.8...v0.2.9) (2026-02-23)
+
+
+### Features
+
+* **exclusions:** add Mdblist list exclusion support ([#232](https://github.com/rfsbraz/deleterr/issues/232)) ([d3f5f62](https://github.com/rfsbraz/deleterr/commit/d3f5f62e350dfd59ee5fec3c0cf204dda9043f43))
+
 ## [0.2.8](https://github.com/rfsbraz/deleterr/compare/v0.2.7...v0.2.8) (2026-02-20)
 
 
