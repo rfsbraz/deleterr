@@ -238,7 +238,7 @@ The default leaving soon template includes:
 - Tip explaining how watching content keeps it
 - Grouped sections for Movies and TV Shows
 - Links to Plex (if configured)
-- Links to Overseerr for re-requesting (if configured)
+- Links to [Overseerr](../integrations/overseerr.md) for re-requesting (if configured)
 
 ### Custom Templates
 

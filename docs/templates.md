@@ -538,3 +538,14 @@ libraries:
 
 - [Configuration Reference](CONFIGURATION.md) - Detailed documentation of all options
 - [Getting Started](getting-started.md) - Installation and setup guide
+- [Exclusions](features/exclusions.md) - Understand how exclusion rules work
+- [Sorting & Prioritization](features/sorting.md) - Control deletion order
+- [Disk Thresholds](features/disk-thresholds.md) - Only delete when disk space is low
+- [Multi-Instance Support](features/multi-instance.md) - Manage 4K and standard libraries separately
+
+### Integration Guides
+
+- [Trakt](integrations/trakt.md) - Protect media on Trakt lists
+- [MDBList](integrations/mdblist.md) - Protect media on MDBList lists
+- [JustWatch](integrations/justwatch.md) - Streaming availability exclusions
+- [Overseerr / Seerr](integrations/overseerr.md) - Request-based exclusions

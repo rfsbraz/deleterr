@@ -131,7 +131,7 @@ Pin the "Leaving Soon" collection to your Plex home screen so users see it promi
 
 ### Combine with Disk Thresholds
 
-Leaving Soon works well with disk thresholds - items are only tagged when disk space is low:
+Leaving Soon works well with [disk thresholds](disk-thresholds.md) - items are only tagged when disk space is low:
 
 ```yaml
 libraries:

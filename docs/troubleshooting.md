@@ -258,6 +258,92 @@ See [Notifications Troubleshooting](features/notifications.md#troubleshooting) f
      - /var/run/docker.sock:/var/run/docker.sock:ro
    ```
 
+## JustWatch Issues
+
+### Streaming Check Not Working
+
+**Symptoms**: Items aren't being excluded even though they're on Netflix/etc.
+
+**Solutions**:
+
+1. **Check country code**: Must match your streaming region
+   ```yaml
+   justwatch:
+     country: "US"  # ISO 3166-1 alpha-2 code
+   ```
+
+2. **Title matching**: JustWatch searches by title -- unusual characters or regional titles may not match. Enable `LOG_LEVEL: DEBUG` to see search results.
+
+3. **Rate limiting**: If you see `JustWatch API rate limit hit` in logs, reduce `max_actions_per_run` or run less frequently.
+
+See [JustWatch Integration](integrations/justwatch.md) for full setup details.
+
+## Overseerr Issues
+
+### Overseerr Connection Failed
+
+**Symptoms**: `Cannot reach Overseerr` or `API authentication failed`
+
+**Solutions**:
+
+1. **Check URL and API key**:
+   ```yaml
+   overseerr:
+     url: "http://localhost:5055"
+     api_key: "YOUR_API_KEY"  # From Overseerr Settings > General
+   ```
+
+2. **Test connection**:
+   ```bash
+   curl -H "X-Api-Key: YOUR_KEY" http://overseerr:5055/api/v1/status
+   ```
+
+3. **Seerr users**: The same configuration works for Seerr -- no changes needed.
+
+### Deleted Media Still Shows as Available
+
+If deleted media still shows "available" in Overseerr, enable `update_status`:
+
+```yaml
+exclude:
+  overseerr:
+    update_status: true
+```
+
+See [Overseerr Integration](integrations/overseerr.md) for full setup details.
+
+## Trakt / MDBList Issues
+
+### List Items Not Being Excluded
+
+**Symptoms**: Items on Trakt/MDBList lists are still being deleted
+
+**Solutions**:
+
+1. **Verify credentials**: Ensure `trakt.client_id`/`client_secret` or `mdblist.api_key` are correct
+
+2. **Check list URL format**: URLs must match supported patterns
+   ```yaml
+   # Trakt
+   - "https://trakt.tv/movies/trending"
+   - "https://trakt.tv/users/username/lists/listname"
+
+   # MDBList
+   - "https://mdblist.com/lists/username/listname"
+   ```
+
+3. **Increase max_items_per_list**: If your list has more items than the default limit
+   ```yaml
+   trakt:
+     max_items_per_list: 200   # Default: 100
+   mdblist:
+     max_items_per_list: 2000  # Default: 1000
+   ```
+
+4. **Check matching IDs**: Trakt matches by TMDB/TVDB ID. If an item lacks these IDs, it won't match.
+
+See [Trakt Integration](integrations/trakt.md) and [MDBList Integration](integrations/mdblist.md) for full setup details.
+
 ## Getting Help
 
 If you're still stuck:
