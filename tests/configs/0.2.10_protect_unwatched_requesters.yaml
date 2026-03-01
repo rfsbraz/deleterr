@@ -1,0 +1,60 @@
+# Config file for testing protect_unwatched_requesters feature
+# This validates that the Overseerr requester watch protection configuration works
+
+plex:
+  url: "http://localhost:32400"
+  token: "YOUR_PLEX_TOKEN"
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "YOUR_RADARR_API_KEY"
+
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "YOUR_SONARR_API_KEY"
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "YOUR_TAUTULLI_API_KEY"
+
+overseerr:
+  url: "http://localhost:5055"
+  api_key: "YOUR_OVERSEERR_API_KEY"
+
+dry_run: true
+
+libraries:
+  # Movies library with protect_unwatched_requesters
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 90
+    added_at_threshold: 180
+    max_actions_per_run: 10
+    exclude:
+      overseerr:
+        mode: "exclude"
+        update_status: true
+        protect_unwatched_requesters:
+          enabled: true
+          min_request_age_days: 90
+          max_protection_days: 365
+          user_mapping:
+            overseerr_user: tautulli_user
+
+  # TV Shows library with protect_unwatched_requesters (no user mapping)
+  - name: "TV Shows"
+    sonarr: "Sonarr"
+    action_mode: "delete"
+    last_watched_threshold: 90
+    added_at_threshold: 180
+    max_actions_per_run: 10
+    series_type: standard
+    exclude:
+      overseerr:
+        mode: "exclude"
+        protect_unwatched_requesters:
+          enabled: true
+          min_request_age_days: 30
