@@ -33,12 +33,25 @@ libraries:
     max_actions_per_run: 20
     preview_next: 10  # Required for leaving_soon
     leaving_soon:
+      duration: "7d"
       collection:
         name: "Leaving Soon"
 ```
 
 !!! warning "preview_next Required"
     `preview_next` cannot be set to `0` when `leaving_soon` is configured, as the feature needs to tag upcoming deletions.
+
+### Duration
+
+The `duration` property controls how long items stay in the "Leaving Soon" state before deletion. When set, the exact deletion date is displayed in notifications and the Plex collection description, giving users a clear deadline.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `duration` | string | *(none)* | How long items stay before deletion. Format: `<number>d` for days or `<number>h` for hours |
+
+**Examples:** `7d` (7 days), `24h` (24 hours), `30d` (30 days)
+
+If `duration` is not set, Deleterr will try to derive the deletion date from the scheduler interval. If neither is available, notifications will use the generic "next cleanup cycle" text.
 
 ### Collection Settings
 
@@ -52,6 +65,7 @@ You can also add labels to items instead of (or in addition to) collections:
 
 ```yaml
 leaving_soon:
+  duration: "7d"
   collection:
     name: "Leaving Soon"
   labels:

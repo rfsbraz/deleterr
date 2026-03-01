@@ -103,6 +103,22 @@ class PlexMediaServer(BaseMediaServer):
         except NotFound:
             return None
 
+    def set_collection_summary(self, collection: Any, summary: str) -> None:
+        """Set the summary/description of a Plex collection.
+
+        Args:
+            collection: The Plex collection.
+            summary: The summary text to set.
+        """
+        try:
+            collection.editSummary(summary)
+            logger.debug(f"Set summary for collection '{collection.title}'")
+        except Exception as e:
+            logger.warning(
+                f"Could not set summary for collection '{collection.title}': {e}. "
+                "The collection will still work but won't show the deletion date."
+            )
+
     def set_collection_items(self, collection: Any, items: list) -> None:
         """Replace collection contents with given items.
 
