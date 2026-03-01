@@ -672,4 +672,37 @@ class Config:
                     "'min_request_age_days' must be a non-negative integer."
                 )
 
+        # Validate protect_unwatched_requesters
+        protect_config = overseerr_exclusions.get("protect_unwatched_requesters", {})
+        if protect_config:
+            protect_min_age = protect_config.get("min_request_age_days")
+            if protect_min_age is not None:
+                if not isinstance(protect_min_age, int) or protect_min_age < 0:
+                    self.log_and_exit(
+                        f"Overseerr exclusions in library '{library.get('name')}': "
+                        "'protect_unwatched_requesters.min_request_age_days' must be a non-negative integer."
+                    )
+
+            protect_max_days = protect_config.get("max_protection_days")
+            if protect_max_days is not None:
+                if not isinstance(protect_max_days, int) or protect_max_days < 0:
+                    self.log_and_exit(
+                        f"Overseerr exclusions in library '{library.get('name')}': "
+                        "'protect_unwatched_requesters.max_protection_days' must be a non-negative integer."
+                    )
+
+            if (protect_min_age is not None and protect_max_days is not None
+                    and protect_min_age >= protect_max_days):
+                self.log_and_exit(
+                    f"Overseerr exclusions in library '{library.get('name')}': "
+                    "'protect_unwatched_requesters.min_request_age_days' must be less than 'max_protection_days'."
+                )
+
+            protect_mapping = protect_config.get("user_mapping")
+            if protect_mapping is not None and not isinstance(protect_mapping, dict):
+                self.log_and_exit(
+                    f"Overseerr exclusions in library '{library.get('name')}': "
+                    "'protect_unwatched_requesters.user_mapping' must be a dictionary."
+                )
+
         return True

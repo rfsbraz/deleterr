@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -739,3 +740,341 @@ class TestUpdateOverseerrStatus:
 
             # Should not raise an exception - handled gracefully
             cleaner._update_overseerr_status(library, media_data, "movie")
+
+
+@pytest.mark.unit
+class TestResolveTautulliUsername:
+    """Test the _resolve_tautulli_username helper function."""
+
+    def test_manual_mapping_by_username(self):
+        """Manual mapping matches by Overseerr username."""
+        from app.media_cleaner import _resolve_tautulli_username
+
+        request_data = {
+            "requested_by": {"username": "john", "plexUsername": "john_plex", "email": "john@test.com"}
+        }
+        result = _resolve_tautulli_username(request_data, {"john": "john_tautulli"})
+        assert result == "john_tautulli"
+
+    def test_manual_mapping_by_email(self):
+        """Manual mapping matches by email."""
+        from app.media_cleaner import _resolve_tautulli_username
+
+        request_data = {
+            "requested_by": {"username": "john", "plexUsername": "", "email": "john@test.com"}
+        }
+        result = _resolve_tautulli_username(request_data, {"john@test.com": "john_tautulli"})
+        assert result == "john_tautulli"
+
+    def test_manual_mapping_by_plex_username(self):
+        """Manual mapping matches by plexUsername."""
+        from app.media_cleaner import _resolve_tautulli_username
+
+        request_data = {
+            "requested_by": {"username": "john", "plexUsername": "john_plex", "email": ""}
+        }
+        result = _resolve_tautulli_username(request_data, {"john_plex": "john_tautulli"})
+        assert result == "john_tautulli"
+
+    def test_manual_mapping_case_insensitive(self):
+        """Manual mapping is case-insensitive."""
+        from app.media_cleaner import _resolve_tautulli_username
+
+        request_data = {
+            "requested_by": {"username": "John", "plexUsername": "", "email": ""}
+        }
+        result = _resolve_tautulli_username(request_data, {"john": "john_tautulli"})
+        assert result == "john_tautulli"
+
+    def test_auto_match_via_plex_username(self):
+        """Auto-matches via plexUsername when no manual mapping."""
+        from app.media_cleaner import _resolve_tautulli_username
+
+        request_data = {
+            "requested_by": {"username": "john", "plexUsername": "john_plex", "email": ""}
+        }
+        result = _resolve_tautulli_username(request_data, {})
+        assert result == "john_plex"
+
+    def test_fallback_to_overseerr_username(self):
+        """Falls back to Overseerr username when no plexUsername."""
+        from app.media_cleaner import _resolve_tautulli_username
+
+        request_data = {
+            "requested_by": {"username": "john", "plexUsername": "", "email": ""}
+        }
+        result = _resolve_tautulli_username(request_data, {})
+        assert result == "john"
+
+    def test_no_match_returns_none(self):
+        """Returns None when no identifiers available."""
+        from app.media_cleaner import _resolve_tautulli_username
+
+        request_data = {
+            "requested_by": {"username": "", "plexUsername": "", "email": ""}
+        }
+        result = _resolve_tautulli_username(request_data, {})
+        assert result is None
+
+    def test_no_requested_by(self):
+        """Returns None when no requested_by data."""
+        from app.media_cleaner import _resolve_tautulli_username
+
+        result = _resolve_tautulli_username({}, {})
+        assert result is None
+
+
+@pytest.mark.unit
+class TestCheckExcludedOverseerrRequesterWatch:
+    """Test the check_excluded_overseerr_requester_watch function."""
+
+    def test_no_config_returns_true(self):
+        """No config means not excluded (actionable)."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test", "tmdbId": 550}, MagicMock(), {}, MagicMock(), MagicMock(), "1"
+        )
+        assert result is True
+
+    def test_disabled_returns_true(self):
+        """Disabled feature returns True (actionable)."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {"enabled": False}}}
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test", "tmdbId": 550}, MagicMock(), exclude, MagicMock(), MagicMock(), "1"
+        )
+        assert result is True
+
+    def test_no_overseerr_instance_returns_true(self):
+        """No Overseerr instance returns True (actionable)."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {"enabled": True}}}
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test", "tmdbId": 550}, MagicMock(), exclude, None, MagicMock(), "1"
+        )
+        assert result is True
+
+    def test_no_tautulli_instance_returns_true(self):
+        """No Tautulli instance returns True (actionable)."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {"enabled": True}}}
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test", "tmdbId": 550}, MagicMock(), exclude, MagicMock(), None, "1"
+        )
+        assert result is True
+
+    def test_no_tmdb_id_returns_true(self):
+        """No TMDB ID returns True (actionable)."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {"enabled": True}}}
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test"}, MagicMock(), exclude, MagicMock(), MagicMock(), "1"
+        )
+        assert result is True
+
+    def test_no_request_returns_true(self):
+        """No request in Overseerr returns True (actionable)."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {"enabled": True}}}
+        overseerr = MagicMock()
+        overseerr.get_request_data.return_value = None
+
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test", "tmdbId": 550}, MagicMock(), exclude, overseerr, MagicMock(), "1"
+        )
+        assert result is True
+
+    def test_grace_period_protects(self):
+        """Request within grace period is protected (returns False)."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {
+            "enabled": True, "min_request_age_days": 90
+        }}}
+        overseerr = MagicMock()
+        recent_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        overseerr.get_request_data.return_value = {
+            "created_at": recent_date,
+            "requested_by": {"username": "testuser", "plexUsername": "testuser"},
+        }
+
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test", "tmdbId": 550}, MagicMock(), exclude, overseerr, MagicMock(), "1"
+        )
+        assert result is False  # Protected
+
+    def test_max_protection_allows_deletion(self):
+        """Request older than max_protection_days allows deletion (returns True)."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {
+            "enabled": True, "max_protection_days": 365
+        }}}
+        overseerr = MagicMock()
+        old_date = (datetime.now(timezone.utc) - timedelta(days=400)).isoformat()
+        overseerr.get_request_data.return_value = {
+            "created_at": old_date,
+            "requested_by": {"username": "testuser", "plexUsername": "testuser"},
+        }
+
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test", "tmdbId": 550}, MagicMock(), exclude, overseerr, MagicMock(), "1"
+        )
+        assert result is True  # Allow deletion
+
+    def test_unwatched_requester_protected(self):
+        """Unwatched by requester is protected (returns False)."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {"enabled": True}}}
+        overseerr = MagicMock()
+        old_date = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+        overseerr.get_request_data.return_value = {
+            "created_at": old_date,
+            "requested_by": {"username": "testuser", "plexUsername": "testuser"},
+        }
+        tautulli = MagicMock()
+        tautulli.has_user_watched.return_value = False
+
+        plex_item = MagicMock()
+        plex_item.ratingKey = 123
+        plex_item.grandparentRatingKey = None
+
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test Movie", "tmdbId": 550}, plex_item, exclude, overseerr, tautulli, "1"
+        )
+        assert result is False  # Protected
+
+    def test_watched_requester_allows_deletion(self):
+        """Watched by requester allows deletion (returns True)."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {"enabled": True}}}
+        overseerr = MagicMock()
+        old_date = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+        overseerr.get_request_data.return_value = {
+            "created_at": old_date,
+            "requested_by": {"username": "testuser", "plexUsername": "testuser"},
+        }
+        tautulli = MagicMock()
+        tautulli.has_user_watched.return_value = True
+
+        plex_item = MagicMock()
+        plex_item.ratingKey = 123
+        plex_item.grandparentRatingKey = None
+
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test Movie", "tmdbId": 550}, plex_item, exclude, overseerr, tautulli, "1"
+        )
+        assert result is True  # Allow deletion
+
+    def test_manual_user_mapping_works(self):
+        """Manual user_mapping is used for Tautulli lookup."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {
+            "enabled": True,
+            "user_mapping": {"overseerr_user": "tautulli_user"},
+        }}}
+        overseerr = MagicMock()
+        old_date = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+        overseerr.get_request_data.return_value = {
+            "created_at": old_date,
+            "requested_by": {"username": "overseerr_user", "plexUsername": "", "email": ""},
+        }
+        tautulli = MagicMock()
+        tautulli.has_user_watched.return_value = True
+
+        plex_item = MagicMock()
+        plex_item.ratingKey = 123
+        plex_item.grandparentRatingKey = None
+
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test Movie", "tmdbId": 550}, plex_item, exclude, overseerr, tautulli, "1"
+        )
+
+        # Verify Tautulli was called with the mapped username
+        tautulli.has_user_watched.assert_called_once()
+        call_kwargs = tautulli.has_user_watched.call_args
+        assert call_kwargs[1]["user"] == "tautulli_user" or call_kwargs[0][3] == "tautulli_user" if call_kwargs[0] else call_kwargs[1]["user"] == "tautulli_user"
+
+    def test_plex_username_auto_match(self):
+        """plexUsername is used as auto-match for Tautulli."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {"enabled": True}}}
+        overseerr = MagicMock()
+        old_date = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+        overseerr.get_request_data.return_value = {
+            "created_at": old_date,
+            "requested_by": {"username": "overseerr_name", "plexUsername": "plex_name", "email": ""},
+        }
+        tautulli = MagicMock()
+        tautulli.has_user_watched.return_value = False
+
+        plex_item = MagicMock()
+        plex_item.ratingKey = 123
+        plex_item.grandparentRatingKey = None
+
+        check_excluded_overseerr_requester_watch(
+            {"title": "Test", "tmdbId": 550}, plex_item, exclude, overseerr, tautulli, "1"
+        )
+
+        # Should use plexUsername, not overseerr username
+        call_kwargs = tautulli.has_user_watched.call_args[1]
+        assert call_kwargs["user"] == "plex_name"
+
+    def test_unmappable_user_protected_by_default(self):
+        """Unmappable user is protected by default (returns False)."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {"enabled": True}}}
+        overseerr = MagicMock()
+        old_date = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+        overseerr.get_request_data.return_value = {
+            "created_at": old_date,
+            "requested_by": {"username": "", "plexUsername": "", "email": ""},
+        }
+        tautulli = MagicMock()
+
+        result = check_excluded_overseerr_requester_watch(
+            {"title": "Test", "tmdbId": 550}, MagicMock(), exclude, overseerr, tautulli, "1"
+        )
+        assert result is False  # Protected
+        tautulli.has_user_watched.assert_not_called()
+
+    def test_tv_show_uses_grandparent_key(self):
+        """TV shows use statistics-based detection for grandparent key."""
+        from app.media_cleaner import check_excluded_overseerr_requester_watch
+
+        exclude = {"overseerr": {"protect_unwatched_requesters": {"enabled": True}}}
+        overseerr = MagicMock()
+        old_date = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+        overseerr.get_request_data.return_value = {
+            "created_at": old_date,
+            "requested_by": {"username": "testuser", "plexUsername": "testuser"},
+        }
+        tautulli = MagicMock()
+        tautulli.has_user_watched.return_value = True
+
+        plex_item = MagicMock()
+        plex_item.ratingKey = 456
+        plex_item.grandparentRatingKey = None
+
+        # Sonarr data has "statistics" field indicating TV show
+        media_data = {"title": "Test Show", "tmdbId": 550, "statistics": {"episodeFileCount": 10}}
+
+        check_excluded_overseerr_requester_watch(
+            media_data, plex_item, exclude, overseerr, tautulli, "1"
+        )
+
+        # Should use grandparent_rating_key for TV shows
+        call_kwargs = tautulli.has_user_watched.call_args[1]
+        assert call_kwargs["grandparent_rating_key"] == "456"
+        assert call_kwargs["rating_key"] is None

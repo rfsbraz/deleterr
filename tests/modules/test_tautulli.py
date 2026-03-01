@@ -192,6 +192,104 @@ def test_prepare_activity_entry_tv_show():
 
 
 @patch("app.modules.tautulli.RawAPI", MagicMock())
+class TestHasUserWatched:
+    """Test the has_user_watched method."""
+
+    def test_returns_true_when_history_exists(self):
+        """Returns True when user has watch history for the item."""
+        tautulli = Tautulli("http://localhost", "key")
+        tautulli.api.get_history = MagicMock(return_value={
+            "data": [{"rating_key": "123", "stopped": 1641081600}]
+        })
+
+        result = tautulli.has_user_watched(
+            section="1", rating_key="123",
+            grandparent_rating_key=None, user="testuser"
+        )
+
+        assert result is True
+        tautulli.api.get_history.assert_called_once_with(
+            section_id="1", user="testuser",
+            grandparent_rating_key=None, rating_key="123", length=1,
+        )
+
+    def test_returns_false_when_no_history(self):
+        """Returns False when no watch history found."""
+        tautulli = Tautulli("http://localhost", "key")
+        tautulli.api.get_history = MagicMock(return_value={"data": []})
+
+        result = tautulli.has_user_watched(
+            section="1", rating_key="123",
+            grandparent_rating_key=None, user="testuser"
+        )
+
+        assert result is False
+
+    def test_returns_false_when_no_user(self):
+        """Returns False when no user is provided."""
+        tautulli = Tautulli("http://localhost", "key")
+
+        result = tautulli.has_user_watched(
+            section="1", rating_key="123",
+            grandparent_rating_key=None, user=None
+        )
+
+        assert result is False
+
+    def test_returns_false_when_no_user_empty_string(self):
+        """Returns False when user is empty string."""
+        tautulli = Tautulli("http://localhost", "key")
+
+        result = tautulli.has_user_watched(
+            section="1", rating_key="123",
+            grandparent_rating_key=None, user=""
+        )
+
+        assert result is False
+
+    def test_uses_grandparent_rating_key_for_shows(self):
+        """Uses grandparent_rating_key for TV shows."""
+        tautulli = Tautulli("http://localhost", "key")
+        tautulli.api.get_history = MagicMock(return_value={
+            "data": [{"grandparent_rating_key": "456", "stopped": 1641081600}]
+        })
+
+        result = tautulli.has_user_watched(
+            section="1", rating_key="123",
+            grandparent_rating_key="456", user="testuser"
+        )
+
+        assert result is True
+        tautulli.api.get_history.assert_called_once_with(
+            section_id="1", user="testuser",
+            grandparent_rating_key="456", rating_key=None, length=1,
+        )
+
+    def test_handles_api_errors_gracefully(self):
+        """Returns False when API call fails."""
+        tautulli = Tautulli("http://localhost", "key")
+        tautulli.api.get_history = MagicMock(side_effect=Exception("API Error"))
+
+        result = tautulli.has_user_watched(
+            section="1", rating_key="123",
+            grandparent_rating_key=None, user="testuser"
+        )
+
+        assert result is False
+
+    def test_returns_false_when_no_keys(self):
+        """Returns False when both rating_key and grandparent_rating_key are None."""
+        tautulli = Tautulli("http://localhost", "key")
+
+        result = tautulli.has_user_watched(
+            section="1", rating_key=None,
+            grandparent_rating_key=None, user="testuser"
+        )
+
+        assert result is False
+
+
+@patch("app.modules.tautulli.RawAPI", MagicMock())
 def test_prepare_activity_entry_missing_year():
     """Test _prepare_activity_entry handles missing year gracefully."""
     tautulli_instance = Tautulli("id", "secret")

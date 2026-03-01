@@ -1254,6 +1254,7 @@ class MediaCleaner:
                     radarr_instance,
                     sonarr_instance,
                     mdblist_items=mdblist_items,
+                    plex_library_key=plex_library.key,
             ):
                 continue
 
@@ -1274,6 +1275,7 @@ class MediaCleaner:
             radarr_instance=None,
             sonarr_instance=None,
             mdblist_items=None,
+            plex_library_key=None,
     ):
         if not self.check_watched_status(
                 library,
@@ -1291,7 +1293,7 @@ class MediaCleaner:
         ):
             return False
 
-        if not self.check_exclusions(library, media_data, plex_media_item, radarr_instance, sonarr_instance):
+        if not self.check_exclusions(library, media_data, plex_media_item, radarr_instance, sonarr_instance, plex_library_key=plex_library_key):
             return False
 
         if not self.check_added_date(media_data, plex_media_item, added_at_threshold):
@@ -1377,7 +1379,7 @@ class MediaCleaner:
 
         return True
 
-    def check_exclusions(self, library, media_data, plex_media_item, radarr_instance=None, sonarr_instance=None):
+    def check_exclusions(self, library, media_data, plex_media_item, radarr_instance=None, sonarr_instance=None, plex_library_key=None):
         exclude = library.get("exclude", {})
         exclusion_checks = [
             lambda m, pmi, e: check_excluded_radarr_fields(m, pmi, e, radarr_instance),
@@ -1409,6 +1411,13 @@ class MediaCleaner:
         # Overseerr exclusion check (requires overseerr instance)
         if not check_excluded_overseerr(
             media_data, plex_media_item, exclude, self.overseerr
+        ):
+            return False
+
+        # Overseerr requester watch check (requires overseerr + tautulli)
+        if not check_excluded_overseerr_requester_watch(
+            media_data, plex_media_item, exclude, self.overseerr,
+            self.tautulli, plex_library_key
         ):
             return False
 
@@ -1774,6 +1783,151 @@ def check_excluded_overseerr(media_data, plex_media_item, exclude, overseerr_ins
             return False
 
     return True
+
+
+def _resolve_tautulli_username(request_data, user_mapping):
+    """
+    Resolve the Tautulli username for an Overseerr requester.
+
+    Resolution order:
+    1. Manual user_mapping (case-insensitive match against username, plexUsername, email)
+    2. plexUsername from Overseerr (most reliable auto-match)
+    3. Overseerr username as fallback
+
+    Args:
+        request_data: Request data from Overseerr containing 'requested_by' info
+        user_mapping: Dict mapping Overseerr identifiers to Tautulli usernames
+
+    Returns:
+        Tautulli username string, or None if unmappable
+    """
+    requested_by = request_data.get("requested_by", {})
+    overseerr_username = requested_by.get("username", "")
+    plex_username = requested_by.get("plexUsername", "")
+    email = requested_by.get("email", "")
+
+    # 1. Check manual user_mapping (case-insensitive match)
+    if user_mapping:
+        mapping_lower = {k.lower(): v for k, v in user_mapping.items()}
+        for identifier in [overseerr_username, plex_username, email]:
+            if identifier and identifier.lower() in mapping_lower:
+                return mapping_lower[identifier.lower()]
+
+    # 2. Use plexUsername (most reliable auto-match with Tautulli)
+    if plex_username:
+        return plex_username
+
+    # 3. Fall back to Overseerr username
+    if overseerr_username:
+        return overseerr_username
+
+    return None
+
+
+def check_excluded_overseerr_requester_watch(
+    media_data, plex_media_item, exclude, overseerr_instance, tautulli_instance, plex_library_key
+):
+    """
+    Check if media should be protected because the Overseerr requester hasn't watched it.
+
+    Args:
+        media_data: Media data from Sonarr/Radarr
+        plex_media_item: Plex media item
+        exclude: Exclusion configuration from library
+        overseerr_instance: Overseerr instance (may be None)
+        tautulli_instance: Tautulli instance (may be None)
+        plex_library_key: Plex library section key for Tautulli queries
+
+    Returns:
+        True if media should NOT be excluded (i.e., is actionable / allow deletion)
+        False if media should be excluded (i.e., protect from deletion)
+    """
+    overseerr_config = exclude.get("overseerr", {})
+    protect_config = overseerr_config.get("protect_unwatched_requesters", {})
+
+    if not protect_config or not protect_config.get("enabled", True):
+        return True
+
+    if not overseerr_instance or not tautulli_instance:
+        return True
+
+    tmdb_id = media_data.get("tmdbId")
+    if not tmdb_id:
+        return True
+
+    # Get request data from Overseerr
+    request_data = overseerr_instance.get_request_data(tmdb_id)
+    if not request_data:
+        # No request exists — not protected by this feature
+        return True
+
+    # Check request age against grace period and max protection
+    created_at = request_data.get("created_at")
+    if created_at:
+        try:
+            request_date = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            age_days = (datetime.now(request_date.tzinfo) - request_date).days
+
+            min_age = protect_config.get("min_request_age_days", 0)
+            if age_days < min_age:
+                logger.debug(
+                    f"'{media_data.get('title')}' request is {age_days} days old "
+                    f"(grace period: {min_age} days), protecting"
+                )
+                return False  # Protect: within grace period
+
+            max_days = protect_config.get("max_protection_days")
+            if max_days is not None and age_days > max_days:
+                logger.debug(
+                    f"'{media_data.get('title')}' request is {age_days} days old "
+                    f"(max protection: {max_days} days), allowing deletion"
+                )
+                return True  # Allow deletion: protection expired
+        except (ValueError, TypeError) as e:
+            logger.debug(
+                f"Could not parse request date for '{media_data.get('title')}': {e}"
+            )
+
+    # Resolve Tautulli username
+    user_mapping = protect_config.get("user_mapping", {})
+    tautulli_user = _resolve_tautulli_username(request_data, user_mapping)
+
+    if not tautulli_user:
+        logger.debug(
+            f"'{media_data.get('title')}' requested by unmappable user, protecting by default"
+        )
+        return False  # Protect: can't determine if user watched
+
+    # Determine the appropriate rating key for the Tautulli query
+    rating_key = str(plex_media_item.ratingKey)
+    grandparent_rating_key = None
+
+    # For TV shows, use grandparent_rating_key (the series key)
+    if hasattr(plex_media_item, "grandparentRatingKey") and plex_media_item.grandparentRatingKey:
+        grandparent_rating_key = str(plex_media_item.grandparentRatingKey)
+    elif media_data.get("statistics"):
+        # Sonarr data indicates TV show — the plex_media_item IS the show (grandparent)
+        grandparent_rating_key = rating_key
+        rating_key = None
+
+    # Check if the requester has watched it
+    watched = tautulli_instance.has_user_watched(
+        section=plex_library_key,
+        rating_key=rating_key,
+        grandparent_rating_key=grandparent_rating_key,
+        user=tautulli_user,
+    )
+
+    if not watched:
+        logger.debug(
+            f"'{media_data.get('title')}' not watched by requester '{tautulli_user}', protecting"
+        )
+        return False  # Protect: requester hasn't watched
+
+    logger.debug(
+        f"'{media_data.get('title')}' watched by requester '{tautulli_user}', allowing normal rules"
+    )
+    return True  # Allow: requester has watched
 
 
 def find_watched_data(plex_media_item, activity_data):

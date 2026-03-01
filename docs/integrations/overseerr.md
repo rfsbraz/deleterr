@@ -107,6 +107,41 @@ exclude:
     min_request_age_days: 30  # Requests older than 30 days can be deleted
 ```
 
+## Protect Unwatched Requesters
+
+Protect content that hasn't been watched by the person who requested it. This combines Overseerr request data with Tautulli per-user watch history -- if the requester hasn't watched the content yet, it's protected from deletion.
+
+```yaml
+exclude:
+  overseerr:
+    protect_unwatched_requesters:
+      enabled: true
+      min_request_age_days: 90   # Grace period: always protect requests younger than 90 days
+      max_protection_days: 365   # Expiry: allow deletion after 1 year regardless
+      user_mapping:              # Optional: map Overseerr users to Tautulli users
+        overseerr_user: tautulli_user
+```
+
+**How it works:**
+
+1. When Deleterr considers deleting an item, it checks if the item was requested via Overseerr
+2. If it was, it looks up the requester's Tautulli watch history
+3. If the requester **hasn't watched** the content, the item is **protected** from deletion
+4. If the requester **has watched** it, normal deletion rules apply
+
+**User matching:** Deleterr automatically matches Overseerr users to Tautulli users via their Plex username. If your usernames differ between systems, use `user_mapping` to define the mapping manually.
+
+**Grace period:** `min_request_age_days` always protects requests younger than this, regardless of watch status. This gives users time before the watch-check even kicks in.
+
+**Expiry:** `max_protection_days` sets a hard limit. After this many days, the item can be deleted regardless of whether the requester watched it.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `true` | Enable/disable the feature |
+| `min_request_age_days` | `0` | Grace period: always protect requests younger than this |
+| `max_protection_days` | none | Hard limit: allow deletion after this many days regardless |
+| `user_mapping` | `{}` | Manual Overseerr-to-Tautulli username mapping |
+
 ## Post-Deletion: Update Status
 
 When `update_status` is enabled, Deleterr marks deleted media in Overseerr so it can be requested again:
