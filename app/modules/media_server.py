@@ -126,3 +126,14 @@ class BaseMediaServer(ABC):
             shared: Whether to show on shared users' Home pages.
         """
         pass  # Default no-op for servers that don't support visibility
+
+    def set_collection_summary(self, collection: Any, summary: str) -> None:
+        """Set the summary/description of a collection.
+
+        Optional method - not all media servers support this.
+
+        Args:
+            collection: The collection object.
+            summary: The summary text to set.
+        """
+        pass  # Default no-op for servers that don't support summaries

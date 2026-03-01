@@ -42,7 +42,11 @@
       <div class="warning">
         <div class="warning-title">⚠️ These titles will be removed soon</div>
         <div class="warning-text">
+          {% if deletion_date_str %}
+          The items below will be removed on <strong>{{ deletion_date_str }}</strong>.
+          {% else %}
           The items below are scheduled for deletion on the next cleanup cycle.
+          {% endif %}
           If you want to keep any of them, <strong>watch them before then!</strong>
         </div>
       </div>

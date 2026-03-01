@@ -1,6 +1,7 @@
 # encoding: utf-8
 """Notification manager that orchestrates all notification providers."""
 
+from datetime import datetime
 from typing import Optional
 
 from app import logger
@@ -178,6 +179,7 @@ class NotificationManager:
         items: list[DeletedItem],
         plex_url: Optional[str] = None,
         seerr_url: Optional[str] = None,
+        deletion_date: Optional[datetime] = None,
     ) -> bool:
         """
         Send leaving soon notifications to all configured leaving_soon providers.
@@ -189,6 +191,7 @@ class NotificationManager:
             items: List of items scheduled for deletion (preview items)
             plex_url: Optional base Plex URL for "Watch Now" links
             seerr_url: Optional Seerr/Overseerr URL for "Request Again" links
+            deletion_date: Optional datetime when items will be deleted
 
         Returns:
             True if at least one provider succeeded, False otherwise.
@@ -209,6 +212,9 @@ class NotificationManager:
             # Provide both seerr_url and overseerr_url for template backward compatibility
             context["seerr_url"] = seerr_url
             context["overseerr_url"] = seerr_url
+        if deletion_date:
+            context["deletion_date"] = deletion_date
+            context["deletion_date_str"] = deletion_date.strftime("%B %d, %Y").replace(" 0", " ")
 
         # Get template and subject from config
         template_path = self._leaving_soon_config.get("template")
@@ -235,7 +241,10 @@ class NotificationManager:
                         )
                 else:
                     # For other providers, create a RunResult with preview items
+                    # and attach deletion_date for providers that support it
                     result = RunResult(is_dry_run=False)
+                    result.deletion_date = deletion_date
+                    result.deletion_date_str = context.get("deletion_date_str")
                     for item in items:
                         result.add_preview(item)
                     if provider.send(result):

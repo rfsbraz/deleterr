@@ -1,0 +1,70 @@
+# Config file for testing leaving_soon with duration property
+# Validates that the duration field is accepted and parsed correctly
+
+# Plex connection details
+plex:
+  url: "http://localhost:32400"
+  token: "YOUR_PLEX_TOKEN"
+
+# Radarr connection details
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "YOUR_RADARR_API_KEY"
+
+# Sonarr connection details
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "YOUR_SONARR_API_KEY"
+
+# Tautulli connection details
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "YOUR_TAUTULLI_API_KEY"
+
+# Scheduler (used as fallback for deletion date)
+scheduler:
+  enabled: true
+  schedule: "weekly"
+
+dry_run: true
+
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 30
+    added_at_threshold: 90
+    max_actions_per_run: 10
+    preview_next: 5
+    leaving_soon:
+      duration: "7d"
+      collection:
+        name: "Leaving Soon"
+        promote_home: true
+        promote_shared: true
+      labels:
+        name: "leaving-soon"
+
+  - name: "TV Shows"
+    sonarr: "Sonarr"
+    action_mode: "delete"
+    last_watched_threshold: 365
+    added_at_threshold: 180
+    max_actions_per_run: 10
+    series_type: standard
+    preview_next: 5
+    leaving_soon:
+      duration: "24h"
+      collection:
+        name: "Leaving Soon"
+
+  # Library without duration (tests fallback to schedule)
+  - name: "Movies 4K"
+    radarr: "Radarr"
+    action_mode: "delete"
+    max_actions_per_run: 5
+    leaving_soon:
+      collection:
+        name: "Leaving Soon 4K"

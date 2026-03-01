@@ -570,11 +570,20 @@ class Deleterr:
             preview: List of items that would be deleted next run
             media_type: 'movie' or 'show'
         """
+        from app.media_cleaner import compute_deletion_date
+
         leaving_soon_config = library.get("leaving_soon")
         if not leaving_soon_config:
             return
 
         is_dry_run = self.config.settings.get("dry_run", True)
+
+        # Compute deletion date from duration or schedule
+        scheduler_config = self.config.settings.get("scheduler", {})
+        deletion_date = compute_deletion_date(
+            duration_str=leaving_soon_config.get("duration"),
+            schedule=scheduler_config.get("schedule"),
+        )
 
         # In dry_run mode, log what would be tagged but don't actually tag
         if is_dry_run:
@@ -611,14 +620,14 @@ class Deleterr:
 
         # Process leaving_soon - tag preview items for next run
         self.media_cleaner.process_leaving_soon(
-            library, plex_library, preview, media_type
+            library, plex_library, preview, media_type, deletion_date=deletion_date
         )
 
         # Send leaving_soon notifications if configured and there are items
         if preview and self.notifications.is_leaving_soon_enabled():
-            self._send_leaving_soon_notification(library, preview, media_type)
+            self._send_leaving_soon_notification(library, preview, media_type, deletion_date)
 
-    def _send_leaving_soon_notification(self, library, preview, media_type):
+    def _send_leaving_soon_notification(self, library, preview, media_type, deletion_date=None):
         """
         Send leaving_soon notification for preview items.
 
@@ -626,6 +635,7 @@ class Deleterr:
             library: Library configuration dict
             preview: List of items scheduled for deletion
             media_type: 'movie' or 'show'
+            deletion_date: Optional datetime when items will be deleted
         """
         # Convert preview items to DeletedItem objects for notification
         library_name = library.get("name", "Unknown")
@@ -653,6 +663,7 @@ class Deleterr:
                 items,
                 plex_url=plex_url,
                 seerr_url=seerr_url,
+                deletion_date=deletion_date,
             )
         except Exception as e:
             logger.error(f"Failed to send leaving_soon notification: {e}")

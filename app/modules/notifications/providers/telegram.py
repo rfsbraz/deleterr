@@ -109,6 +109,10 @@ class TelegramProvider(BaseNotificationProvider):
             preview_size = self.format_size(result.total_preview_bytes)
             lines.append(f"*Next Scheduled Deletions* \\({len(result.preview_items)} items, {self._escape_markdown(preview_size)}\\):")
 
+            deletion_date_str = getattr(result, "deletion_date_str", None)
+            if deletion_date_str:
+                lines.append(f"Removal date: *{self._escape_markdown(deletion_date_str)}*")
+
             for item in result.preview_items[:5]:
                 size = self.format_size(item.size_bytes)
                 lines.append(f"• {self._escape_markdown(item.format_title())} \\- {self._escape_markdown(size)}")

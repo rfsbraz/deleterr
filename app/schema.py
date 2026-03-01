@@ -241,6 +241,13 @@ class LeavingSoonConfig(BaseModel):
     Subsequent runs: Delete previously tagged items, then tag new candidates
     """
 
+    duration: Optional[str] = Field(
+        default=None,
+        description="How long items stay in 'Leaving Soon' before deletion. "
+                    "Used to display the deletion date in notifications and collection descriptions. "
+                    "Examples: '7d', '24h', '30d'. Defaults to schedule interval if not set",
+        json_schema_extra={"example": "7d"},
+    )
     collection: Optional[LeavingSoonCollectionConfig] = Field(
         default=None,
         description="Configuration for the Leaving Soon collection",
