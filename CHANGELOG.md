@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.11](https://github.com/rfsbraz/deleterr/compare/v0.2.10...v0.2.11) (2026-03-04)
+
+
+### Features
+
+* **overseerr:** protect content unwatched by requester ([#244](https://github.com/rfsbraz/deleterr/issues/244)) ([685d997](https://github.com/rfsbraz/deleterr/commit/685d99758a3552c79f653c1efc7b5c3c0f56ca0b))
+
 ## [0.2.10](https://github.com/rfsbraz/deleterr/compare/v0.2.9...v0.2.10) (2026-02-23)
 
 
