@@ -18,14 +18,22 @@ jobs:
         uses: thollander/actions-comment-pull-request@v3
         with:
           message: |
-            :whale: A Docker image for this PR will be available after the build completes:
+            :whale: To test this PR, build and run directly from the branch:
 
-            ```bash
-            docker run -e LOG_LEVEL=DEBUG --rm \
-              -v ./config:/config \
-              -v ./logs:/config/logs \
-              ghcr.io/rfsbraz/deleterr:pr-${{ github.event.pull_request.number }}
+            **Using docker compose:**
+            ```yaml
+            services:
+              deleterr:
+                build: https://github.com/rfsbraz/deleterr.git#refs/pull/${{ github.event.pull_request.number }}/head
+                volumes:
+                  - ./config:/config
+                environment:
+                  LOG_LEVEL: DEBUG
             ```
 
-            > **Note:** This image is built for `linux/amd64` only. The image is pushed to GHCR (not Docker Hub) for PR testing.
+            **Using docker build:**
+            ```bash
+            docker build https://github.com/rfsbraz/deleterr.git#refs/pull/${{ github.event.pull_request.number }}/head -t deleterr:pr-${{ github.event.pull_request.number }}
+            docker run --rm -v ./config:/config -e LOG_LEVEL=DEBUG deleterr:pr-${{ github.event.pull_request.number }}
+            ```
           comment-tag: docker_image_instructions
