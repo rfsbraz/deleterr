@@ -362,9 +362,9 @@ libraries:
 
 ---
 
-## 6. Protect Unwatched Seerr Requests
+## 6. Protect Seerr Requests
 
-Keep content that users requested but haven't watched yet.
+Keep content that users requested through Seerr/Overseerr.
 
 ```yaml
 dry_run: true
@@ -436,6 +436,111 @@ exclude:
   seerr:
     mode: "exclude"
     min_request_age_days: 30  # Requests older than 30 days can be deleted
+```
+
+---
+
+## 7. Per-User Requester Watch Protection
+
+Protect content only until the person who requested it has actually watched it. Combines Seerr request data with Tautulli per-user watch history for precise, per-requester protection.
+
+```yaml
+dry_run: true
+
+plex:
+  url: "http://localhost:32400"
+  token: "YOUR_PLEX_TOKEN"
+
+tautulli:
+  url: "http://localhost:8181"
+  api_key: "YOUR_TAUTULLI_API_KEY"
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "YOUR_RADARR_API_KEY"
+
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "YOUR_SONARR_API_KEY"
+
+seerr:
+  url: "http://localhost:5055"
+  api_key: "YOUR_SEERR_API_KEY"
+
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 90
+    added_at_threshold: 180
+    max_actions_per_run: 20
+    exclude:
+      seerr:
+        mode: "exclude"
+        protect_unwatched_requesters:
+          enabled: true
+          min_request_age_days: 90   # Always protect requests younger than 90 days
+          max_protection_days: 365   # Allow deletion after 1 year regardless
+
+  - name: "TV Shows"
+    sonarr: "Sonarr"
+    series_type: "standard"
+    action_mode: "delete"
+    last_watched_threshold: 90
+    added_at_threshold: 180
+    max_actions_per_run: 20
+    exclude:
+      seerr:
+        mode: "exclude"
+        protect_unwatched_requesters:
+          enabled: true
+          min_request_age_days: 30
+```
+
+**What it does**: Instead of protecting all requested content indefinitely, this checks whether the requester has actually watched it. If they haven't, the content stays. Once they've watched it, normal deletion rules apply. This prevents the "requested but never watched" problem where content sits forever because someone requested it and forgot about it.
+
+**How it works**:
+
+1. Deleterr checks if the item was requested via Seerr
+2. Looks up the requester's watch history in Tautulli
+3. If the requester **hasn't watched** it, the item is **protected**
+4. If the requester **has watched** it, normal deletion rules apply
+
+### Variations
+
+With user mapping (when Seerr and Tautulli usernames differ):
+```yaml
+exclude:
+  seerr:
+    mode: "exclude"
+    protect_unwatched_requesters:
+      enabled: true
+      user_mapping:
+        john_overseerr: john_plex    # Map Seerr username to Tautulli username
+        jane_overseerr: jane_plex
+```
+
+No grace period, no expiry (protect until watched, forever):
+```yaml
+exclude:
+  seerr:
+    mode: "exclude"
+    protect_unwatched_requesters:
+      enabled: true
+```
+
+Combined with basic Seerr exclusions (protect all pending, plus watch-check for approved):
+```yaml
+exclude:
+  seerr:
+    mode: "exclude"
+    request_status: ["pending"]       # Always protect pending requests
+    protect_unwatched_requesters:
+      enabled: true                   # For approved requests, protect until watched
+      min_request_age_days: 14        # 2-week grace period for new requests
+      max_protection_days: 180        # 6-month hard limit
 ```
 
 ---
