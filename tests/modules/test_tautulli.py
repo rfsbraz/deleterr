@@ -94,6 +94,7 @@ def test_get_activity(mock_fetch_history_data):
 
     # Assert - verify data extracted directly from history response
     assert "plex://movie/abc123" in result
+    assert "123" in result  # Also stored by rating key
     assert result["plex://movie/abc123"]["title"] == "Test Movie"
     assert result["plex://movie/abc123"]["year"] == 2022
     mock_fetch_history_data.assert_called_once_with(section)
@@ -103,10 +104,10 @@ def test_get_activity(mock_fetch_history_data):
 @patch.object(
     Tautulli,
     "_fetch_history_data",
-    return_value=[{"grandparent_rating_key": "123", "stopped": 1641081600, "guid": "plex://show/abc123", "grandparent_title": "Test Show", "title": "Episode 1", "year": 2022}],
+    return_value=[{"grandparent_rating_key": "456", "stopped": 1641081600, "guid": "plex://episode/abc123", "grandparent_title": "Test Show", "title": "Episode 1", "year": 2022}],
 )
 def test_get_activity_tv_show(mock_fetch_history_data):
-    """Test that get_activity uses grandparent_title for TV shows."""
+    """Test that get_activity uses grandparent_title for TV shows and stores by rating key."""
     # Arrange
     tautulli_instance = Tautulli("id", "secret")
     section = "section"
@@ -114,9 +115,11 @@ def test_get_activity_tv_show(mock_fetch_history_data):
     # Act
     result = tautulli_instance.get_activity(section)
 
-    # Assert - verify grandparent_title is used for TV shows
-    assert "plex://show/abc123" in result
-    assert result["plex://show/abc123"]["title"] == "Test Show"  # Uses grandparent_title
+    # Assert - stored under both the episode GUID and the show's rating key
+    assert "plex://episode/abc123" in result
+    assert "456" in result
+    assert result["plex://episode/abc123"]["title"] == "Test Show"
+    assert result["456"]["title"] == "Test Show"
 
 
 @patch("app.modules.tautulli.RawAPI", MagicMock())
@@ -141,8 +144,8 @@ def test_get_activity_without_tautulli_items(mock_fetch_history_data):
     "_fetch_history_data",
     return_value=[{"rating_key": "123", "stopped": 1641081600, "title": "Test Movie", "year": 2022}],  # Missing guid
 )
-def test_get_activity_skips_entries_without_guid(mock_fetch_history_data):
-    """Test that entries without guid are skipped."""
+def test_get_activity_entries_without_guid_still_stored_by_rating_key(mock_fetch_history_data):
+    """Test that entries without guid are still accessible by rating key."""
     # Arrange
     tautulli_instance = Tautulli("id", "secret")
     section = "section"
@@ -150,8 +153,9 @@ def test_get_activity_skips_entries_without_guid(mock_fetch_history_data):
     # Act
     result = tautulli_instance.get_activity(section)
 
-    # Assert - no entries added without guid
-    assert result == {}
+    # Assert - stored by rating key even without guid
+    assert "123" in result
+    assert result["123"]["title"] == "Test Movie"
 
 
 @patch("app.modules.tautulli.RawAPI", MagicMock())

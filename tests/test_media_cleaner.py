@@ -127,6 +127,37 @@ class TestFindWatchedData(unittest.TestCase):
             self.activity_data["guid3"],
         )
 
+    def test_rating_key_match(self):
+        """TV shows: episode GUID won't match, but rating key should."""
+        activity_data = {
+            "plex://episode/abc123": {"title": "The Simpsons", "year": 1989},
+            "12345": {"title": "The Simpsons", "year": 1989},
+        }
+        plex_media_item = Mock()
+        plex_media_item.guid = "plex://show/def456"
+        plex_media_item.ratingKey = 12345
+        plex_media_item.title = "The Simpsons"
+        plex_media_item.year = 1989
+        self.assertEqual(
+            find_watched_data(plex_media_item, activity_data),
+            activity_data["12345"],
+        )
+
+    def test_rating_key_match_no_guid_match(self):
+        """Rating key lookup works when GUID doesn't match at all."""
+        activity_data = {
+            "99999": {"title": "Breaking Bad", "year": 2008},
+        }
+        plex_media_item = Mock()
+        plex_media_item.guid = "plex://show/xyz"
+        plex_media_item.ratingKey = 99999
+        plex_media_item.title = "Breaking Bad"
+        plex_media_item.year = 2008
+        self.assertEqual(
+            find_watched_data(plex_media_item, activity_data),
+            activity_data["99999"],
+        )
+
     def test_no_match(self):
         plex_media_item = Mock()
         plex_media_item.guid = "guid4"

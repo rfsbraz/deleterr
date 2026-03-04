@@ -1780,6 +1780,12 @@ def find_watched_data(plex_media_item, activity_data):
     if resp := activity_data.get(plex_media_item.guid):
         return resp
 
+    # Match by Plex rating key - needed for TV shows where the activity data
+    # GUID is the episode GUID, not the show GUID
+    rating_key = getattr(plex_media_item, "ratingKey", None)
+    if rating_key and (resp := activity_data.get(str(rating_key))):
+        return resp
+
     for guid, history in activity_data.items():
         if guid_matches(plex_media_item, guid) or title_and_year_match(
                 plex_media_item, history

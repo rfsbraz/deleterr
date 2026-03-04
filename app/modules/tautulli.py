@@ -64,9 +64,18 @@ class Tautulli:
         # The get_history endpoint already returns guid, title, year, grandparent_title
         last_activity = {}
         for entry in filtered_data:
+            activity_entry = self._prepare_activity_entry(entry)
+
             guid = entry.get("guid")
             if guid:
-                last_activity[guid] = self._prepare_activity_entry(entry)
+                last_activity[guid] = activity_entry
+
+            # For TV shows, the guid from history is the episode GUID, not the
+            # show GUID. Store a second entry keyed by the show's rating key so
+            # find_watched_data can match via plex_media_item.ratingKey.
+            rating_key = str(entry.get(key, ""))
+            if rating_key:
+                last_activity[rating_key] = activity_entry
 
         logger.debug("Processed %d unique items from history", len(last_activity))
         return last_activity
