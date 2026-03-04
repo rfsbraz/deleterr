@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  schedule:
+    - cron: '0 2 * * 1'
   pull_request:
     types: [opened, synchronize, reopened]
   push:

@@ -4,4 +4,5 @@ relative_files = True
 source = app/
 
 [report]
+show_missing = true
 skip_empty = true

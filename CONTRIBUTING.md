@@ -72,10 +72,20 @@ Feature requests are welcome! Please:
 
 5. Run tests:
    ```bash
-   pytest
+   make test       # All tests with coverage
+   make unit       # Unit tests only (excludes integration and slow)
+   make integration # Integration tests only
    ```
 
 ### Docker Development
+
+```bash
+make build  # Build Docker image with git metadata
+make run    # Build and run with docker-compose
+make clean  # Stop and remove containers
+```
+
+Or manually:
 
 ```bash
 docker build -t deleterr:dev .
@@ -93,8 +103,20 @@ docker run -v $(pwd)/config:/config deleterr:dev
 
 - Write tests for new functionality
 - Ensure existing tests pass
-- Use `pytest` for running tests
+- Use `make unit` for quick feedback (excludes integration and slow tests)
+- Use `make test` for full test suite with coverage
 - Test with `dry_run: true` before testing actual deletions
+
+### Integration Tests
+
+Integration tests require Docker services:
+
+```bash
+cd tests/integration
+docker compose -f docker-compose.integration.yml up -d
+pytest tests/integration/ -m integration -v --timeout=300
+docker compose -f docker-compose.integration.yml down -v
+```
 
 ## Commit Messages
 
@@ -106,8 +128,17 @@ Use clear, descriptive commit messages:
 - `test:` for test additions/changes
 - `refactor:` for code refactoring
 - `chore:` for maintenance tasks
+- `perf:` for performance improvements
+- `ci:` for CI/CD changes
 
-Example: `feat: Add support for Radarr tags filtering`
+Use scopes to indicate the affected area:
+
+```
+feat(notifications): add Telegram notification support
+fix(radarr): handle timeout on large libraries
+test(integration): add Sonarr season deletion test
+refactor(config): simplify schema validation logic
+```
 
 ## Branch Naming
 

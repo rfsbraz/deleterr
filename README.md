@@ -184,3 +184,7 @@ The image is available through:
 * `X.Y.Z`: A specific version
 * `X.Y`: The latest release in the vX.Y series
 * `X`: The latest release in the vX series
+
+## Support
+
+If you find this useful and want to support development, you can [buy me a coffee](https://buymeacoffee.com/rfsbraz) - no pressure at all, just a nice way to say thanks.
