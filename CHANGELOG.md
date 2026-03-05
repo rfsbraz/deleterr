@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.12](https://github.com/rfsbraz/deleterr/compare/v0.2.11...v0.2.12) (2026-03-05)
+
+
+### Bug Fixes
+
+* **tautulli:** match TV show watch data by rating key ([#248](https://github.com/rfsbraz/deleterr/issues/248)) ([214262f](https://github.com/rfsbraz/deleterr/commit/214262fb40641b7d7c0d2f9f5aba7ab1f0a856ba))
+
 ## [0.2.11](https://github.com/rfsbraz/deleterr/compare/v0.2.10...v0.2.11) (2026-03-04)
 
 
