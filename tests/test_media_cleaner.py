@@ -127,6 +127,42 @@ class TestFindWatchedData(unittest.TestCase):
             self.activity_data["guid3"],
         )
 
+    def test_rating_key_match_episode_year_differs_from_show(self):
+        """TV shows: episode GUID and year don't match the show, only rating key works.
+
+        This is the real-world scenario from issue #247: Tautulli returns the
+        episode's air year (e.g. 2026) but Plex has the show's premiere year
+        (e.g. 1989). Neither GUID match nor title+year match can work here.
+        """
+        activity_data = {
+            "plex://episode/abc123": {"title": "The Simpsons", "year": 2026},
+            "12345": {"title": "The Simpsons", "year": 2026},
+        }
+        plex_media_item = Mock()
+        plex_media_item.guid = "plex://show/def456"
+        plex_media_item.ratingKey = 12345
+        plex_media_item.title = "The Simpsons"
+        plex_media_item.year = 1989  # Show premiere year, NOT episode year
+        self.assertEqual(
+            find_watched_data(plex_media_item, activity_data),
+            activity_data["12345"],
+        )
+
+    def test_rating_key_match_no_guid_entry(self):
+        """Rating key lookup works when activity data has no GUID entry at all."""
+        activity_data = {
+            "99999": {"title": "Breaking Bad", "year": 2013},
+        }
+        plex_media_item = Mock()
+        plex_media_item.guid = "plex://show/xyz"
+        plex_media_item.ratingKey = 99999
+        plex_media_item.title = "Breaking Bad"
+        plex_media_item.year = 2008  # Premiere year differs from last episode year
+        self.assertEqual(
+            find_watched_data(plex_media_item, activity_data),
+            activity_data["99999"],
+        )
+
     def test_no_match(self):
         plex_media_item = Mock()
         plex_media_item.guid = "guid4"
@@ -1438,6 +1474,151 @@ def test_check_watched_status(
 
     # Assert
     assert result == expected
+
+
+class TestCheckWatchedStatusTVShowIntegration:
+    """Integration-style tests for check_watched_status with real find_watched_data.
+
+    These tests do NOT mock find_watched_data, so they exercise the full pipeline:
+    Tautulli activity data -> find_watched_data -> check_watched_status.
+
+    The key scenario: Tautulli's get_history returns episode-level GUIDs
+    (plex://episode/...) for TV shows, but Plex library items have show-level
+    GUIDs (plex://show/...). Without the rating key fallback, find_watched_data
+    can't match them, and recently-watched shows would be incorrectly treated
+    as unwatched.
+    """
+
+    def test_recently_watched_tv_show_is_protected(self, standard_config):
+        """A long-running TV show watched recently should be protected.
+
+        This is the exact scenario from issue #247: The Simpsons (premiere 1989)
+        has a recent episode (2026). Tautulli returns the episode GUID and the
+        episode's year, not the show's premiere year. Without rating key lookup:
+        - GUID won't match: plex://episode/... != plex://show/...
+        - title+year won't match: abs(1989 - 2026) > 1
+        So find_watched_data returns None and the show gets deleted.
+        """
+        media_cleaner_instance = MediaCleaner(standard_config)
+
+        # Activity data as Tautulli actually returns it: episode GUID + rating key
+        # The year comes from the episode, not the show premiere
+        activity_data = {
+            "plex://episode/5d776830880197001ec94f8b": {
+                "title": "The Simpsons",
+                "year": 2026,  # Episode air year, NOT show premiere year
+                "last_watched": datetime.now() - timedelta(days=15),
+            },
+            "456": {  # grandparent_rating_key from Tautulli
+                "title": "The Simpsons",
+                "year": 2026,
+                "last_watched": datetime.now() - timedelta(days=15),
+            },
+        }
+
+        # Plex show item has show-level GUID and show premiere year
+        plex_media_item = Mock()
+        plex_media_item.guid = "plex://show/5d9c086c46115600200aa2fe"
+        plex_media_item.ratingKey = 456
+        plex_media_item.title = "The Simpsons"
+        plex_media_item.year = 1989  # Show premiere year
+
+        library = {}
+        media_data = {"title": "The Simpsons"}
+
+        result = media_cleaner_instance.check_watched_status(
+            library, activity_data, media_data, plex_media_item,
+            last_watched_threshold=180,
+        )
+        # Should be False (protected) - watched 15 days ago, threshold is 180
+        assert result is False
+
+    def test_old_watched_tv_show_is_actionable(self, standard_config):
+        """A TV show watched long ago should be actionable past the threshold."""
+        media_cleaner_instance = MediaCleaner(standard_config)
+
+        activity_data = {
+            "plex://episode/ep001": {
+                "title": "Lost",
+                "year": 2010,
+                "last_watched": datetime.now() - timedelta(days=200),
+            },
+            "789": {
+                "title": "Lost",
+                "year": 2010,
+                "last_watched": datetime.now() - timedelta(days=200),
+            },
+        }
+
+        plex_media_item = Mock()
+        plex_media_item.guid = "plex://show/xyz"
+        plex_media_item.ratingKey = 789
+        plex_media_item.title = "Lost"
+        plex_media_item.year = 2004  # Show premiere year differs from episode year
+
+        library = {}
+        media_data = {"title": "Lost"}
+
+        result = media_cleaner_instance.check_watched_status(
+            library, activity_data, media_data, plex_media_item,
+            last_watched_threshold=180,
+        )
+        # Should be True (actionable) - watched 200 days ago, threshold is 180
+        assert result is True
+
+    def test_unwatched_tv_show_not_in_activity_is_actionable(self, standard_config):
+        """A TV show with no watch history should be actionable (deletable)."""
+        media_cleaner_instance = MediaCleaner(standard_config)
+
+        activity_data = {}
+
+        plex_media_item = Mock()
+        plex_media_item.guid = "plex://show/neverWatched"
+        plex_media_item.ratingKey = 999
+        plex_media_item.title = "Unwatched Show"
+        plex_media_item.year = 2020
+
+        library = {}
+        media_data = {"title": "Unwatched Show"}
+
+        result = media_cleaner_instance.check_watched_status(
+            library, activity_data, media_data, plex_media_item,
+            last_watched_threshold=180,
+        )
+        assert result is True
+
+    def test_unwatched_only_library_skips_watched_tv_show(self, standard_config):
+        """With watch_status=unwatched, a watched TV show should be skipped."""
+        media_cleaner_instance = MediaCleaner(standard_config)
+
+        activity_data = {
+            "plex://episode/ep001": {
+                "title": "The Office",
+                "year": 2013,  # Final season year
+                "last_watched": datetime.now() - timedelta(days=3),
+            },
+            "111": {
+                "title": "The Office",
+                "year": 2013,
+                "last_watched": datetime.now() - timedelta(days=3),
+            },
+        }
+
+        plex_media_item = Mock()
+        plex_media_item.guid = "plex://show/office123"
+        plex_media_item.ratingKey = 111
+        plex_media_item.title = "The Office"
+        plex_media_item.year = 2005  # Show premiere year
+
+        library = {"watch_status": "unwatched"}
+        media_data = {"title": "The Office"}
+
+        result = media_cleaner_instance.check_watched_status(
+            library, activity_data, media_data, plex_media_item,
+            last_watched_threshold=None,
+        )
+        # Should be False - this is a "delete unwatched only" library, and the show was watched
+        assert result is False
 
 
 @pytest.mark.parametrize(
