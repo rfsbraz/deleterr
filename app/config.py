@@ -373,6 +373,50 @@ class Config:
             return False
 
     def validate_watch_provider(self):
+        tautulli_config = self.settings.get("tautulli")
+        if tautulli_config:
+            return self._validate_tautulli_watch_provider()
+
+        return self._validate_plex_watch_provider()
+
+    def _validate_plex_watch_provider(self):
+        plex_config = self.settings.get("plex")
+        if not plex_config:
+            logger.error(
+                "No watch data provider configured. "
+                "Add 'tautulli' section with 'url' and 'api_key', or configure "
+                "'plex' with 'url' and 'token' to use Plex directly."
+            )
+            return False
+
+        try:
+            from app.modules.plex_watch_provider import PlexWatchProvider
+
+            ssl_verify = self.settings.get("ssl_verify", False)
+            plex_provider = PlexWatchProvider(
+                plex_config["url"], plex_config["token"], ssl_verify=ssl_verify
+            )
+            plex_provider.test_connection()
+            logger.info("Using Plex as watch data provider (no Tautulli configured)")
+            return True
+        except Exception as err:
+            url = plex_config.get("url", "unknown")
+            error_msg = str(err).lower()
+            if "401" in error_msg or "unauthorized" in error_msg:
+                logger.error(
+                    f"Plex authentication failed at {url}: {err}. "
+                    "Verify your Plex token is correct."
+                )
+            elif "timeout" in error_msg or "connection" in error_msg:
+                logger.error(
+                    f"Cannot reach Plex at {url}: {err}. "
+                    "Check the URL and ensure Plex is running."
+                )
+            else:
+                logger.error(f"Plex connection failed at {url}: {err}")
+            return False
+
+    def _validate_tautulli_watch_provider(self):
         try:
             tautulli_config = self.settings.get("tautulli")
             if not tautulli_config:

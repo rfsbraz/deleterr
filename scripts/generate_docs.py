@@ -263,7 +263,7 @@ plex:
 
 ## Tautulli
 
-**Required.** Connection details for Tautulli (watch history tracking).
+Optional. Connection details for Tautulli (watch history tracking). If not configured, Deleterr uses the Plex API directly for watch history.
 
 {tautulli_table}
 

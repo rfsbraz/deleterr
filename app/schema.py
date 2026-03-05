@@ -871,9 +871,9 @@ class DeleterrConfig(BaseModel):
         ...,
         description="Plex server connection settings",
     )
-    tautulli: TautulliConfig = Field(
-        ...,
-        description="Tautulli connection settings",
+    tautulli: Optional[TautulliConfig] = Field(
+        default=None,
+        description="Tautulli connection settings. If not configured, Plex API is used for watch history instead",
     )
     radarr: list[RadarrInstance] = Field(
         default_factory=list,
@@ -924,3 +924,4 @@ class DeleterrConfig(BaseModel):
         if not self.radarr and not self.sonarr:
             raise ValueError("At least one Radarr or Sonarr instance must be configured")
         return self
+

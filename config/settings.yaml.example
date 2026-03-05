@@ -23,7 +23,8 @@ sonarr:
     url: "http://localhost:8990"
     api_key: "YOUR_SONARR_API_KEY2"
 
-# Tautulli connection details
+# Tautulli connection details (optional)
+# If configured, Tautulli is used for watch history. Otherwise, Plex API is used directly.
 tautulli:
   url: "http://localhost:8181"  # Replace with your Tautulli server URL
   api_key: "YOUR_TAUTULLI_API_KEY"  # Replace with your Tautulli API key

@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from app.modules.tautulli import Tautulli
 from app.modules.watch_provider import WatchDataProvider, create_watch_provider
@@ -36,6 +36,43 @@ class TestCreateWatchProvider:
             provider = create_watch_provider(config)
         assert isinstance(provider, Tautulli)
         assert isinstance(provider, WatchDataProvider)
+
+    def test_create_with_plex_config(self):
+        """Factory returns a PlexWatchProvider when tautulli is not configured."""
+        config = MagicMock(
+            settings={
+                "plex": {
+                    "url": "http://localhost:32400",
+                    "token": "test_token",
+                },
+            }
+        )
+        with patch("app.modules.plex_watch_provider.PlexServer"):
+            from app.modules.plex_watch_provider import PlexWatchProvider
+
+            provider = create_watch_provider(config)
+        assert isinstance(provider, PlexWatchProvider)
+        assert isinstance(provider, WatchDataProvider)
+
+    def test_tautulli_takes_priority_over_plex(self):
+        """Factory returns Tautulli when both tautulli and plex are configured."""
+        config = MagicMock(
+            settings={
+                "plex": {
+                    "url": "http://localhost:32400",
+                    "token": "test_token",
+                },
+                "tautulli": {
+                    "url": "http://localhost:8181",
+                    "api_key": "test_key",
+                },
+            }
+        )
+        with pytest.MonkeyPatch.context() as mp:
+            mock_api = MagicMock()
+            mp.setattr("app.modules.tautulli.RawAPI", lambda *a, **kw: mock_api)
+            provider = create_watch_provider(config)
+        assert isinstance(provider, Tautulli)
 
     def test_create_no_config_raises(self):
         """Factory raises KeyError when no provider is configured."""

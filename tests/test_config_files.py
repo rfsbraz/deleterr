@@ -14,9 +14,11 @@ class TestConfigFiles(unittest.TestCase):
     @patch.object(tautulli.Tautulli, "test_connection")
     @patch("app.modules.tautulli.RawAPI")
     @patch("app.modules.radarr.RadarrAPI")
+    @patch("app.modules.plex_watch_provider.PlexServer")
     def validate(
         self,
         filename,
+        mock_plex_server,
         mock_radarr_api,
         mock_tautulli_rawapi,
         mock_tautulli_test_connection,
