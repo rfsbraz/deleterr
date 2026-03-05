@@ -157,7 +157,7 @@ class Config:
                 self.validate_root_level_keys()
                 and self.validate_trakt()
                 and self.validate_sonarr_and_radarr_instances()
-                and self.validate_tautulli()
+                and self.validate_watch_provider()
                 and self.validate_seerr()
                 and self.validate_notifications()
                 and self.validate_libraries()
@@ -372,7 +372,7 @@ class Config:
             logger.error(f"Failed to connect to Sonarr '{name}' at {url}: {err}")
             return False
 
-    def validate_tautulli(self):
+    def validate_watch_provider(self):
         try:
             tautulli_config = self.settings.get("tautulli")
             if not tautulli_config:

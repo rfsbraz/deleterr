@@ -68,7 +68,7 @@ class TestPreviewNextIntegration:
         ]
 
         with patch("app.media_cleaner.PlexServer"), \
-             patch("app.media_cleaner.Tautulli"), \
+             patch("app.modules.watch_provider.Tautulli"), \
              patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
 
@@ -135,7 +135,7 @@ class TestPreviewNextIntegration:
         ]
 
         with patch("app.media_cleaner.PlexServer"), \
-             patch("app.media_cleaner.Tautulli"), \
+             patch("app.modules.watch_provider.Tautulli"), \
              patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
 
@@ -206,7 +206,7 @@ class TestPreviewNextIntegration:
         ]
 
         with patch("app.media_cleaner.PlexServer"), \
-             patch("app.media_cleaner.Tautulli"), \
+             patch("app.modules.watch_provider.Tautulli"), \
              patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
 
