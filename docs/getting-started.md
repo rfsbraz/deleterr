@@ -9,9 +9,9 @@ This guide walks you through deploying Deleterr and running your first cleanup.
 Before starting, ensure you have:
 
 - [ ] Plex Media Server with a valid token ([how to get token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/))
-- [ ] Tautulli installed and configured with API key
 - [ ] Radarr and/or Sonarr with API keys
 - [ ] Docker installed on your system
+- [ ] (Optional) Tautulli installed and configured with API key - if not configured, Plex API is used for watch history
 
 ---
 
@@ -99,6 +99,7 @@ plex:
   url: "http://plex:32400"
   token: "YOUR_PLEX_TOKEN"
 
+# Tautulli is optional - if not configured, Plex API is used for watch history
 tautulli:
   url: "http://tautulli:8181"
   api_key: "YOUR_TAUTULLI_API_KEY"
@@ -219,7 +220,8 @@ docker compose run --rm deleterr
 
 Check the logs for:
 
-- Successful connections to Plex, Tautulli, Radarr/Sonarr
+- Successful connections to Plex, Radarr/Sonarr, and Tautulli (if configured)
+- Watch data provider selection (Tautulli or Plex)
 - Media items identified for deletion
 - Any errors or warnings
 

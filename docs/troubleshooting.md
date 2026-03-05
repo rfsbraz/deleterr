@@ -87,7 +87,7 @@ Common issues and solutions for Deleterr.
    added_at_threshold: 180      # Added 180+ days ago
    ```
 
-2. **Verify watch history**: Ensure Tautulli has watch data
+2. **Verify watch history**: Ensure Tautulli (or Plex, if no Tautulli configured) has watch data
 
 3. **Check exclusions**: Your exclusion rules might be too broad
 
