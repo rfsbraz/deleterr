@@ -200,11 +200,17 @@ class SlackProvider(BaseNotificationProvider):
         preview_size = self.format_size(result.total_preview_bytes)
         preview_count = len(result.preview_items)
 
+        deletion_date_str = getattr(result, "deletion_date_str", None)
+        if deletion_date_str:
+            header_text = f"*Next Scheduled Deletions* ({preview_count} items, {preview_size}) - Removal date: *{deletion_date_str}*"
+        else:
+            header_text = f"*Next Scheduled Deletions* ({preview_count} items, {preview_size})"
+
         blocks.append({
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*Next Scheduled Deletions* ({preview_count} items, {preview_size})",
+                "text": header_text,
             },
         })
 

@@ -14,8 +14,9 @@ from app.modules.plex import PlexMediaServer
 
 from app import logger
 from app.config import hang_on_error, load_config
-from app.media_cleaner import ConfigurationError, MediaCleaner
+from app.media_cleaner import ConfigurationError, MediaCleaner, parse_leaving_soon_duration
 from app.modules.notifications import NotificationManager, RunResult, DeletedItem, LibraryStats
+from app.state import StateManager
 from app.utils import print_readable_freed_space
 
 # Lock file for single instance detection
@@ -83,6 +84,7 @@ class Deleterr:
         )
 
         self.media_cleaner = MediaCleaner(config, media_server=self.media_server)
+        self.state_manager = StateManager()
         self.notifications = NotificationManager(config)
         self.run_result = RunResult(
             is_dry_run=config.settings.get("dry_run", True),
@@ -157,6 +159,92 @@ class Deleterr:
                     seen_keys.add(item.ratingKey)
 
         return items_to_delete
+
+    def _filter_by_duration(self, library_name, death_row_plex_items, duration_str):
+        """
+        Filter death row items by checking if their leaving_soon duration has elapsed.
+
+        Items whose tagged_at + duration > now are not yet eligible for deletion.
+
+        Args:
+            library_name: Library name for state lookup
+            death_row_plex_items: List of Plex items in death row
+            duration_str: Duration string like '7d' or '24h'
+
+        Returns:
+            tuple: (eligible_items, skipped_count)
+        """
+        try:
+            duration = parse_leaving_soon_duration(duration_str)
+        except ValueError:
+            # Invalid duration string — don't block deletions
+            return death_row_plex_items, 0
+
+        tagged_dates = self.state_manager.get_tagged_dates(library_name)
+        now = datetime.now()
+
+        eligible = []
+        skipped = 0
+
+        for item in death_row_plex_items:
+            key_str = str(item.ratingKey)
+            tagged_at_str = tagged_dates.get(key_str)
+
+            if tagged_at_str is None:
+                # No record of when this was tagged — treat as newly tagged
+                # (conservative: don't delete items with unknown tag date)
+                logger.info(
+                    "Item '%s' (key=%s) in leaving_soon has no tagged date in state — "
+                    "recording now and skipping deletion until duration elapses",
+                    getattr(item, "title", "Unknown"),
+                    key_str,
+                )
+                self.state_manager.set_tagged_dates(
+                    library_name,
+                    {key_str: now.isoformat()},
+                )
+                skipped += 1
+                continue
+
+            try:
+                tagged_at = datetime.fromisoformat(tagged_at_str)
+            except (ValueError, TypeError):
+                logger.warning(
+                    "Invalid tagged date '%s' for item '%s' — skipping deletion",
+                    tagged_at_str,
+                    getattr(item, "title", "Unknown"),
+                )
+                skipped += 1
+                continue
+
+            expires_at = tagged_at + duration
+            if now >= expires_at:
+                eligible.append(item)
+            else:
+                remaining = expires_at - now
+                days = remaining.days
+                hours = remaining.seconds // 3600
+                if days > 0:
+                    time_remaining = f"{days}d {hours}h"
+                else:
+                    time_remaining = f"{hours}h"
+                logger.info(
+                    "Item '%s' in leaving_soon for library '%s' — %s remaining before deletion",
+                    getattr(item, "title", "Unknown"),
+                    library_name,
+                    time_remaining,
+                )
+                skipped += 1
+
+        if skipped > 0:
+            logger.info(
+                "%d items in leaving_soon for library '%s' waiting for duration to elapse (duration: %s)",
+                skipped,
+                library_name,
+                duration_str,
+            )
+
+        return eligible, skipped
 
     def _lookup_radarr_movie(self, plex_item, radarr_instance):
         """
@@ -280,7 +368,25 @@ class Deleterr:
             return 0, [], []
 
         # Get death row items (items tagged on previous run)
-        death_row_plex_items = self._get_death_row_items(library, plex_library)
+        all_death_row_plex_items = self._get_death_row_items(library, plex_library)
+
+        # Filter out items whose leaving_soon duration hasn't elapsed yet
+        leaving_soon_config = library.get("leaving_soon", {})
+        duration_str = leaving_soon_config.get("duration") if leaving_soon_config else None
+        duration_waiting_items = []
+        if duration_str and all_death_row_plex_items:
+            death_row_plex_items, skipped_count = self._filter_by_duration(
+                library_name, all_death_row_plex_items, duration_str
+            )
+            # Track items still waiting for duration to elapse
+            eligible_keys = {item.ratingKey for item in death_row_plex_items}
+            duration_waiting_items = [
+                item for item in all_death_row_plex_items
+                if item.ratingKey not in eligible_keys
+            ]
+        else:
+            death_row_plex_items = all_death_row_plex_items
+
         death_row_keys = {item.ratingKey for item in death_row_plex_items}
 
         # Get ALL items that currently match deletion rules
@@ -374,16 +480,68 @@ class Deleterr:
 
             deleted_items.append(media_item)
 
-        # Get preview candidates for next run (excluding what we just deleted)
+        # Clean up state for deleted items
+        if deleted_items and not is_dry_run:
+            # Find the plex rating keys for deleted items so we can remove from state
+            deleted_rating_keys = []
+            for plex_item in death_row_plex_items:
+                # Check if this plex item's corresponding media item was deleted
+                if plex_item.ratingKey in candidate_by_plex_key:
+                    media_item = candidate_by_plex_key[plex_item.ratingKey]
+                    if media_item in deleted_items:
+                        deleted_rating_keys.append(plex_item.ratingKey)
+            self.state_manager.remove_items(library_name, deleted_rating_keys)
+
+        # Build the list of items that should be in the leaving_soon collection:
+        # 1. Items still waiting for duration to elapse (must stay in collection)
+        # 2. New preview candidates (limited by preview_next)
         preview_next = library.get("preview_next")
         if preview_next is None:
             preview_next = library.get("max_actions_per_run", 10)
 
         deleted_ids = {m.get("id") for m in deleted_items}
-        preview_candidates = [
+
+        # Get media items for duration-waiting Plex items (they need to stay in collection)
+        waiting_media_items = []
+        if duration_waiting_items:
+            # Build candidate_by_plex_key if not already built
+            if not death_row_keys:
+                candidate_by_plex_key = {}
+                for media_item in all_deletion_candidates:
+                    if media_type == "movie":
+                        plex_item = self.media_server.find_item(
+                            plex_library,
+                            tmdb_id=media_item.get("tmdbId"),
+                            imdb_id=media_item.get("imdbId"),
+                            title=media_item.get("title"),
+                            year=media_item.get("year"),
+                        )
+                    else:
+                        plex_item = self.media_server.find_item(
+                            plex_library,
+                            tvdb_id=media_item.get("tvdbId"),
+                            imdb_id=media_item.get("imdbId"),
+                            title=media_item.get("title"),
+                        )
+                    if plex_item:
+                        candidate_by_plex_key[plex_item.ratingKey] = media_item
+
+            waiting_keys = {item.ratingKey for item in duration_waiting_items}
+            waiting_media_items = [
+                candidate_by_plex_key[key]
+                for key in waiting_keys
+                if key in candidate_by_plex_key
+            ]
+
+        # New candidates = all deletion candidates minus deleted and minus already-waiting
+        waiting_ids = {m.get("id") for m in waiting_media_items}
+        new_candidates = [
             m for m in all_deletion_candidates
-            if m.get("id") not in deleted_ids
+            if m.get("id") not in deleted_ids and m.get("id") not in waiting_ids
         ][:preview_next]
+
+        # Combined: waiting items first (they must stay), then new candidates
+        preview_candidates = waiting_media_items + new_candidates
 
         return saved_space, deleted_items, preview_candidates
 
@@ -570,11 +728,20 @@ class Deleterr:
             preview: List of items that would be deleted next run
             media_type: 'movie' or 'show'
         """
+        from app.media_cleaner import compute_deletion_date
+
         leaving_soon_config = library.get("leaving_soon")
         if not leaving_soon_config:
             return
 
         is_dry_run = self.config.settings.get("dry_run", True)
+
+        # Compute deletion date from duration or schedule
+        scheduler_config = self.config.settings.get("scheduler", {})
+        deletion_date = compute_deletion_date(
+            duration_str=leaving_soon_config.get("duration"),
+            schedule=scheduler_config.get("schedule"),
+        )
 
         # In dry_run mode, log what would be tagged but don't actually tag
         if is_dry_run:
@@ -611,14 +778,73 @@ class Deleterr:
 
         # Process leaving_soon - tag preview items for next run
         self.media_cleaner.process_leaving_soon(
-            library, plex_library, preview, media_type
+            library, plex_library, preview, media_type, deletion_date=deletion_date
         )
+
+        # Record tagged timestamps for duration enforcement
+        library_name = library.get("name", "Unknown")
+        if preview:
+            now_iso = datetime.now().isoformat()
+            tagged_items = {}
+            for item in preview:
+                # Find the Plex item to get its ratingKey
+                if media_type == "movie":
+                    plex_item = self.media_server.find_item(
+                        plex_library,
+                        tmdb_id=item.get("tmdbId"),
+                        imdb_id=item.get("imdbId"),
+                        title=item.get("title"),
+                        year=item.get("year"),
+                    )
+                else:
+                    plex_item = self.media_server.find_item(
+                        plex_library,
+                        tvdb_id=item.get("tvdbId"),
+                        imdb_id=item.get("imdbId"),
+                        title=item.get("title"),
+                    )
+                if plex_item:
+                    tagged_items[str(plex_item.ratingKey)] = now_iso
+
+            if tagged_items:
+                self.state_manager.set_tagged_dates(library_name, tagged_items)
+                logger.debug(
+                    "Recorded tagged timestamps for %d items in library '%s'",
+                    len(tagged_items),
+                    library_name,
+                )
+
+        # Clean up state entries for items no longer in collection
+        # (handles items removed manually from the collection)
+        death_row_plex_items = self._get_death_row_items(library, plex_library)
+        active_keys = {item.ratingKey for item in death_row_plex_items}
+        # Also include the items we just tagged
+        if preview:
+            for item in preview:
+                if media_type == "movie":
+                    plex_item = self.media_server.find_item(
+                        plex_library,
+                        tmdb_id=item.get("tmdbId"),
+                        imdb_id=item.get("imdbId"),
+                        title=item.get("title"),
+                        year=item.get("year"),
+                    )
+                else:
+                    plex_item = self.media_server.find_item(
+                        plex_library,
+                        tvdb_id=item.get("tvdbId"),
+                        imdb_id=item.get("imdbId"),
+                        title=item.get("title"),
+                    )
+                if plex_item:
+                    active_keys.add(plex_item.ratingKey)
+        self.state_manager.cleanup_library(library_name, active_keys)
 
         # Send leaving_soon notifications if configured and there are items
         if preview and self.notifications.is_leaving_soon_enabled():
-            self._send_leaving_soon_notification(library, preview, media_type)
+            self._send_leaving_soon_notification(library, preview, media_type, deletion_date)
 
-    def _send_leaving_soon_notification(self, library, preview, media_type):
+    def _send_leaving_soon_notification(self, library, preview, media_type, deletion_date=None):
         """
         Send leaving_soon notification for preview items.
 
@@ -626,6 +852,7 @@ class Deleterr:
             library: Library configuration dict
             preview: List of items scheduled for deletion
             media_type: 'movie' or 'show'
+            deletion_date: Optional datetime when items will be deleted
         """
         # Convert preview items to DeletedItem objects for notification
         library_name = library.get("name", "Unknown")
@@ -653,6 +880,7 @@ class Deleterr:
                 items,
                 plex_url=plex_url,
                 seerr_url=seerr_url,
+                deletion_date=deletion_date,
             )
         except Exception as e:
             logger.error(f"Failed to send leaving_soon notification: {e}")

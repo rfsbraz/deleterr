@@ -71,6 +71,8 @@ class RunResult:
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     library_stats: list[LibraryStats] = field(default_factory=list)
+    deletion_date: Optional[datetime] = None
+    deletion_date_str: Optional[str] = None
 
     def add_deleted(self, item: DeletedItem) -> None:
         """Add a deleted item to the results."""

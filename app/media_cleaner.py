@@ -1,7 +1,7 @@
 import re
 import time
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
 from plexapi.server import PlexServer
@@ -17,6 +17,102 @@ from app.utils import parse_size_to_bytes, print_readable_freed_space
 
 DEFAULT_MAX_ACTIONS_PER_RUN = 10
 DEFAULT_SONARR_SERIES_TYPE = "standard"
+
+
+def parse_leaving_soon_duration(duration_str):
+    """
+    Parse a duration string into a timedelta.
+
+    Supported formats:
+        '7d'  -> 7 days
+        '24h' -> 24 hours
+        '30d' -> 30 days
+
+    Args:
+        duration_str: Duration string like '7d' or '24h'
+
+    Returns:
+        timedelta for the parsed duration
+
+    Raises:
+        ValueError: If the format is invalid
+    """
+    if not duration_str or not isinstance(duration_str, str):
+        raise ValueError(f"Invalid duration: {duration_str!r}")
+
+    duration_str = duration_str.strip().lower()
+    match = re.fullmatch(r"(\d+)\s*([dh])", duration_str)
+    if not match:
+        raise ValueError(
+            f"Invalid duration format: '{duration_str}'. "
+            "Use '<number>d' for days or '<number>h' for hours (e.g., '7d', '24h')"
+        )
+
+    value = int(match.group(1))
+    unit = match.group(2)
+
+    if value <= 0:
+        raise ValueError(f"Duration must be positive, got: '{duration_str}'")
+
+    if unit == "d":
+        return timedelta(days=value)
+    else:  # 'h'
+        return timedelta(hours=value)
+
+
+def compute_deletion_date(duration_str=None, schedule=None):
+    """
+    Compute the expected deletion date for leaving soon items.
+
+    Priority:
+        1. If duration is set, use now + duration
+        2. If schedule is available, compute next fire time from schedule
+        3. Otherwise, return None (no date available)
+
+    Args:
+        duration_str: Optional duration string like '7d' or '24h'
+        schedule: Optional schedule string (cron expression or preset)
+
+    Returns:
+        datetime of expected deletion, or None if not determinable
+    """
+    now = datetime.now()
+
+    # Priority 1: Explicit duration
+    if duration_str:
+        try:
+            delta = parse_leaving_soon_duration(duration_str)
+            return now + delta
+        except ValueError as e:
+            logger.warning(f"Invalid leaving_soon duration '{duration_str}': {e}")
+            # Fall through to schedule-based calculation
+
+    # Priority 2: Derive from schedule
+    if schedule:
+        try:
+            from app.scheduler import SCHEDULE_PRESETS
+            from apscheduler.triggers.cron import CronTrigger
+
+            # Resolve preset to cron expression
+            cron_expr = SCHEDULE_PRESETS.get(schedule.lower(), schedule)
+            parts = cron_expr.split()
+            if len(parts) == 5:
+                minute, hour, day, month, day_of_week = parts
+                trigger = CronTrigger(
+                    minute=minute,
+                    hour=hour,
+                    day=day,
+                    month=month,
+                    day_of_week=day_of_week,
+                )
+                next_fire = trigger.get_next_fire_time(None, now)
+                if next_fire:
+                    # Strip timezone info for consistency with duration-based dates
+                    return next_fire.replace(tzinfo=None)
+        except Exception as e:
+            logger.debug(f"Could not compute deletion date from schedule '{schedule}': {e}")
+
+    return None
 
 
 def normalize_title(title: str) -> str:
@@ -824,7 +920,7 @@ class MediaCleaner:
 
         return items_to_delete
 
-    def process_leaving_soon(self, library_config, plex_library, items_to_tag, media_type):
+    def process_leaving_soon(self, library_config, plex_library, items_to_tag, media_type, deletion_date=None):
         """
         Update leaving soon collection and labels for preview items.
 
@@ -835,6 +931,7 @@ class MediaCleaner:
             plex_library: Plex library section
             items_to_tag: List of media items from Radarr/Sonarr to tag
             media_type: 'movie' or 'show'
+            deletion_date: Optional datetime when items will be deleted
         """
         leaving_soon_config = library_config.get("leaving_soon")
         if not leaving_soon_config:
@@ -872,7 +969,7 @@ class MediaCleaner:
         collection_config = leaving_soon_config.get("collection")
         if collection_config is not None:
             self._update_leaving_soon_collection(
-                plex_library, plex_items, collection_config
+                plex_library, plex_items, collection_config, deletion_date=deletion_date
             )
 
         # Update labels (presence of config = enabled)
@@ -882,7 +979,7 @@ class MediaCleaner:
                 plex_library, plex_items, labels_config
             )
 
-    def _update_leaving_soon_collection(self, plex_library, plex_items, collection_config):
+    def _update_leaving_soon_collection(self, plex_library, plex_items, collection_config, deletion_date=None):
         """
         Update the leaving soon collection with the given items.
 
@@ -890,6 +987,7 @@ class MediaCleaner:
             plex_library: Plex library section
             plex_items: List of Plex media items to add to collection
             collection_config: Collection configuration dict
+            deletion_date: Optional datetime when items will be deleted
         """
         collection_name = collection_config.get("name", "Leaving Soon")
         promote_home = collection_config.get("promote_home", True)
@@ -914,6 +1012,12 @@ class MediaCleaner:
             self.media_server.set_collection_visibility(
                 collection, home=promote_home, shared=promote_shared
             )
+
+            # Set collection summary with deletion date if available
+            if plex_items and deletion_date:
+                date_str = deletion_date.strftime("%B %d, %Y").replace(" 0", " ")
+                summary = f"These items will be removed on {date_str}. Watch them before then!"
+                self.media_server.set_collection_summary(collection, summary)
 
             if plex_items:
                 logger.info(

@@ -490,6 +490,7 @@ class TestDeathRowIntersectionLogic:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = MagicMock()
             instance.run_result = MagicMock()
             instance.radarr = {}
@@ -792,6 +793,7 @@ class TestLeavingSoonNotifications:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = mock_notification_manager
             instance.run_result = MagicMock()
             instance.radarr = {}
@@ -964,6 +966,7 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = MagicMock()
             instance.run_result = MagicMock()
             instance.radarr = {"Radarr": MagicMock()}
@@ -1199,6 +1202,7 @@ class TestThresholdNotMetClearsDeathRow:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = MagicMock()
             instance.run_result = MagicMock()
             instance.radarr = {"Radarr": MagicMock()}
@@ -1437,6 +1441,7 @@ class TestDeathRowLogging:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = MagicMock()
             instance.run_result = MagicMock()
             instance.radarr = {"Radarr": MagicMock()}
@@ -1548,6 +1553,7 @@ class TestDeathRowDeletionErrorHandling:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = MagicMock()
             instance.run_result = MagicMock()
             instance.radarr = {"Radarr": MagicMock()}

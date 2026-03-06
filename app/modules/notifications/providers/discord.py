@@ -169,6 +169,11 @@ class DiscordProvider(BaseNotificationProvider):
         preview_size = self.format_size(result.total_preview_bytes)
         lines = [f"*{len(result.preview_items)} items, {preview_size}*", ""]
 
+        deletion_date_str = getattr(result, "deletion_date_str", None)
+        if deletion_date_str:
+            lines.append(f"**Removal date: {deletion_date_str}**")
+            lines.append("")
+
         for item in result.preview_items[:5]:
             lines.append(f"• {item.format_title()} - {self.format_size(item.size_bytes)}")
 

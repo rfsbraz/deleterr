@@ -425,6 +425,7 @@ class Config:
             self.validate_radarr_exclusions(library)
             self.validate_sonarr_exclusions(library)
             self.validate_seerr_exclusions(library)
+            self.validate_leaving_soon(library)
 
         return True
 
@@ -650,6 +651,26 @@ class Config:
                         logger.warning(
                             f"Sonarr profile '{profile}' does not exist in instance '{connection['name']}'"
                         )
+
+        return True
+
+    def validate_leaving_soon(self, library):
+        """Validate leaving_soon configuration for a library."""
+        leaving_soon = library.get("leaving_soon")
+        if not leaving_soon:
+            return True
+
+        duration = leaving_soon.get("duration")
+        if duration:
+            from app.media_cleaner import parse_leaving_soon_duration
+
+            try:
+                parse_leaving_soon_duration(duration)
+            except ValueError as e:
+                self.log_and_exit(
+                    f"Invalid leaving_soon duration '{duration}' in library "
+                    f"'{library.get('name')}': {e}"
+                )
 
         return True
 

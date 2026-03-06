@@ -84,7 +84,7 @@ class EmailProvider(BaseNotificationProvider):
             html_content = self._render_leaving_soon_template(template_path, template_context)
 
             # Build plain text fallback
-            plain_content = self._build_leaving_soon_text(items)
+            plain_content = self._build_leaving_soon_text(items, context=template_context)
 
             return self._send_email(email_subject, html_content, plain_content)
 
@@ -336,19 +336,25 @@ class EmailProvider(BaseNotificationProvider):
 
     def _build_leaving_soon_html_simple(self, context: dict) -> str:
         """Build simple HTML content when Jinja2 is unavailable or template fails."""
-        html = """<!DOCTYPE html>
+        deletion_date_str = context.get("deletion_date_str")
+        if deletion_date_str:
+            warning_text = f'The items below will be removed on <strong>{deletion_date_str}</strong>.'
+        else:
+            warning_text = 'The items below are scheduled for deletion on the next cleanup cycle.'
+
+        html = f"""<!DOCTYPE html>
 <html>
 <head>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
-        .container { max-width: 700px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .header { background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 30px; text-align: center; }
-        .header h1 { margin: 0; font-size: 28px; }
-        .content { padding: 30px; }
-        .warning { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 20px; margin-bottom: 25px; }
-        .section-title { font-size: 20px; font-weight: bold; color: #333; margin: 25px 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #e74c3c; }
-        .item { padding: 10px; margin-bottom: 10px; background: #f9f9f9; border-radius: 4px; }
-        .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999; }
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }}
+        .container {{ max-width: 700px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+        .header {{ background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 30px; text-align: center; }}
+        .header h1 {{ margin: 0; font-size: 28px; }}
+        .content {{ padding: 30px; }}
+        .warning {{ background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 20px; margin-bottom: 25px; }}
+        .section-title {{ font-size: 20px; font-weight: bold; color: #333; margin: 25px 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #e74c3c; }}
+        .item {{ padding: 10px; margin-bottom: 10px; background: #f9f9f9; border-radius: 4px; }}
+        .footer {{ background: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999; }}
     </style>
 </head>
 <body>
@@ -360,7 +366,7 @@ class EmailProvider(BaseNotificationProvider):
         <div class="content">
             <div class="warning">
                 <strong>⚠️ These titles will be removed soon</strong><br>
-                The items below are scheduled for deletion on the next cleanup cycle.
+                {warning_text}
                 If you want to keep any of them, watch them before then!
             </div>
 """
@@ -391,12 +397,18 @@ class EmailProvider(BaseNotificationProvider):
 
         return html
 
-    def _build_leaving_soon_text(self, items: list[DeletedItem]) -> str:
+    def _build_leaving_soon_text(self, items: list[DeletedItem], context: Optional[dict] = None) -> str:
         """Build plain text content for leaving soon email."""
+        deletion_date_str = (context or {}).get("deletion_date_str")
+        if deletion_date_str:
+            schedule_text = f"The following titles will be removed on {deletion_date_str}."
+        else:
+            schedule_text = "The following titles are scheduled for deletion on the next cleanup cycle."
+
         lines = [
             "Leaving Soon - Content scheduled for removal",
             "",
-            "The following titles are scheduled for deletion on the next cleanup cycle.",
+            schedule_text,
             "If you want to keep any of them, watch them before then!",
             "",
         ]
