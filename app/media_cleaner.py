@@ -10,7 +10,7 @@ from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 from app import logger
 from app.modules.justwatch import JustWatch
 from app.modules.seerr import Seerr
-from app.modules.tautulli import Tautulli
+from app.modules.watch_provider import create_watch_provider
 from app.modules.mdblist import Mdblist
 from app.modules.trakt import Trakt
 from app.utils import parse_size_to_bytes, print_readable_freed_space
@@ -387,11 +387,7 @@ class MediaCleaner:
         # Set ssl_verify: true in config for secure connections
         ssl_verify = config.settings.get("ssl_verify", False)
 
-        self.tautulli = Tautulli(
-            config.settings.get("tautulli").get("url"),
-            config.settings.get("tautulli").get("api_key"),
-            ssl_verify=ssl_verify,
-        )
+        self.watch_provider = create_watch_provider(config, ssl_verify=ssl_verify)
 
         self.trakt = Trakt(
             config.settings.get("trakt", {}).get("client_id"),
@@ -471,10 +467,10 @@ class MediaCleaner:
         return self.plex.library.section(library.get("name"))
 
     def get_show_activity(self, library, plex_library):
-        return self.tautulli.get_activity(plex_library.key)
+        return self.watch_provider.get_activity(plex_library.key)
 
     def get_movie_activity(self, library, movies_library):
-        return self.tautulli.get_activity(movies_library.key)
+        return self.watch_provider.get_activity(movies_library.key)
 
     def filter_shows(self, library, unfiltered_all_show_data):
         return [
@@ -1529,7 +1525,7 @@ class MediaCleaner:
         # Seerr requester watch check (requires seerr + tautulli)
         if not check_excluded_seerr_requester_watch(
             media_data, plex_media_item, exclude, self.seerr,
-            self.tautulli, plex_library_key
+            self.watch_provider, plex_library_key
         ):
             return False
 

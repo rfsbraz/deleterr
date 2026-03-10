@@ -288,7 +288,7 @@ class TestAddedAtThreshold:
 
         # Test the check_added_date method directly
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             result = cleaner.check_added_date(
@@ -315,7 +315,7 @@ class TestAddedAtThreshold:
         }
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             result = cleaner.check_added_date(
@@ -353,7 +353,7 @@ class TestWatchedStatusCheck:
         }
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             result = cleaner.check_watched_status(
@@ -393,7 +393,7 @@ class TestWatchedStatusCheck:
         }
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             result = cleaner.check_watched_status(
@@ -424,7 +424,7 @@ class TestWatchedStatusCheck:
         }
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             result = cleaner.check_watched_status(
@@ -463,7 +463,7 @@ class TestWatchedStatusCheck:
         }
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             result = cleaner.check_watched_status(
@@ -501,7 +501,7 @@ class TestCollectionThreshold:
         }
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             # Add MCU to watched collections
@@ -750,7 +750,7 @@ class TestSeriesTypeFiltering:
         }
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             filtered = cleaner.filter_shows(library_config, all_show_data)
@@ -777,7 +777,7 @@ class TestSeriesTypeFiltering:
         }
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             filtered = cleaner.filter_shows(library_config, all_show_data)
@@ -849,7 +849,7 @@ class TestDryRunMode:
         library = {"name": "Movies", "add_list_exclusion_on_delete": False}
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             cleaner.process_movie(
@@ -891,7 +891,7 @@ class TestMaxActionsPerRun:
         library = {"name": "Movies", "max_actions_per_run": 2}
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
 
@@ -936,7 +936,7 @@ class TestAddListExclusion:
         library = {"name": "Movies", "add_list_exclusion_on_delete": True}
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             cleaner.delete_movie_if_allowed(
@@ -989,7 +989,7 @@ class TestCombinedExclusions:
         }
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             result = cleaner.check_exclusions(library, media_data, plex_item)
@@ -1035,7 +1035,7 @@ class TestCombinedExclusions:
         }
 
         with patch("app.media_cleaner.PlexServer"), patch(
-            "app.media_cleaner.Tautulli"
+            "app.modules.watch_provider.Tautulli"
         ), patch("app.media_cleaner.Trakt"):
             cleaner = MediaCleaner(mock_config)
             result = cleaner.check_exclusions(library, media_data, plex_item)

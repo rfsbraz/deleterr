@@ -603,7 +603,7 @@ class TestUpdateSeerrStatus:
 
     def test_update_status_disabled(self):
         """Test that status update is skipped when update_status is False."""
-        with patch("app.media_cleaner.Tautulli"), \
+        with patch("app.modules.watch_provider.Tautulli"), \
              patch("app.media_cleaner.PlexServer"), \
              patch("app.media_cleaner.Trakt"):
             from app.media_cleaner import MediaCleaner
@@ -628,7 +628,7 @@ class TestUpdateSeerrStatus:
 
     def test_update_status_enabled(self):
         """Test that status update is called when update_status is True."""
-        with patch("app.media_cleaner.Tautulli"), \
+        with patch("app.modules.watch_provider.Tautulli"), \
              patch("app.media_cleaner.PlexServer"), \
              patch("app.media_cleaner.Trakt"):
             from app.media_cleaner import MediaCleaner
@@ -653,7 +653,7 @@ class TestUpdateSeerrStatus:
 
     def test_update_status_no_tmdb_id(self):
         """Test that status update is skipped when media has no TMDB ID."""
-        with patch("app.media_cleaner.Tautulli"), \
+        with patch("app.modules.watch_provider.Tautulli"), \
              patch("app.media_cleaner.PlexServer"), \
              patch("app.media_cleaner.Trakt"):
             from app.media_cleaner import MediaCleaner
@@ -677,7 +677,7 @@ class TestUpdateSeerrStatus:
 
     def test_update_status_no_seerr_instance(self):
         """Test that status update is skipped when Seerr is not configured."""
-        with patch("app.media_cleaner.Tautulli"), \
+        with patch("app.modules.watch_provider.Tautulli"), \
              patch("app.media_cleaner.PlexServer"), \
              patch("app.media_cleaner.Trakt"):
             from app.media_cleaner import MediaCleaner
@@ -699,7 +699,7 @@ class TestUpdateSeerrStatus:
 
     def test_update_status_handles_failure(self):
         """Test that status update handles API failures gracefully."""
-        with patch("app.media_cleaner.Tautulli"), \
+        with patch("app.modules.watch_provider.Tautulli"), \
              patch("app.media_cleaner.PlexServer"), \
              patch("app.media_cleaner.Trakt"):
             from app.media_cleaner import MediaCleaner
@@ -725,7 +725,7 @@ class TestUpdateSeerrStatus:
 
     def test_update_status_handles_exception(self):
         """Test that status update handles exceptions gracefully."""
-        with patch("app.media_cleaner.Tautulli"), \
+        with patch("app.modules.watch_provider.Tautulli"), \
              patch("app.media_cleaner.PlexServer"), \
              patch("app.media_cleaner.Trakt"):
             from app.media_cleaner import MediaCleaner
