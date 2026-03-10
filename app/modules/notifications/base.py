@@ -60,11 +60,15 @@ class BaseNotificationProvider(ABC):
 
     def build_title(self, result: RunResult) -> str:
         """Build the notification title."""
+        if result.is_leaving_soon:
+            return "Leaving Soon"
         prefix = "[DRY-RUN] " if result.is_dry_run else ""
         return f"{prefix}Deleterr Run Complete"
 
     def build_summary(self, result: RunResult) -> str:
         """Build the summary text."""
+        if result.is_leaving_soon:
+            return "The following content is scheduled for removal"
         deleted_count = len(result.deleted_items)
         freed_size = self.format_size(result.total_freed_bytes)
 

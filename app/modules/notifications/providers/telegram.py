@@ -77,10 +77,11 @@ class TelegramProvider(BaseNotificationProvider):
         lines.append(f"*{self._escape_markdown(title)}*")
         lines.append("")
 
-        # Summary
-        summary = self.build_summary(result)
-        lines.append(self._escape_markdown(summary))
-        lines.append("")
+        # Summary (skip deletion stats for leaving_soon)
+        if not result.is_leaving_soon:
+            summary = self.build_summary(result)
+            lines.append(self._escape_markdown(summary))
+            lines.append("")
 
         # Deleted items
         if result.deleted_items:

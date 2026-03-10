@@ -104,10 +104,19 @@ class DiscordProvider(BaseNotificationProvider):
 
     def _build_summary_embed(self, result: RunResult) -> dict:
         """Build the main summary embed."""
-        color = self.COLOR_DRY_RUN if result.is_dry_run else self.COLOR_SUCCESS
-
         title = self.build_title(result)
         description = self.build_summary(result)
+
+        # Leaving soon notifications skip the deletion stats
+        if result.is_leaving_soon:
+            return {
+                "title": title,
+                "description": description,
+                "color": self.COLOR_WARNING,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+
+        color = self.COLOR_DRY_RUN if result.is_dry_run else self.COLOR_SUCCESS
 
         fields = []
 

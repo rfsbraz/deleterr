@@ -78,8 +78,9 @@ class SlackProvider(BaseNotificationProvider):
         # Header block
         blocks.append(self._build_header_block(result))
 
-        # Summary block
-        blocks.append(self._build_summary_block(result))
+        # Summary block (skip deletion stats for leaving_soon)
+        if not result.is_leaving_soon:
+            blocks.append(self._build_summary_block(result))
 
         # Deleted items section
         if result.deleted_items:
