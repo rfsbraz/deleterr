@@ -340,9 +340,10 @@ class TestDurationEnforcement:
         Scenario: schedule runs daily, duration is 7d.
         Items tagged 2 days ago should NOT be deleted but MUST stay in the
         collection (via preview_candidates) so they aren't dropped.
+        New candidates should NOT be added while items are still waiting.
         """
         now = datetime.now()
-        # Item tagged 2 days ago — still within 7d duration
+        # Item tagged 2 days ago - still within 7d duration
         deleterr_instance.state_manager.set_tagged_dates("Movies", {
             "100": (now - timedelta(days=2)).isoformat(),
         })
@@ -394,10 +395,118 @@ class TestDurationEnforcement:
         assert len(deleted_items) == 0
         assert saved_space == 0
 
-        # Both items should be in preview: the waiting item + the new candidate
+        # Only the waiting item should be in preview - no new candidates
+        # while items are still on death row
         preview_titles = {m["title"] for m in preview_candidates}
         assert "Waiting Movie" in preview_titles
-        assert "New Movie" in preview_titles
+        assert "New Movie" not in preview_titles
+
+    def test_new_candidates_added_when_death_row_empty(self, deleterr_instance):
+        """New candidates are added to preview when death row is empty (first run or after clearing)."""
+        # No items in state - death row is empty
+        plex_library = MagicMock()
+        deleterr_instance.media_server.get_library.return_value = plex_library
+
+        # Empty death row collection
+        deleterr_instance.media_server.get_collection.return_value = MagicMock(
+            items=MagicMock(return_value=[])
+        )
+        deleterr_instance.media_server.get_items_with_label.return_value = []
+
+        new_candidate_a = {"id": 1, "title": "Movie A", "tmdbId": "tt001", "year": 2024, "sizeOnDisk": 1000}
+        new_candidate_b = {"id": 2, "title": "Movie B", "tmdbId": "tt002", "year": 2023, "sizeOnDisk": 2000}
+
+        plex_a = self._make_plex_item(100, "Movie A")
+        plex_b = self._make_plex_item(200, "Movie B")
+
+        def find_item_side_effect(lib, **kwargs):
+            tmdb = kwargs.get("tmdb_id")
+            if tmdb == "tt001":
+                return plex_a
+            if tmdb == "tt002":
+                return plex_b
+            return None
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+
+        deleterr_instance._get_deletion_candidates = MagicMock(
+            return_value=[new_candidate_a, new_candidate_b]
+        )
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted_items, preview_candidates, saved_plex_items = deleterr_instance._process_death_row(
+                library, MagicMock(), "movie"
+            )
+
+        # No deletions on first run
+        assert len(deleted_items) == 0
+
+        # Both new candidates should be in preview since death row was empty
+        preview_titles = {m["title"] for m in preview_candidates}
+        assert "Movie A" in preview_titles
+        assert "Movie B" in preview_titles
+
+    def test_new_candidates_added_after_batch_cleared(self, deleterr_instance):
+        """After all death row items are deleted, new candidates should be added."""
+        now = datetime.now()
+        # Item tagged 10 days ago - past 7d duration, eligible for deletion
+        deleterr_instance.state_manager.set_tagged_dates("Movies", {
+            "100": (now - timedelta(days=10)).isoformat(),
+        })
+
+        plex_library = MagicMock()
+        deleterr_instance.media_server.get_library.return_value = plex_library
+
+        death_row_plex_item = self._make_plex_item(100, "Old Movie")
+        deleterr_instance.media_server.get_collection.return_value = MagicMock(
+            items=MagicMock(return_value=[death_row_plex_item])
+        )
+        deleterr_instance.media_server.get_items_with_label.return_value = []
+
+        # Old Movie still matches criteria, plus a new candidate
+        old_media = {"id": 1, "title": "Old Movie", "tmdbId": "tt001", "year": 2020, "sizeOnDisk": 1000}
+        new_candidate = {"id": 2, "title": "New Movie", "tmdbId": "tt002", "year": 2023, "sizeOnDisk": 2000}
+        new_plex_item = self._make_plex_item(200, "New Movie")
+
+        def find_item_side_effect(lib, **kwargs):
+            tmdb = kwargs.get("tmdb_id")
+            if tmdb == "tt001":
+                return death_row_plex_item
+            if tmdb == "tt002":
+                return new_plex_item
+            return None
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+
+        deleterr_instance._get_deletion_candidates = MagicMock(
+            return_value=[old_media, new_candidate]
+        )
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted_items, preview_candidates, saved_plex_items = deleterr_instance._process_death_row(
+                library, MagicMock(), "movie"
+            )
+
+        # Old Movie should be deleted (duration elapsed + still matches)
+        assert len(deleted_items) == 1
+        assert deleted_items[0]["title"] == "Old Movie"
+
+        # New Movie should NOT be in preview yet - death row had items this run.
+        # It will be added on the next run when death row is empty.
+        preview_titles = {m["title"] for m in preview_candidates}
+        assert "New Movie" not in preview_titles
 
 
 class TestNotificationDedup:

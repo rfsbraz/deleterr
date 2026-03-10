@@ -541,15 +541,27 @@ class Deleterr:
                 if key in candidate_by_plex_key
             ]
 
-        # New candidates = all deletion candidates minus deleted and minus already-waiting
-        waiting_ids = {m.get("id") for m in waiting_media_items}
-        new_candidates = [
-            m for m in all_deletion_candidates
-            if m.get("id") not in deleted_ids and m.get("id") not in waiting_ids
-        ][:preview_next]
-
-        # Combined: waiting items first (they must stay), then new candidates
-        preview_candidates = waiting_media_items + new_candidates
+        # When duration is configured and items are still on death row (waiting or just deleted),
+        # don't add new candidates. This ensures the current batch is fully processed before
+        # a new batch enters the collection. New candidates are only added when death row is empty.
+        if duration_str and all_death_row_plex_items:
+            # Death row has items - only keep the waiting ones, no new additions
+            preview_candidates = waiting_media_items
+            if waiting_media_items:
+                logger.debug(
+                    "Death row active for library '%s' - holding %d items, "
+                    "new candidates deferred until current batch is cleared",
+                    library_name,
+                    len(waiting_media_items),
+                )
+        else:
+            # No duration or empty death row - add new candidates as usual
+            waiting_ids = {m.get("id") for m in waiting_media_items}
+            new_candidates = [
+                m for m in all_deletion_candidates
+                if m.get("id") not in deleted_ids and m.get("id") not in waiting_ids
+            ][:preview_next]
+            preview_candidates = waiting_media_items + new_candidates
 
         return saved_space, deleted_items, preview_candidates, saved_plex_items
 
