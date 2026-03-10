@@ -340,9 +340,10 @@ class TestDurationEnforcement:
         Scenario: schedule runs daily, duration is 7d.
         Items tagged 2 days ago should NOT be deleted but MUST stay in the
         collection (via preview_candidates) so they aren't dropped.
+        New candidates should NOT be added while items are still waiting.
         """
         now = datetime.now()
-        # Item tagged 2 days ago — still within 7d duration
+        # Item tagged 2 days ago - still within 7d duration
         deleterr_instance.state_manager.set_tagged_dates("Movies", {
             "100": (now - timedelta(days=2)).isoformat(),
         })
@@ -386,7 +387,7 @@ class TestDurationEnforcement:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted_items, preview_candidates = deleterr_instance._process_death_row(
+            saved_space, deleted_items, preview_candidates, saved_plex_items = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -394,7 +395,642 @@ class TestDurationEnforcement:
         assert len(deleted_items) == 0
         assert saved_space == 0
 
-        # Both items should be in preview: the waiting item + the new candidate
+        # Only the waiting item should be in preview - no new candidates
+        # while items are still on death row
         preview_titles = {m["title"] for m in preview_candidates}
         assert "Waiting Movie" in preview_titles
-        assert "New Movie" in preview_titles
+        assert "New Movie" not in preview_titles
+
+    def test_new_candidates_added_when_death_row_empty(self, deleterr_instance):
+        """New candidates are added to preview when death row is empty (first run or after clearing)."""
+        # No items in state - death row is empty
+        plex_library = MagicMock()
+        deleterr_instance.media_server.get_library.return_value = plex_library
+
+        # Empty death row collection
+        deleterr_instance.media_server.get_collection.return_value = MagicMock(
+            items=MagicMock(return_value=[])
+        )
+        deleterr_instance.media_server.get_items_with_label.return_value = []
+
+        new_candidate_a = {"id": 1, "title": "Movie A", "tmdbId": "tt001", "year": 2024, "sizeOnDisk": 1000}
+        new_candidate_b = {"id": 2, "title": "Movie B", "tmdbId": "tt002", "year": 2023, "sizeOnDisk": 2000}
+
+        plex_a = self._make_plex_item(100, "Movie A")
+        plex_b = self._make_plex_item(200, "Movie B")
+
+        def find_item_side_effect(lib, **kwargs):
+            tmdb = kwargs.get("tmdb_id")
+            if tmdb == "tt001":
+                return plex_a
+            if tmdb == "tt002":
+                return plex_b
+            return None
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+
+        deleterr_instance._get_deletion_candidates = MagicMock(
+            return_value=[new_candidate_a, new_candidate_b]
+        )
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted_items, preview_candidates, saved_plex_items = deleterr_instance._process_death_row(
+                library, MagicMock(), "movie"
+            )
+
+        # No deletions on first run
+        assert len(deleted_items) == 0
+
+        # Both new candidates should be in preview since death row was empty
+        preview_titles = {m["title"] for m in preview_candidates}
+        assert "Movie A" in preview_titles
+        assert "Movie B" in preview_titles
+
+    def test_new_candidates_added_after_batch_cleared(self, deleterr_instance):
+        """After all death row items are deleted, new candidates should be added."""
+        now = datetime.now()
+        # Item tagged 10 days ago - past 7d duration, eligible for deletion
+        deleterr_instance.state_manager.set_tagged_dates("Movies", {
+            "100": (now - timedelta(days=10)).isoformat(),
+        })
+
+        plex_library = MagicMock()
+        deleterr_instance.media_server.get_library.return_value = plex_library
+
+        death_row_plex_item = self._make_plex_item(100, "Old Movie")
+        deleterr_instance.media_server.get_collection.return_value = MagicMock(
+            items=MagicMock(return_value=[death_row_plex_item])
+        )
+        deleterr_instance.media_server.get_items_with_label.return_value = []
+
+        # Old Movie still matches criteria, plus a new candidate
+        old_media = {"id": 1, "title": "Old Movie", "tmdbId": "tt001", "year": 2020, "sizeOnDisk": 1000}
+        new_candidate = {"id": 2, "title": "New Movie", "tmdbId": "tt002", "year": 2023, "sizeOnDisk": 2000}
+        new_plex_item = self._make_plex_item(200, "New Movie")
+
+        def find_item_side_effect(lib, **kwargs):
+            tmdb = kwargs.get("tmdb_id")
+            if tmdb == "tt001":
+                return death_row_plex_item
+            if tmdb == "tt002":
+                return new_plex_item
+            return None
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+
+        deleterr_instance._get_deletion_candidates = MagicMock(
+            return_value=[old_media, new_candidate]
+        )
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted_items, preview_candidates, saved_plex_items = deleterr_instance._process_death_row(
+                library, MagicMock(), "movie"
+            )
+
+        # Old Movie should be deleted (duration elapsed + still matches)
+        assert len(deleted_items) == 1
+        assert deleted_items[0]["title"] == "Old Movie"
+
+        # New Movie should NOT be in preview yet - death row had items this run.
+        # It will be added on the next run when death row is empty.
+        preview_titles = {m["title"] for m in preview_candidates}
+        assert "New Movie" not in preview_titles
+
+
+class TestBatchSize:
+    """Tests for batch_size controlling how many items enter the leaving_soon collection."""
+
+    @pytest.fixture
+    def deleterr_instance(self, tmp_path):
+        """Create a Deleterr instance with mocked dependencies."""
+        state_file = str(tmp_path / ".deleterr_state.json")
+
+        with patch("app.deleterr.MediaCleaner", return_value=MagicMock()), \
+             patch("app.deleterr.PlexMediaServer", return_value=MagicMock()), \
+             patch("app.deleterr.NotificationManager", return_value=MagicMock()):
+            from app.deleterr import Deleterr
+            config = MagicMock()
+            config.settings = {
+                "dry_run": False,
+                "plex": {"url": "http://localhost:32400", "token": "test"},
+                "sonarr": [],
+                "radarr": [],
+            }
+            d = Deleterr.__new__(Deleterr)
+            d.config = config
+            d.media_server = MagicMock()
+            d.media_cleaner = MagicMock()
+            d.notifications = MagicMock()
+            d.state_manager = StateManager(state_file=state_file)
+            d.run_result = MagicMock()
+            d.sonarr = {}
+            d.radarr = {}
+            d.libraries_processed = 0
+            d.libraries_failed = 0
+            return d
+
+    def _make_plex_item(self, rating_key, title="Test Item"):
+        item = MagicMock()
+        item.ratingKey = rating_key
+        item.title = title
+        return item
+
+    def test_batch_size_limits_new_candidates(self, deleterr_instance):
+        """With batch_size: 2 and 5 deletion candidates, only 2 enter preview."""
+        plex_library = MagicMock()
+        deleterr_instance.media_server.get_library.return_value = plex_library
+
+        # Empty death row
+        deleterr_instance.media_server.get_collection.return_value = MagicMock(
+            items=MagicMock(return_value=[])
+        )
+        deleterr_instance.media_server.get_items_with_label.return_value = []
+
+        candidates = [
+            {"id": i, "title": f"Movie {i}", "tmdbId": f"tt{i:03d}", "year": 2020 + i, "sizeOnDisk": 1000}
+            for i in range(1, 6)
+        ]
+        plex_items = {f"tt{i:03d}": self._make_plex_item(100 + i, f"Movie {i}") for i in range(1, 6)}
+
+        def find_item_side_effect(lib, **kwargs):
+            return plex_items.get(kwargs.get("tmdb_id"))
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=candidates)
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"batch_size": 2, "collection": {"name": "Leaving Soon"}},
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            _, _, preview_candidates, _ = deleterr_instance._process_death_row(
+                library, MagicMock(), "movie"
+            )
+
+        assert len(preview_candidates) == 2
+
+    def test_batch_size_overrides_preview_next(self, deleterr_instance):
+        """batch_size: 3 with preview_next: 10 results in 3 items."""
+        plex_library = MagicMock()
+        deleterr_instance.media_server.get_library.return_value = plex_library
+
+        deleterr_instance.media_server.get_collection.return_value = MagicMock(
+            items=MagicMock(return_value=[])
+        )
+        deleterr_instance.media_server.get_items_with_label.return_value = []
+
+        candidates = [
+            {"id": i, "title": f"Movie {i}", "tmdbId": f"tt{i:03d}", "year": 2020 + i, "sizeOnDisk": 1000}
+            for i in range(1, 11)
+        ]
+        plex_items = {f"tt{i:03d}": self._make_plex_item(100 + i, f"Movie {i}") for i in range(1, 11)}
+
+        def find_item_side_effect(lib, **kwargs):
+            return plex_items.get(kwargs.get("tmdb_id"))
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=candidates)
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"batch_size": 3, "collection": {"name": "Leaving Soon"}},
+            "preview_next": 10,
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            _, _, preview_candidates, _ = deleterr_instance._process_death_row(
+                library, MagicMock(), "movie"
+            )
+
+        assert len(preview_candidates) == 3
+
+    def test_batch_size_overrides_max_actions(self, deleterr_instance):
+        """batch_size: 3 with max_actions_per_run: 10 results in 3 items."""
+        plex_library = MagicMock()
+        deleterr_instance.media_server.get_library.return_value = plex_library
+
+        deleterr_instance.media_server.get_collection.return_value = MagicMock(
+            items=MagicMock(return_value=[])
+        )
+        deleterr_instance.media_server.get_items_with_label.return_value = []
+
+        candidates = [
+            {"id": i, "title": f"Movie {i}", "tmdbId": f"tt{i:03d}", "year": 2020 + i, "sizeOnDisk": 1000}
+            for i in range(1, 11)
+        ]
+        plex_items = {f"tt{i:03d}": self._make_plex_item(100 + i, f"Movie {i}") for i in range(1, 11)}
+
+        def find_item_side_effect(lib, **kwargs):
+            return plex_items.get(kwargs.get("tmdb_id"))
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=candidates)
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"batch_size": 3, "collection": {"name": "Leaving Soon"}},
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            _, _, preview_candidates, _ = deleterr_instance._process_death_row(
+                library, MagicMock(), "movie"
+            )
+
+        assert len(preview_candidates) == 3
+
+    def test_no_batch_size_uses_preview_next(self, deleterr_instance):
+        """Without batch_size, preview_next controls the batch (backward compat)."""
+        plex_library = MagicMock()
+        deleterr_instance.media_server.get_library.return_value = plex_library
+
+        deleterr_instance.media_server.get_collection.return_value = MagicMock(
+            items=MagicMock(return_value=[])
+        )
+        deleterr_instance.media_server.get_items_with_label.return_value = []
+
+        candidates = [
+            {"id": i, "title": f"Movie {i}", "tmdbId": f"tt{i:03d}", "year": 2020 + i, "sizeOnDisk": 1000}
+            for i in range(1, 11)
+        ]
+        plex_items = {f"tt{i:03d}": self._make_plex_item(100 + i, f"Movie {i}") for i in range(1, 11)}
+
+        def find_item_side_effect(lib, **kwargs):
+            return plex_items.get(kwargs.get("tmdb_id"))
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=candidates)
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            _, _, preview_candidates, _ = deleterr_instance._process_death_row(
+                library, MagicMock(), "movie"
+            )
+
+        assert len(preview_candidates) == 5
+
+    def test_no_batch_size_no_preview_next_uses_max_actions(self, deleterr_instance):
+        """Without batch_size or preview_next, falls back to max_actions_per_run."""
+        plex_library = MagicMock()
+        deleterr_instance.media_server.get_library.return_value = plex_library
+
+        deleterr_instance.media_server.get_collection.return_value = MagicMock(
+            items=MagicMock(return_value=[])
+        )
+        deleterr_instance.media_server.get_items_with_label.return_value = []
+
+        candidates = [
+            {"id": i, "title": f"Movie {i}", "tmdbId": f"tt{i:03d}", "year": 2020 + i, "sizeOnDisk": 1000}
+            for i in range(1, 21)
+        ]
+        plex_items = {f"tt{i:03d}": self._make_plex_item(100 + i, f"Movie {i}") for i in range(1, 21)}
+
+        def find_item_side_effect(lib, **kwargs):
+            return plex_items.get(kwargs.get("tmdb_id"))
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=candidates)
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "max_actions_per_run": 7,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            _, _, preview_candidates, _ = deleterr_instance._process_death_row(
+                library, MagicMock(), "movie"
+            )
+
+        assert len(preview_candidates) == 7
+
+
+class TestNotificationDedup:
+    """Tests for notification deduplication in leaving_soon."""
+
+    @pytest.fixture
+    def deleterr_instance(self, tmp_path):
+        """Create a Deleterr instance with mocked dependencies."""
+        state_file = str(tmp_path / ".deleterr_state.json")
+
+        with patch("app.deleterr.MediaCleaner", return_value=MagicMock()), \
+             patch("app.deleterr.PlexMediaServer", return_value=MagicMock()), \
+             patch("app.deleterr.NotificationManager", return_value=MagicMock()):
+            from app.deleterr import Deleterr
+            config = MagicMock()
+            config.settings = {
+                "dry_run": False,
+                "plex": {"url": "http://localhost:32400", "token": "test"},
+                "sonarr": [],
+                "radarr": [],
+                "notifications": {
+                    "leaving_soon": {
+                        "discord": {"webhook_url": "http://test"},
+                    },
+                },
+            }
+            d = Deleterr.__new__(Deleterr)
+            d.config = config
+            d.media_server = MagicMock()
+            d.media_cleaner = MagicMock()
+            d.notifications = MagicMock()
+            d.notifications.is_leaving_soon_enabled.return_value = True
+            d.state_manager = StateManager(state_file=state_file)
+            d.run_result = MagicMock()
+            d.sonarr = {}
+            d.radarr = {}
+            d.libraries_processed = 0
+            d.libraries_failed = 0
+            return d
+
+    def _make_plex_item(self, rating_key, title="Test Item"):
+        item = MagicMock()
+        item.ratingKey = rating_key
+        item.title = title
+        item.year = 2024
+        return item
+
+    def test_first_run_notifies_all_items(self, deleterr_instance):
+        """First run: all items should trigger notification."""
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+        }
+        preview = [
+            {"title": "Movie A", "tmdbId": 1, "year": 2024, "sizeOnDisk": 1000},
+            {"title": "Movie B", "tmdbId": 2, "year": 2023, "sizeOnDisk": 2000},
+        ]
+
+        plex_a = self._make_plex_item(100, "Movie A")
+        plex_b = self._make_plex_item(200, "Movie B")
+
+        # process_leaving_soon returns resolved plex items
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = [plex_a, plex_b]
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+
+        with patch("app.media_cleaner.compute_deletion_date", return_value=None):
+            deleterr_instance._process_library_leaving_soon(library, preview, "movie")
+
+        # Notification should be sent with all items
+        deleterr_instance._send_leaving_soon_notification = MagicMock()
+        # Re-run with the mock to verify
+        with patch("app.media_cleaner.compute_deletion_date", return_value=None):
+            deleterr_instance._process_library_leaving_soon(library, preview, "movie")
+
+        # The send_leaving_soon should have been called on notifications
+        assert deleterr_instance.notifications.send_leaving_soon.called
+
+    def test_second_run_same_items_no_notification(self, deleterr_instance):
+        """Second run with same items: no notification should be sent (dedup)."""
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+        }
+        preview = [
+            {"title": "Movie A", "tmdbId": 1, "year": 2024, "sizeOnDisk": 1000},
+        ]
+
+        plex_a = self._make_plex_item(100, "Movie A")
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = [plex_a]
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+
+        # Simulate first run: record item in state
+        deleterr_instance.state_manager.set_tagged_dates("Movies", {"100": "2026-03-01T00:00:00"})
+
+        with patch("app.media_cleaner.compute_deletion_date", return_value=None):
+            deleterr_instance._process_library_leaving_soon(library, preview, "movie")
+
+        # Notification should NOT be called because item was already in state
+        assert not deleterr_instance.notifications.send_leaving_soon.called
+
+    def test_third_run_new_item_notifies_only_new(self, deleterr_instance):
+        """Third run with one new item: only the new item should trigger notification."""
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+        }
+        preview = [
+            {"title": "Movie A", "tmdbId": 1, "year": 2024, "sizeOnDisk": 1000},
+            {"title": "Movie C", "tmdbId": 3, "year": 2022, "sizeOnDisk": 3000},
+        ]
+
+        plex_a = self._make_plex_item(100, "Movie A")
+        plex_c = self._make_plex_item(300, "Movie C")
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = [plex_a, plex_c]
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+
+        # Movie A was already tagged in state
+        deleterr_instance.state_manager.set_tagged_dates("Movies", {"100": "2026-03-01T00:00:00"})
+
+        with patch("app.media_cleaner.compute_deletion_date", return_value=None):
+            deleterr_instance._process_library_leaving_soon(library, preview, "movie")
+
+        # Notification should be sent
+        assert deleterr_instance.notifications.send_leaving_soon.called
+        call_args = deleterr_instance.notifications.send_leaving_soon.call_args
+        notified_items = call_args[0][0] if call_args[0] else call_args[1].get("items", [])
+        # Only Movie C should be in the notified items
+        assert len(notified_items) == 1
+        assert notified_items[0].title == "Movie C"
+
+    def test_no_duration_always_notifies(self, deleterr_instance):
+        """Without duration config, all items are notified every run."""
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            # No "duration" key
+        }
+        preview = [
+            {"title": "Movie A", "tmdbId": 1, "year": 2024, "sizeOnDisk": 1000},
+        ]
+
+        plex_a = self._make_plex_item(100, "Movie A")
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = [plex_a]
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+
+        # Even if item was already in state, without duration we always notify
+        deleterr_instance.state_manager.set_tagged_dates("Movies", {"100": "2026-03-01T00:00:00"})
+
+        with patch("app.media_cleaner.compute_deletion_date", return_value=None):
+            deleterr_instance._process_library_leaving_soon(library, preview, "movie")
+
+        assert deleterr_instance.notifications.send_leaving_soon.called
+
+
+class TestSavedItems:
+    """Tests for saved items detection in death row processing."""
+
+    @pytest.fixture
+    def deleterr_instance(self, tmp_path):
+        """Create a Deleterr instance with mocked dependencies."""
+        state_file = str(tmp_path / ".deleterr_state.json")
+
+        with patch("app.deleterr.MediaCleaner", return_value=MagicMock()), \
+             patch("app.deleterr.PlexMediaServer", return_value=MagicMock()), \
+             patch("app.deleterr.NotificationManager", return_value=MagicMock()):
+            from app.deleterr import Deleterr
+            config = MagicMock()
+            config.settings = {
+                "dry_run": False,
+                "plex": {"url": "http://localhost:32400", "token": "test"},
+                "sonarr": [],
+                "radarr": [],
+            }
+            d = Deleterr.__new__(Deleterr)
+            d.config = config
+            d.media_server = MagicMock()
+            d.media_cleaner = MagicMock()
+            d.notifications = MagicMock()
+            d.state_manager = StateManager(state_file=state_file)
+            d.run_result = MagicMock()
+            d.sonarr = {}
+            d.radarr = {}
+            d.libraries_processed = 0
+            d.libraries_failed = 0
+            return d
+
+    def _make_plex_item(self, rating_key, title="Test Item"):
+        item = MagicMock()
+        item.ratingKey = rating_key
+        item.title = title
+        return item
+
+    def test_saved_items_detected(self, deleterr_instance):
+        """Items on death row that no longer match criteria are 'saved'."""
+        now = datetime.now()
+        # Both items tagged long enough ago to be eligible
+        deleterr_instance.state_manager.set_tagged_dates("Movies", {
+            "100": (now - timedelta(days=10)).isoformat(),
+            "200": (now - timedelta(days=10)).isoformat(),
+        })
+
+        plex_item_100 = self._make_plex_item(100, "Deleted Movie")
+        plex_item_200 = self._make_plex_item(200, "Saved Movie")
+
+        # Both items in death row collection
+        deleterr_instance._get_death_row_items = MagicMock(
+            return_value=[plex_item_100, plex_item_200]
+        )
+
+        # Only item 100 still matches deletion criteria (200 was watched)
+        media_100 = {"id": 1, "title": "Deleted Movie", "tmdbId": "tt001", "year": 2024, "sizeOnDisk": 1000}
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[media_100])
+
+        def find_item_side_effect(lib, **kwargs):
+            tmdb = kwargs.get("tmdb_id")
+            if tmdb == "tt001":
+                return plex_item_100
+            return None
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted_items, preview_candidates, saved_plex_items = deleterr_instance._process_death_row(
+                library, MagicMock(), "movie"
+            )
+
+        # Item 100 was deleted, item 200 was saved
+        assert len(deleted_items) == 1
+        assert deleted_items[0]["title"] == "Deleted Movie"
+        assert len(saved_plex_items) == 1
+        assert saved_plex_items[0].title == "Saved Movie"
+
+
+class TestFormatTitleWithLibrary:
+    """Tests for DeletedItem.format_title_with_library()."""
+
+    def test_with_library_and_year(self):
+        from app.modules.notifications.models import DeletedItem
+        item = DeletedItem(
+            title="Inception",
+            year=2010,
+            media_type="movie",
+            size_bytes=1000,
+            library_name="4K Movies",
+            instance_name="Radarr",
+        )
+        assert item.format_title_with_library() == "[4K Movies] Inception (2010)"
+
+    def test_with_library_no_year(self):
+        from app.modules.notifications.models import DeletedItem
+        item = DeletedItem(
+            title="Some Show",
+            year=None,
+            media_type="show",
+            size_bytes=1000,
+            library_name="TV Shows",
+            instance_name="Sonarr",
+        )
+        assert item.format_title_with_library() == "[TV Shows] Some Show"
+
+    def test_no_library_name(self):
+        from app.modules.notifications.models import DeletedItem
+        item = DeletedItem(
+            title="Inception",
+            year=2010,
+            media_type="movie",
+            size_bytes=1000,
+            library_name="",
+            instance_name="Radarr",
+        )
+        assert item.format_title_with_library() == "Inception (2010)"
+
+    def test_is_leaving_soon_flag(self):
+        from app.modules.notifications.models import RunResult
+        result = RunResult(is_leaving_soon=True)
+        assert result.is_leaving_soon is True
+
+        result2 = RunResult()
+        assert result2.is_leaving_soon is False
+
+    def test_saved_items_in_run_result(self):
+        from app.modules.notifications.models import RunResult, DeletedItem
+        result = RunResult()
+        assert result.saved_items == []
+
+        item = DeletedItem(
+            title="Saved Movie",
+            year=2024,
+            media_type="movie",
+            size_bytes=0,
+            library_name="Movies",
+            instance_name="Radarr",
+        )
+        result.saved_items = [item]
+        assert result.has_content() is True

@@ -30,16 +30,23 @@ libraries:
   - name: "Movies"
     radarr: "Radarr"
     action_mode: "delete"
-    max_actions_per_run: 20
-    preview_next: 10  # Required for leaving_soon
     leaving_soon:
+      batch_size: 10
       duration: "7d"
       collection:
         name: "Leaving Soon"
 ```
 
-!!! warning "preview_next Required"
-    `preview_next` cannot be set to `0` when `leaving_soon` is configured, as the feature needs to tag upcoming deletions.
+### Batch Size
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `batch_size` | integer | `max_actions_per_run` | How many items enter the Leaving Soon collection per cycle |
+
+When `batch_size` is set, `preview_next` is no longer required and can be omitted or set to `0`.
+
+!!! note "max_actions_per_run is ignored"
+    When `leaving_soon` is configured, `max_actions_per_run` has no effect on the death row path. Use `batch_size` to control the number of items per cycle instead. If `max_actions_per_run` is explicitly set, Deleterr will log a warning.
 
 ### Duration
 
@@ -152,12 +159,11 @@ libraries:
   - name: "Movies"
     radarr: "Radarr"
     action_mode: "delete"
-    max_actions_per_run: 20
-    preview_next: 10
     disk_size_threshold:
       - path: "/data/media"
         threshold: 500GB
     leaving_soon:
+      batch_size: 10
       collection:
         name: "Leaving Soon"
 ```
@@ -168,7 +174,7 @@ libraries:
 
 1. Verify Plex URL and token are correct in your config
 2. Check Deleterr logs for Plex API errors
-3. Ensure `preview_next` is greater than 0
+3. Ensure `batch_size` or `preview_next` is greater than 0
 4. Run with `dry_run: false` - collections are only created in non-dry-run mode
 
 ### Items Not Being Deleted

@@ -77,10 +77,11 @@ class TelegramProvider(BaseNotificationProvider):
         lines.append(f"*{self._escape_markdown(title)}*")
         lines.append("")
 
-        # Summary
-        summary = self.build_summary(result)
-        lines.append(self._escape_markdown(summary))
-        lines.append("")
+        # Summary (skip deletion stats for leaving_soon)
+        if not result.is_leaving_soon:
+            summary = self.build_summary(result)
+            lines.append(self._escape_markdown(summary))
+            lines.append("")
 
         # Deleted items
         if result.deleted_items:
@@ -113,12 +114,23 @@ class TelegramProvider(BaseNotificationProvider):
             if deletion_date_str:
                 lines.append(f"Removal date: *{self._escape_markdown(deletion_date_str)}*")
 
+            use_library_name = getattr(result, "is_leaving_soon", False)
             for item in result.preview_items[:5]:
                 size = self.format_size(item.size_bytes)
-                lines.append(f"• {self._escape_markdown(item.format_title())} \\- {self._escape_markdown(size)}")
+                title = item.format_title_with_library() if use_library_name else item.format_title()
+                lines.append(f"• {self._escape_markdown(title)} \\- {self._escape_markdown(size)}")
 
             if len(result.preview_items) > 5:
                 lines.append(f"_\\.\\.\\.and {len(result.preview_items) - 5} more_")
+
+        # Saved items (for leaving_soon notifications)
+        if result.saved_items:
+            lines.append("")
+            lines.append(f"*Saved from Deletion* \\({len(result.saved_items)} items\\):")
+            for item in result.saved_items[:5]:
+                lines.append(f"• {self._escape_markdown(item.format_title_with_library())}")
+            if len(result.saved_items) > 5:
+                lines.append(f"_\\.\\.\\.and {len(result.saved_items) - 5} more_")
 
         return "\n".join(lines)
 

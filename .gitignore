@@ -5,6 +5,7 @@ config/settings.yaml
 
 # AI Tools
 .claude/
+!CLAUDE.md
 
 # IDE / Editor settings
 .idea/
