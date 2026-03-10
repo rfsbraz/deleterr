@@ -109,8 +109,7 @@ class TestGetActivity:
 
         result = provider.get_activity("1")
 
-        expected_ts = int(newer.timestamp())
-        assert result["plex://movie/abc"]["last_watched"] == expected_ts
+        assert result["plex://movie/abc"]["last_watched"] == newer
 
     def test_get_activity_empty(self, provider, mock_plex_server):
         """Empty history returns empty dict."""
