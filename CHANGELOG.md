@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.13](https://github.com/rfsbraz/deleterr/compare/v0.2.12...v0.2.13) (2026-03-10)
+
+
+### Features
+
+* **leaving-soon:** add duration property for explicit deletion dates ([#245](https://github.com/rfsbraz/deleterr/issues/245)) ([747e6d0](https://github.com/rfsbraz/deleterr/commit/747e6d03948ac2d1d9c5ffc68ade1948885e7425)), closes [#244](https://github.com/rfsbraz/deleterr/issues/244)
+* **leaving-soon:** notification dedup, library names, and saved items ([#255](https://github.com/rfsbraz/deleterr/issues/255)) ([64cb6f1](https://github.com/rfsbraz/deleterr/commit/64cb6f14f314c7117c0a0dd3118e175320d32dc8))
+
 ## [0.2.12](https://github.com/rfsbraz/deleterr/compare/v0.2.11...v0.2.12) (2026-03-05)
 
 
