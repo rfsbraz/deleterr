@@ -241,6 +241,13 @@ class LeavingSoonConfig(BaseModel):
     Subsequent runs: Delete previously tagged items, then tag new candidates
     """
 
+    duration: Optional[str] = Field(
+        default=None,
+        description="How long items stay in 'Leaving Soon' before deletion. "
+                    "Used to display the deletion date in notifications and collection descriptions. "
+                    "Examples: '7d', '24h', '30d'. Defaults to schedule interval if not set",
+        json_schema_extra={"example": "7d"},
+    )
     collection: Optional[LeavingSoonCollectionConfig] = Field(
         default=None,
         description="Configuration for the Leaving Soon collection",
@@ -248,6 +255,12 @@ class LeavingSoonConfig(BaseModel):
     labels: Optional[LeavingSoonLabelConfig] = Field(
         default=None,
         description="Configuration for the Leaving Soon labels",
+    )
+    batch_size: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Number of items to add to the Leaving Soon collection per cycle. "
+                    "Defaults to the library's max_actions_per_run if not set",
     )
 
 
@@ -606,7 +619,10 @@ class LibraryConfig(BaseModel):
     @model_validator(mode="after")
     def check_leaving_soon_requires_preview(self):
         if self.leaving_soon is not None:
-            if self.preview_next is not None and self.preview_next == 0:
+            # When batch_size is set, preview_next=0 is allowed (batch_size takes over)
+            if self.leaving_soon.batch_size is not None:
+                pass
+            elif self.preview_next is not None and self.preview_next == 0:
                 raise ValueError(
                     "leaving_soon requires preview_next > 0 (cannot be explicitly set to 0)"
                 )
@@ -752,6 +768,10 @@ class LeavingSoonNotificationConfig(BaseModel):
     from the main notification config.
     """
 
+    include_saved_items: bool = Field(
+        default=True,
+        description="Include items that were saved from deletion (watched or no longer matching) in the notification",
+    )
     template: Optional[str] = Field(
         default=None,
         description="Path to custom HTML template for emails. Uses built-in template if not specified",

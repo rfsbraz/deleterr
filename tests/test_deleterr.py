@@ -10,7 +10,8 @@ from app.deleterr import Deleterr, acquire_instance_lock, release_instance_lock,
 @pytest.fixture
 def deleterr():
     with patch("app.deleterr.MediaCleaner", return_value=MagicMock()), \
-         patch("app.deleterr.PlexMediaServer", return_value=MagicMock()):
+         patch("app.deleterr.PlexMediaServer", return_value=MagicMock()), \
+         patch("app.deleterr.StateManager", return_value=MagicMock()):
         yield Deleterr(MagicMock())
 
 

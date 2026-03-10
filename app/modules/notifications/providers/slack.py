@@ -78,8 +78,9 @@ class SlackProvider(BaseNotificationProvider):
         # Header block
         blocks.append(self._build_header_block(result))
 
-        # Summary block
-        blocks.append(self._build_summary_block(result))
+        # Summary block (skip deletion stats for leaving_soon)
+        if not result.is_leaving_soon:
+            blocks.append(self._build_summary_block(result))
 
         # Deleted items section
         if result.deleted_items:
@@ -90,6 +91,11 @@ class SlackProvider(BaseNotificationProvider):
         if result.preview_items:
             blocks.append({"type": "divider"})
             blocks.extend(self._build_preview_blocks(result))
+
+        # Saved items section (for leaving_soon notifications)
+        if result.saved_items:
+            blocks.append({"type": "divider"})
+            blocks.extend(self._build_saved_blocks(result))
 
         # Context/footer
         blocks.append(self._build_context_block(result))
@@ -200,20 +206,57 @@ class SlackProvider(BaseNotificationProvider):
         preview_size = self.format_size(result.total_preview_bytes)
         preview_count = len(result.preview_items)
 
+        deletion_date_str = getattr(result, "deletion_date_str", None)
+        if deletion_date_str:
+            header_text = f"*Next Scheduled Deletions* ({preview_count} items, {preview_size}) - Removal date: *{deletion_date_str}*"
+        else:
+            header_text = f"*Next Scheduled Deletions* ({preview_count} items, {preview_size})"
+
         blocks.append({
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*Next Scheduled Deletions* ({preview_count} items, {preview_size})",
+                "text": header_text,
+            },
+        })
+
+        use_library_name = getattr(result, "is_leaving_soon", False)
+        lines = []
+        for item in result.preview_items[:5]:
+            title = item.format_title_with_library() if use_library_name else item.format_title()
+            lines.append(f"• {title} - {self.format_size(item.size_bytes)}")
+
+        if len(result.preview_items) > 5:
+            lines.append(f"_...and {len(result.preview_items) - 5} more_")
+
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": "\n".join(lines),
+            },
+        })
+
+        return blocks
+
+    def _build_saved_blocks(self, result: RunResult) -> list[dict]:
+        """Build blocks for items saved from death row."""
+        blocks = []
+
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Saved from Deletion* ({len(result.saved_items)} items no longer scheduled for deletion)",
             },
         })
 
         lines = []
-        for item in result.preview_items[:5]:
-            lines.append(f"• {item.format_title()} - {self.format_size(item.size_bytes)}")
+        for item in result.saved_items[:5]:
+            lines.append(f"• {item.format_title_with_library()}")
 
-        if len(result.preview_items) > 5:
-            lines.append(f"_...and {len(result.preview_items) - 5} more_")
+        if len(result.saved_items) > 5:
+            lines.append(f"_...and {len(result.saved_items) - 5} more_")
 
         blocks.append({
             "type": "section",

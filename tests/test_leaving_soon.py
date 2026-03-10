@@ -490,6 +490,7 @@ class TestDeathRowIntersectionLogic:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = MagicMock()
             instance.run_result = MagicMock()
             instance.radarr = {}
@@ -539,7 +540,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_server.find_item.return_value = plex_item_a
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -574,7 +575,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance._get_deletion_candidates = MagicMock(return_value=[])
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -621,7 +622,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_server.find_item.return_value = plex_item_c
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -680,7 +681,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -737,7 +738,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_server.find_item.return_value = plex_item_a
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved = deleterr_instance._process_death_row(
                 library, sonarr_instance, "show", unfiltered_all_show_data
             )
 
@@ -792,6 +793,7 @@ class TestLeavingSoonNotifications:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = mock_notification_manager
             instance.run_result = MagicMock()
             instance.radarr = {}
@@ -964,6 +966,7 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = MagicMock()
             instance.run_result = MagicMock()
             instance.radarr = {"Radarr": MagicMock()}
@@ -999,7 +1002,7 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
 
         # Mock _process_death_row to return preview items
         deleterr_instance._process_death_row = MagicMock(
-            return_value=(0, [], preview_items)  # saved_space=0, deleted=[], preview=items
+            return_value=(0, [], preview_items, [])  # saved_space=0, deleted=[], preview=items, saved=[]
         )
 
         # Track what _log_preview receives
@@ -1043,7 +1046,7 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
 
         # Mock _process_death_row to return preview items
         deleterr_instance._process_death_row = MagicMock(
-            return_value=(0, [], preview_items)  # saved_space=0, deleted=[], preview=items
+            return_value=(0, [], preview_items, [])  # saved_space=0, deleted=[], preview=items, saved=[]
         )
 
         # Track what _log_preview receives
@@ -1134,7 +1137,7 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
         call_count = [0]
 
         def mock_death_row(*args):
-            return (0, [], leaving_soon_preview)
+            return (0, [], leaving_soon_preview, [])
 
         def mock_normal(*args):
             return (0, [], normal_preview)
@@ -1199,6 +1202,7 @@ class TestThresholdNotMetClearsDeathRow:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = MagicMock()
             instance.run_result = MagicMock()
             instance.radarr = {"Radarr": MagicMock()}
@@ -1227,7 +1231,7 @@ class TestThresholdNotMetClearsDeathRow:
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=False):
             from app.deleterr import Deleterr
             # Call the actual method
-            saved_space, deleted, preview = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved = deleterr_instance._process_death_row(
                 library, deleterr_instance.radarr["Radarr"], "movie"
             )
 
@@ -1437,6 +1441,7 @@ class TestDeathRowLogging:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = MagicMock()
             instance.run_result = MagicMock()
             instance.radarr = {"Radarr": MagicMock()}
@@ -1548,6 +1553,7 @@ class TestDeathRowDeletionErrorHandling:
             instance.config = mock_config
             instance.media_server = MagicMock()
             instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
             instance.notifications = MagicMock()
             instance.run_result = MagicMock()
             instance.radarr = {"Radarr": MagicMock()}
@@ -1594,7 +1600,7 @@ class TestDeathRowDeletionErrorHandling:
         deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -1625,7 +1631,7 @@ class TestDeathRowDeletionErrorHandling:
         deleterr_instance.media_server.find_item.return_value = plex_item
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -1712,7 +1718,7 @@ class TestDeathRowDeletionErrorHandling:
         deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved = deleterr_instance._process_death_row(
                 library, sonarr_instance, "show"
             )
 

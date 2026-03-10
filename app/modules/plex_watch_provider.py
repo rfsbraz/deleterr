@@ -34,7 +34,7 @@ class PlexWatchProvider:
         Tautulli: a dict keyed by GUID and rating key, with values containing
         last_watched, title, and year.
         """
-        history = self.plex.history(librarySectionID=int(section))
+        history = self.plex.history(librarySectionID=int(section), maxresults=100000)
 
         if not history:
             return {}
@@ -42,10 +42,12 @@ class PlexWatchProvider:
         last_activity = {}
         for item in history:
             viewed_at = item.viewedAt
+            if not viewed_at:
+                continue
             if isinstance(viewed_at, datetime):
-                last_watched = int(viewed_at.timestamp())
+                last_watched = viewed_at
             else:
-                last_watched = int(viewed_at) if viewed_at else 0
+                last_watched = datetime.fromtimestamp(float(viewed_at))
 
             is_episode = item.type == "episode"
             title = item.grandparentTitle if is_episode else item.title
@@ -130,11 +132,13 @@ class PlexWatchProvider:
                 if account.name == username:
                     self._account_id_cache[username] = account.id
                     return account.id
+            # Lookup succeeded but user was not found - cache the negative result
+            self._account_id_cache[username] = None
+            return None
         except Exception as e:
+            # Do not cache on failure so subsequent calls can retry the API
             logger.warning(f"Failed to fetch Plex system accounts: {e}")
-
-        self._account_id_cache[username] = None
-        return None
+            return None
 
     @staticmethod
     def _update_if_newer(activity_dict, key, entry):

@@ -56,6 +56,7 @@ class EmailProvider(BaseNotificationProvider):
         template_path: Optional[str] = None,
         subject: Optional[str] = None,
         context: Optional[dict] = None,
+        saved_items: Optional[list[DeletedItem]] = None,
     ) -> bool:
         """
         Send leaving soon notification email.
@@ -65,6 +66,7 @@ class EmailProvider(BaseNotificationProvider):
             template_path: Optional path to custom HTML template
             subject: Email subject (uses config default if not specified)
             context: Additional template context (e.g., seerr_url, plex_url)
+            saved_items: Optional list of items saved from death row
 
         Returns:
             True if email was sent successfully, False otherwise.
@@ -78,13 +80,13 @@ class EmailProvider(BaseNotificationProvider):
             )
 
             # Build template context
-            template_context = self._build_leaving_soon_context(items, context or {})
+            template_context = self._build_leaving_soon_context(items, context or {}, saved_items=saved_items)
 
             # Render HTML template
             html_content = self._render_leaving_soon_template(template_path, template_context)
 
             # Build plain text fallback
-            plain_content = self._build_leaving_soon_text(items)
+            plain_content = self._build_leaving_soon_text(items, context=template_context, saved_items=saved_items)
 
             return self._send_email(email_subject, html_content, plain_content)
 
@@ -267,6 +269,7 @@ class EmailProvider(BaseNotificationProvider):
         self,
         items: list[DeletedItem],
         extra_context: dict,
+        saved_items: Optional[list[DeletedItem]] = None,
     ) -> dict:
         """Build template context for leaving soon notification."""
         movies = [item for item in items if item.media_type == "movie"]
@@ -281,6 +284,7 @@ class EmailProvider(BaseNotificationProvider):
                     "year": m.year,
                     "size": self.format_size(m.size_bytes),
                     "library": m.library_name,
+                    "formatted_title": m.format_title_with_library(),
                 }
                 for m in movies
             ],
@@ -290,6 +294,7 @@ class EmailProvider(BaseNotificationProvider):
                     "year": s.year,
                     "size": self.format_size(s.size_bytes),
                     "library": s.library_name,
+                    "formatted_title": s.format_title_with_library(),
                 }
                 for s in shows
             ],
@@ -298,6 +303,17 @@ class EmailProvider(BaseNotificationProvider):
             "movie_count": len(movies),
             "show_count": len(shows),
         }
+
+        if saved_items:
+            context["saved_items"] = [
+                {
+                    "title": item.title,
+                    "year": item.year,
+                    "library": item.library_name,
+                    "formatted_title": item.format_title_with_library(),
+                }
+                for item in saved_items
+            ]
 
         # Merge extra context (e.g., plex_url, seerr_url)
         context.update(extra_context)
@@ -336,19 +352,25 @@ class EmailProvider(BaseNotificationProvider):
 
     def _build_leaving_soon_html_simple(self, context: dict) -> str:
         """Build simple HTML content when Jinja2 is unavailable or template fails."""
-        html = """<!DOCTYPE html>
+        deletion_date_str = context.get("deletion_date_str")
+        if deletion_date_str:
+            warning_text = f'The items below will be removed on <strong>{deletion_date_str}</strong>.'
+        else:
+            warning_text = 'The items below are scheduled for deletion on the next cleanup cycle.'
+
+        html = f"""<!DOCTYPE html>
 <html>
 <head>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
-        .container { max-width: 700px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .header { background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 30px; text-align: center; }
-        .header h1 { margin: 0; font-size: 28px; }
-        .content { padding: 30px; }
-        .warning { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 20px; margin-bottom: 25px; }
-        .section-title { font-size: 20px; font-weight: bold; color: #333; margin: 25px 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #e74c3c; }
-        .item { padding: 10px; margin-bottom: 10px; background: #f9f9f9; border-radius: 4px; }
-        .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999; }
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }}
+        .container {{ max-width: 700px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+        .header {{ background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 30px; text-align: center; }}
+        .header h1 {{ margin: 0; font-size: 28px; }}
+        .content {{ padding: 30px; }}
+        .warning {{ background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 20px; margin-bottom: 25px; }}
+        .section-title {{ font-size: 20px; font-weight: bold; color: #333; margin: 25px 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #e74c3c; }}
+        .item {{ padding: 10px; margin-bottom: 10px; background: #f9f9f9; border-radius: 4px; }}
+        .footer {{ background: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999; }}
     </style>
 </head>
 <body>
@@ -360,7 +382,7 @@ class EmailProvider(BaseNotificationProvider):
         <div class="content">
             <div class="warning">
                 <strong>⚠️ These titles will be removed soon</strong><br>
-                The items below are scheduled for deletion on the next cleanup cycle.
+                {warning_text}
                 If you want to keep any of them, watch them before then!
             </div>
 """
@@ -368,14 +390,17 @@ class EmailProvider(BaseNotificationProvider):
         if context.get("movies"):
             html += '<div class="section-title">🎬 Movies</div>'
             for movie in context["movies"]:
-                year = f" ({movie['year']})" if movie.get("year") else ""
-                html += f'<div class="item">{movie["title"]}{year} - {movie["size"]}</div>'
+                html += f'<div class="item">{movie.get("formatted_title", movie["title"])} - {movie["size"]}</div>'
 
         if context.get("shows"):
             html += '<div class="section-title">📺 TV Shows</div>'
             for show in context["shows"]:
-                year = f" ({show['year']})" if show.get("year") else ""
-                html += f'<div class="item">{show["title"]}{year} - {show["size"]}</div>'
+                html += f'<div class="item">{show.get("formatted_title", show["title"])} - {show["size"]}</div>'
+
+        if context.get("saved_items"):
+            html += '<div class="section-title" style="border-bottom-color: #2ECC71;">✅ Saved from Deletion</div>'
+            for item in context["saved_items"]:
+                html += f'<div class="item">{item.get("formatted_title", item["title"])}</div>'
 
         html += f"""
             <div style="margin-top: 20px; color: #666;">
@@ -391,12 +416,18 @@ class EmailProvider(BaseNotificationProvider):
 
         return html
 
-    def _build_leaving_soon_text(self, items: list[DeletedItem]) -> str:
+    def _build_leaving_soon_text(self, items: list[DeletedItem], context: Optional[dict] = None, saved_items: Optional[list[DeletedItem]] = None) -> str:
         """Build plain text content for leaving soon email."""
+        deletion_date_str = (context or {}).get("deletion_date_str")
+        if deletion_date_str:
+            schedule_text = f"The following titles will be removed on {deletion_date_str}."
+        else:
+            schedule_text = "The following titles are scheduled for deletion on the next cleanup cycle."
+
         lines = [
             "Leaving Soon - Content scheduled for removal",
             "",
-            "The following titles are scheduled for deletion on the next cleanup cycle.",
+            schedule_text,
             "If you want to keep any of them, watch them before then!",
             "",
         ]
@@ -407,16 +438,22 @@ class EmailProvider(BaseNotificationProvider):
         if movies:
             lines.append("Movies:")
             for m in movies:
-                lines.append(f"  - {m.format_title()} ({self.format_size(m.size_bytes)})")
+                lines.append(f"  - {m.format_title_with_library()} ({self.format_size(m.size_bytes)})")
             lines.append("")
 
         if shows:
             lines.append("TV Shows:")
             for s in shows:
-                lines.append(f"  - {s.format_title()} ({self.format_size(s.size_bytes)})")
+                lines.append(f"  - {s.format_title_with_library()} ({self.format_size(s.size_bytes)})")
             lines.append("")
 
         total_size = sum(item.size_bytes for item in items)
         lines.append(f"Total: {len(items)} items, {self.format_size(total_size)}")
+
+        if saved_items:
+            lines.append("")
+            lines.append("Saved from Deletion:")
+            for item in saved_items:
+                lines.append(f"  - {item.format_title_with_library()}")
 
         return "\n".join(lines)
