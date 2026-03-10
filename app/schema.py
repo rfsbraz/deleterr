@@ -727,6 +727,10 @@ class LeavingSoonNotificationConfig(BaseModel):
     from the main notification config.
     """
 
+    include_saved_items: bool = Field(
+        default=True,
+        description="Include items that were saved from deletion (watched or no longer matching) in the notification",
+    )
     template: Optional[str] = Field(
         default=None,
         description="Path to custom HTML template for emails. Uses built-in template if not specified",

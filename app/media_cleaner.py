@@ -932,19 +932,24 @@ class MediaCleaner:
             items_to_tag: List of media items from Radarr/Sonarr to tag
             media_type: 'movie' or 'show'
             deletion_date: Optional datetime when items will be deleted
+
+        Returns:
+            List of resolved Plex items (same order as items_to_tag, None for unresolved)
         """
         leaving_soon_config = library_config.get("leaving_soon")
         if not leaving_soon_config:
-            return
+            return []
 
         if not self.media_server:
             logger.warning("Media server not configured, cannot process leaving_soon")
-            return
+            return []
 
         library_name = library_config.get("name", "Unknown")
 
         # Find Plex items for the preview candidates
+        # resolved_plex_items maintains 1:1 mapping with items_to_tag (None for unresolved)
         plex_items = []
+        resolved_plex_items = []
         for item in items_to_tag:
             plex_item = self.media_server.find_item(
                 plex_library,
@@ -954,6 +959,7 @@ class MediaCleaner:
                 title=item.get("title"),
                 year=item.get("year"),
             )
+            resolved_plex_items.append(plex_item)
             if plex_item:
                 plex_items.append(plex_item)
             else:
@@ -978,6 +984,8 @@ class MediaCleaner:
             self._update_leaving_soon_labels(
                 plex_library, plex_items, labels_config
             )
+
+        return resolved_plex_items
 
     def _update_leaving_soon_collection(self, plex_library, plex_items, collection_config, deletion_date=None):
         """

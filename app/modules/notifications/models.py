@@ -36,6 +36,13 @@ class DeletedItem:
             return f"{self.title} ({self.year})"
         return self.title
 
+    def format_title_with_library(self) -> str:
+        """Format title with library name prefix and year."""
+        prefix = f"[{self.library_name}] " if self.library_name else ""
+        if self.year:
+            return f"{prefix}{self.title} ({self.year})"
+        return f"{prefix}{self.title}"
+
     @classmethod
     def from_radarr(cls, data: dict, library_name: str, instance_name: str) -> "DeletedItem":
         """Create DeletedItem from Radarr movie data."""
@@ -66,8 +73,10 @@ class RunResult:
     """Aggregates results from a Deleterr run."""
 
     is_dry_run: bool = True
+    is_leaving_soon: bool = False
     deleted_items: list[DeletedItem] = field(default_factory=list)
     preview_items: list[DeletedItem] = field(default_factory=list)
+    saved_items: list[DeletedItem] = field(default_factory=list)
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     library_stats: list[LibraryStats] = field(default_factory=list)
@@ -114,7 +123,7 @@ class RunResult:
 
     def has_content(self) -> bool:
         """Check if there's any content to report."""
-        return bool(self.deleted_items or self.preview_items)
+        return bool(self.deleted_items or self.preview_items or self.saved_items)
 
     @property
     def duration_seconds(self) -> Optional[float]:

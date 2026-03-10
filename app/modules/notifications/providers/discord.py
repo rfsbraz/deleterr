@@ -88,6 +88,10 @@ class DiscordProvider(BaseNotificationProvider):
         if result.preview_items:
             embeds.append(self._build_preview_embed(result))
 
+        # Saved items embed (if any, for leaving_soon notifications)
+        if result.saved_items:
+            embeds.append(self._build_saved_embed(result))
+
         payload = {
             "username": username,
             "embeds": embeds,
@@ -174,8 +178,10 @@ class DiscordProvider(BaseNotificationProvider):
             lines.append(f"**Removal date: {deletion_date_str}**")
             lines.append("")
 
+        use_library_name = getattr(result, "is_leaving_soon", False)
         for item in result.preview_items[:5]:
-            lines.append(f"• {item.format_title()} - {self.format_size(item.size_bytes)}")
+            title = item.format_title_with_library() if use_library_name else item.format_title()
+            lines.append(f"• {title} - {self.format_size(item.size_bytes)}")
 
         if len(result.preview_items) > 5:
             lines.append(f"*...and {len(result.preview_items) - 5} more*")
@@ -184,4 +190,20 @@ class DiscordProvider(BaseNotificationProvider):
             "title": "Next Scheduled Deletions",
             "description": "\n".join(lines),
             "color": self.COLOR_WARNING,
+        }
+
+    def _build_saved_embed(self, result: RunResult) -> dict:
+        """Build embed for items saved from death row."""
+        lines = [f"*{len(result.saved_items)} items no longer scheduled for deletion*", ""]
+
+        for item in result.saved_items[:5]:
+            lines.append(f"• {item.format_title_with_library()}")
+
+        if len(result.saved_items) > 5:
+            lines.append(f"*...and {len(result.saved_items) - 5} more*")
+
+        return {
+            "title": "Saved from Deletion",
+            "description": "\n".join(lines),
+            "color": self.COLOR_SUCCESS,
         }

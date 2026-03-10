@@ -342,7 +342,7 @@ class Deleterr:
             all_data: All show data from Sonarr (only needed for shows)
 
         Returns:
-            tuple: (saved_space, deleted_items, preview_candidates)
+            tuple: (saved_space, deleted_items, preview_candidates, saved_plex_items)
         """
         from app.media_cleaner import library_meets_disk_space_threshold
 
@@ -355,7 +355,7 @@ class Deleterr:
                     "death row will be cleared (no deletions needed)",
                     library_name,
                 )
-            return 0, [], []
+            return 0, [], [], []
 
         library_name = library.get("name", "Unknown")
         logger.info(f"Processing library '{library_name}' with leaving_soon (death row pattern)")
@@ -365,7 +365,7 @@ class Deleterr:
             plex_library = self.media_server.get_library(library_name)
         except Exception as e:
             logger.error(f"Failed to get Plex library '{library_name}': {e}")
-            return 0, [], []
+            return 0, [], [], []
 
         # Get death row items (items tagged on previous run)
         all_death_row_plex_items = self._get_death_row_items(library, plex_library)
@@ -425,6 +425,7 @@ class Deleterr:
 
         saved_space = 0
         deleted_items = []
+        saved_plex_items = []
         is_dry_run = self.config.settings.get("dry_run", True)
 
         if death_row_plex_items:
@@ -434,6 +435,13 @@ class Deleterr:
                 f"{len(items_to_delete)} still match deletion criteria"
                 + (f" ({filtered_out} protected by thresholds, exclusions, or watch activity since tagging)" if filtered_out > 0 else "")
             )
+            # Items "saved" from death row: they were on death row (eligible for deletion)
+            # but no longer match deletion criteria (watched, excluded, etc.)
+            if filtered_out > 0:
+                delete_keys = {k for k in candidate_by_plex_key if candidate_by_plex_key[k] in items_to_delete}
+                for plex_item in death_row_plex_items:
+                    if plex_item.ratingKey not in delete_keys:
+                        saved_plex_items.append(plex_item)
         else:
             logger.info("No items in leaving_soon (first run or empty death row)")
 
@@ -543,7 +551,7 @@ class Deleterr:
         # Combined: waiting items first (they must stay), then new candidates
         preview_candidates = waiting_media_items + new_candidates
 
-        return saved_space, deleted_items, preview_candidates
+        return saved_space, deleted_items, preview_candidates, saved_plex_items
 
     def _get_deletion_candidates(self, library, media_instance, plex_library, media_type, all_data=None, limit=None):
         """
@@ -610,7 +618,7 @@ class Deleterr:
 
                     if leaving_soon_config:
                         # Death row pattern: delete previously tagged items, tag new preview
-                        space, deleted, preview = self._process_death_row(
+                        space, deleted, preview, saved = self._process_death_row(
                             library, radarr, "movie"
                         )
                     else:
@@ -618,6 +626,7 @@ class Deleterr:
                         space, deleted, preview = self.media_cleaner.process_library_movies(
                             library, radarr
                         )
+                        saved = []
 
                     saved_space += space
                     self.libraries_processed += 1
@@ -632,7 +641,7 @@ class Deleterr:
                         # Process leaving_soon feature - tag preview items for next run
                         # Don't add to all_preview as these items are being tagged, not deleted
                         self._process_library_leaving_soon(
-                            library, preview, "movie"
+                            library, preview, "movie", saved_plex_items=saved
                         )
                     else:
                         # Normal flow: preview items will be deleted on next run
@@ -674,7 +683,7 @@ class Deleterr:
 
                     if leaving_soon_config:
                         # Death row pattern: delete previously tagged items, tag new preview
-                        space, deleted, preview = self._process_death_row(
+                        space, deleted, preview, saved = self._process_death_row(
                             library, sonarr, "show", unfiltered_all_show_data
                         )
                     else:
@@ -682,6 +691,7 @@ class Deleterr:
                         space, deleted, preview = self.media_cleaner.process_library(
                             library, sonarr, unfiltered_all_show_data
                         )
+                        saved = []
 
                     saved_space += space
                     self.libraries_processed += 1
@@ -696,7 +706,7 @@ class Deleterr:
                         # Process leaving_soon feature - tag preview items for next run
                         # Don't add to all_preview as these items are being tagged, not deleted
                         self._process_library_leaving_soon(
-                            library, preview, "show"
+                            library, preview, "show", saved_plex_items=saved
                         )
                     else:
                         # Normal flow: preview items will be deleted on next run
@@ -714,19 +724,20 @@ class Deleterr:
             # Log preview of next scheduled deletions
             self._log_preview(all_preview, "show")
 
-    def _process_library_leaving_soon(self, library, preview, media_type):
+    def _process_library_leaving_soon(self, library, preview, media_type, saved_plex_items=None):
         """
         Process leaving_soon feature for a library.
 
         Implements the "death row" pattern:
         - Tag preview items to collection/labels for warning before next deletion
         - Items that were tagged on the previous run have already been deleted
-        - Send leaving_soon notifications if configured
+        - Send leaving_soon notifications if configured (only for newly tagged items)
 
         Args:
             library: Library configuration dict
             preview: List of items that would be deleted next run
             media_type: 'movie' or 'show'
+            saved_plex_items: List of Plex items that were saved from death row
         """
         from app.media_cleaner import compute_deletion_date
 
@@ -776,33 +787,21 @@ class Deleterr:
             logger.error(f"Failed to get Plex library '{library.get('name')}': {e}")
             return
 
+        # Capture existing state keys BEFORE recording new tagged timestamps (for dedup)
+        library_name = library.get("name", "Unknown")
+        existing_keys = set(self.state_manager.get_tagged_dates(library_name).keys())
+
         # Process leaving_soon - tag preview items for next run
-        self.media_cleaner.process_leaving_soon(
+        resolved_plex_items = self.media_cleaner.process_leaving_soon(
             library, plex_library, preview, media_type, deletion_date=deletion_date
         )
 
         # Record tagged timestamps for duration enforcement
-        library_name = library.get("name", "Unknown")
+        tagged_items = {}
         if preview:
             now_iso = datetime.now().isoformat()
-            tagged_items = {}
-            for item in preview:
-                # Find the Plex item to get its ratingKey
-                if media_type == "movie":
-                    plex_item = self.media_server.find_item(
-                        plex_library,
-                        tmdb_id=item.get("tmdbId"),
-                        imdb_id=item.get("imdbId"),
-                        title=item.get("title"),
-                        year=item.get("year"),
-                    )
-                else:
-                    plex_item = self.media_server.find_item(
-                        plex_library,
-                        tvdb_id=item.get("tvdbId"),
-                        imdb_id=item.get("imdbId"),
-                        title=item.get("title"),
-                    )
+            for i, item in enumerate(preview):
+                plex_item = resolved_plex_items[i] if i < len(resolved_plex_items) else None
                 if plex_item:
                     tagged_items[str(plex_item.ratingKey)] = now_iso
 
@@ -819,32 +818,53 @@ class Deleterr:
         death_row_plex_items = self._get_death_row_items(library, plex_library)
         active_keys = {item.ratingKey for item in death_row_plex_items}
         # Also include the items we just tagged
-        if preview:
-            for item in preview:
-                if media_type == "movie":
-                    plex_item = self.media_server.find_item(
-                        plex_library,
-                        tmdb_id=item.get("tmdbId"),
-                        imdb_id=item.get("imdbId"),
-                        title=item.get("title"),
-                        year=item.get("year"),
-                    )
-                else:
-                    plex_item = self.media_server.find_item(
-                        plex_library,
-                        tvdb_id=item.get("tvdbId"),
-                        imdb_id=item.get("imdbId"),
-                        title=item.get("title"),
-                    )
-                if plex_item:
-                    active_keys.add(plex_item.ratingKey)
+        for plex_item in resolved_plex_items:
+            if plex_item:
+                active_keys.add(plex_item.ratingKey)
         self.state_manager.cleanup_library(library_name, active_keys)
 
-        # Send leaving_soon notifications if configured and there are items
-        if preview and self.notifications.is_leaving_soon_enabled():
-            self._send_leaving_soon_notification(library, preview, media_type, deletion_date)
+        # Determine which items to notify about
+        if not self.notifications.is_leaving_soon_enabled():
+            return
 
-    def _send_leaving_soon_notification(self, library, preview, media_type, deletion_date=None):
+        # Notification deduplication: only notify for newly tagged items
+        if leaving_soon_config.get("duration"):
+            # With duration: only notify for items not previously in state
+            newly_tagged_keys = set(tagged_items.keys()) - existing_keys
+            if newly_tagged_keys:
+                newly_tagged_preview = [
+                    item for i, item in enumerate(preview)
+                    if (i < len(resolved_plex_items)
+                        and resolved_plex_items[i]
+                        and str(resolved_plex_items[i].ratingKey) in newly_tagged_keys)
+                ]
+            else:
+                newly_tagged_preview = []
+        else:
+            # Without duration: items change every run, always notify
+            newly_tagged_preview = preview
+
+        # Build saved items for notification
+        saved_deleted_items = []
+        if saved_plex_items:
+            instance_name = library.get("radarr") or library.get("sonarr") or "Unknown"
+            for plex_item in saved_plex_items:
+                saved_deleted_items.append(DeletedItem(
+                    title=plex_item.title,
+                    year=getattr(plex_item, "year", None),
+                    media_type=media_type if media_type == "movie" else "show",
+                    size_bytes=0,
+                    library_name=library_name,
+                    instance_name=instance_name,
+                ))
+
+        if newly_tagged_preview or saved_deleted_items:
+            self._send_leaving_soon_notification(
+                library, newly_tagged_preview, media_type, deletion_date,
+                saved_items=saved_deleted_items,
+            )
+
+    def _send_leaving_soon_notification(self, library, preview, media_type, deletion_date=None, saved_items=None):
         """
         Send leaving_soon notification for preview items.
 
@@ -853,6 +873,7 @@ class Deleterr:
             preview: List of items scheduled for deletion
             media_type: 'movie' or 'show'
             deletion_date: Optional datetime when items will be deleted
+            saved_items: Optional list of DeletedItem objects for items saved from death row
         """
         # Convert preview items to DeletedItem objects for notification
         library_name = library.get("name", "Unknown")
@@ -871,6 +892,12 @@ class Deleterr:
                     DeletedItem.from_sonarr(item, library_name, instance_name)
                 )
 
+        # Check if saved items should be included
+        leaving_soon_notification_config = self.config.settings.get("notifications", {}).get("leaving_soon", {})
+        include_saved = leaving_soon_notification_config.get("include_saved_items", True)
+        if not include_saved:
+            saved_items = None
+
         # Get URLs for template context
         plex_url = self.config.settings.get("plex", {}).get("url")
         seerr_url = self.config.settings.get("seerr", {}).get("url")
@@ -881,6 +908,7 @@ class Deleterr:
                 plex_url=plex_url,
                 seerr_url=seerr_url,
                 deletion_date=deletion_date,
+                saved_items=saved_items,
             )
         except Exception as e:
             logger.error(f"Failed to send leaving_soon notification: {e}")

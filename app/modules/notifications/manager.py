@@ -180,6 +180,7 @@ class NotificationManager:
         plex_url: Optional[str] = None,
         seerr_url: Optional[str] = None,
         deletion_date: Optional[datetime] = None,
+        saved_items: Optional[list[DeletedItem]] = None,
     ) -> bool:
         """
         Send leaving soon notifications to all configured leaving_soon providers.
@@ -192,6 +193,7 @@ class NotificationManager:
             plex_url: Optional base Plex URL for "Watch Now" links
             seerr_url: Optional Seerr/Overseerr URL for "Request Again" links
             deletion_date: Optional datetime when items will be deleted
+            saved_items: Optional list of items saved from death row
 
         Returns:
             True if at least one provider succeeded, False otherwise.
@@ -200,7 +202,7 @@ class NotificationManager:
             logger.debug("Leaving soon notifications disabled or no providers configured")
             return False
 
-        if not items:
+        if not items and not saved_items:
             logger.debug("No items to send in leaving soon notification")
             return False
 
@@ -232,6 +234,7 @@ class NotificationManager:
                         template_path=template_path,
                         subject=subject,
                         context=context,
+                        saved_items=saved_items,
                     ):
                         success_count += 1
                         logger.info(f"Sent leaving soon notification via {provider.name}")
@@ -242,11 +245,13 @@ class NotificationManager:
                 else:
                     # For other providers, create a RunResult with preview items
                     # and attach deletion_date for providers that support it
-                    result = RunResult(is_dry_run=False)
+                    result = RunResult(is_dry_run=False, is_leaving_soon=True)
                     result.deletion_date = deletion_date
                     result.deletion_date_str = context.get("deletion_date_str")
                     for item in items:
                         result.add_preview(item)
+                    if saved_items:
+                        result.saved_items = saved_items
                     if provider.send(result):
                         success_count += 1
                         logger.info(f"Sent leaving soon notification via {provider.name}")
