@@ -331,6 +331,33 @@ class SeerrConfig(BaseModel):
     )
 
 
+class ProtectUnwatchedRequesters(BaseModel):
+    """
+    Protect content that hasn't been watched by the person who requested it via Seerr/Overseerr.
+
+    Combines Seerr request data with Tautulli per-user watch history.
+    If the requester hasn't watched the content yet, it's protected from deletion.
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable requester watch protection",
+    )
+    min_request_age_days: int = Field(
+        default=0,
+        description="Grace period: always protect requests younger than this many days, regardless of watch status",
+    )
+    max_protection_days: Optional[int] = Field(
+        default=None,
+        description="Expiry: allow deletion after this many days regardless of watch status. If not set, protection never expires",
+    )
+    user_mapping: dict[str, str] = Field(
+        default_factory=dict,
+        description="Manual mapping from Seerr username to Tautulli username, for cases where usernames differ between systems",
+        json_schema_extra={"example": {"seerr_user": "tautulli_user"}},
+    )
+
+
 class SeerrExclusions(BaseModel):
     """Seerr/Overseerr request-based exclusions."""
 
@@ -359,6 +386,11 @@ class SeerrExclusions(BaseModel):
     update_status: bool = Field(
         default=False,
         description="After deletion, mark the media as deleted in Seerr so it can be requested again",
+    )
+    protect_unwatched_requesters: Optional[ProtectUnwatchedRequesters] = Field(
+        default=None,
+        description="Protect content that hasn't been watched by the requester. "
+                    "Combines Seerr request data with Tautulli per-user watch history",
     )
 
 

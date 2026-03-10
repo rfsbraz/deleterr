@@ -7,7 +7,17 @@
       "bump-patch-for-minor-pre-major": true,
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
-      "include-v-in-tag": true
+      "include-v-in-tag": true,
+      "changelog-sections": [
+        {"type": "feat", "section": "Features"},
+        {"type": "fix", "section": "Bug Fixes"},
+        {"type": "perf", "section": "Performance"},
+        {"type": "deps", "section": "Dependencies"},
+        {"type": "chore", "hidden": true},
+        {"type": "ci", "hidden": true},
+        {"type": "test", "hidden": true},
+        {"type": "refactor", "hidden": true}
+      ]
     }
   }
 }

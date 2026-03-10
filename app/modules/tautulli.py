@@ -64,9 +64,18 @@ class Tautulli:
         # The get_history endpoint already returns guid, title, year, grandparent_title
         last_activity = {}
         for entry in filtered_data:
+            activity_entry = self._prepare_activity_entry(entry)
+
             guid = entry.get("guid")
             if guid:
-                last_activity[guid] = self._prepare_activity_entry(entry)
+                last_activity[guid] = activity_entry
+
+            # For TV shows, the guid from history is the episode GUID, not the
+            # show GUID. Store a second entry keyed by the show's rating key so
+            # find_watched_data can match via plex_media_item.ratingKey.
+            rating_key = str(entry.get(key, ""))
+            if rating_key:
+                last_activity[rating_key] = activity_entry
 
         logger.debug("Processed %d unique items from history", len(last_activity))
         return last_activity
@@ -99,6 +108,43 @@ class Tautulli:
             if raw_data[0].get("grandparent_rating_key", "")
             else "rating_key"
         )
+
+    def has_user_watched(self, section, rating_key, grandparent_rating_key, user):
+        """
+        Check if a specific user has watched a media item.
+
+        Args:
+            section: Plex library section ID
+            rating_key: Rating key for movies
+            grandparent_rating_key: Grandparent rating key for TV shows
+            user: Tautulli username to check
+
+        Returns:
+            True if the user has watched the item, False otherwise
+        """
+        if not user:
+            return False
+
+        # For TV shows, use grandparent_rating_key; for movies, use rating_key
+        key = grandparent_rating_key or rating_key
+        if not key:
+            return False
+
+        try:
+            history = self.api.get_history(
+                section_id=section,
+                user=user,
+                grandparent_rating_key=grandparent_rating_key if grandparent_rating_key else None,
+                rating_key=rating_key if not grandparent_rating_key else None,
+                length=1,
+            )
+            data = history.get("data", [])
+            return len(data) > 0
+        except Exception as e:
+            logger.warning(
+                f"Failed to check watch history for user '{user}' (key: {key}): {e}"
+            )
+            return False
 
     def _prepare_activity_entry(self, entry):
         """
