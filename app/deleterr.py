@@ -358,6 +358,15 @@ class Deleterr:
             return 0, [], [], []
 
         library_name = library.get("name", "Unknown")
+
+        # Warn if max_actions_per_run was explicitly set alongside leaving_soon
+        if library.get("leaving_soon") and library.get("max_actions_per_run", 10) != 10:
+            logger.warning(
+                "Library '%s': max_actions_per_run is ignored when leaving_soon is configured. "
+                "Use leaving_soon.batch_size to control how many items enter the collection per cycle.",
+                library_name,
+            )
+
         logger.info(f"Processing library '{library_name}' with leaving_soon (death row pattern)")
 
         # Get Plex library
@@ -502,10 +511,14 @@ class Deleterr:
 
         # Build the list of items that should be in the leaving_soon collection:
         # 1. Items still waiting for duration to elapse (must stay in collection)
-        # 2. New preview candidates (limited by preview_next)
-        preview_next = library.get("preview_next")
-        if preview_next is None:
-            preview_next = library.get("max_actions_per_run", 10)
+        # 2. New preview candidates (limited by batch_size or preview_next)
+        batch_size = leaving_soon_config.get("batch_size") if leaving_soon_config else None
+        if batch_size is not None:
+            preview_next = batch_size
+        else:
+            preview_next = library.get("preview_next")
+            if preview_next is None:
+                preview_next = library.get("max_actions_per_run", 10)
 
         deleted_ids = {m.get("id") for m in deleted_items}
 

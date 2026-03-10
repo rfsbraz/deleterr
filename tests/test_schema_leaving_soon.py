@@ -58,6 +58,7 @@ class TestLeavingSoonConfig:
         config = LeavingSoonConfig()
         assert config.collection is None
         assert config.labels is None
+        assert config.batch_size is None
 
     def test_with_collection(self):
         """Test configuring with collection."""
@@ -84,6 +85,23 @@ class TestLeavingSoonConfig:
         assert config.collection is not None
         assert config.labels is not None
 
+    def test_batch_size_valid(self):
+        """Test that batch_size accepts a positive integer."""
+        config = LeavingSoonConfig(batch_size=5)
+        assert config.batch_size == 5
+
+    def test_batch_size_zero_rejected(self):
+        """Test that batch_size=0 fails validation (ge=1)."""
+        with pytest.raises(ValidationError):
+            LeavingSoonConfig(batch_size=0)
+
+    def test_batch_size_none_defaults(self):
+        """Test that omitting batch_size keeps existing behavior."""
+        config = LeavingSoonConfig(
+            collection=LeavingSoonCollectionConfig(),
+        )
+        assert config.batch_size is None
+
     def test_from_dict(self):
         """Test creating config from nested dictionary."""
         data = {
@@ -97,6 +115,15 @@ class TestLeavingSoonConfig:
         config = LeavingSoonConfig(**data)
         assert config.collection.name == "Leaving Soon"
         assert config.labels.name == "leaving-soon"
+
+    def test_from_dict_with_batch_size(self):
+        """Test creating config with batch_size from dictionary."""
+        data = {
+            "batch_size": 3,
+            "collection": {"name": "Leaving Soon"},
+        }
+        config = LeavingSoonConfig(**data)
+        assert config.batch_size == 3
 
 
 class TestLibraryConfigWithLeavingSoon:
@@ -178,6 +205,36 @@ class TestLibraryConfigWithLeavingSoon:
                 ),
             )
         assert "leaving_soon requires preview_next > 0" in str(exc_info.value)
+
+    def test_batch_size_with_preview_next_zero(self):
+        """Test that batch_size allows preview_next=0."""
+        config = LibraryConfig(
+            name="Movies",
+            radarr="Radarr",
+            action_mode="delete",
+            preview_next=0,
+            leaving_soon=LeavingSoonConfig(
+                batch_size=5,
+                collection=LeavingSoonCollectionConfig(),
+            ),
+        )
+        assert config.leaving_soon.batch_size == 5
+        assert config.preview_next == 0
+
+    def test_batch_size_with_both_set(self):
+        """Test that both batch_size and preview_next can coexist."""
+        config = LibraryConfig(
+            name="Movies",
+            radarr="Radarr",
+            action_mode="delete",
+            preview_next=10,
+            leaving_soon=LeavingSoonConfig(
+                batch_size=3,
+                collection=LeavingSoonCollectionConfig(),
+            ),
+        )
+        assert config.leaving_soon.batch_size == 3
+        assert config.preview_next == 10
 
     def test_leaving_soon_works_with_preview_next_positive(self):
         """Test that leaving_soon works when preview_next is positive."""

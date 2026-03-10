@@ -256,6 +256,12 @@ class LeavingSoonConfig(BaseModel):
         default=None,
         description="Configuration for the Leaving Soon labels",
     )
+    batch_size: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Number of items to add to the Leaving Soon collection per cycle. "
+                    "Defaults to the library's max_actions_per_run if not set",
+    )
 
 
 class TraktExclusions(BaseModel):
@@ -613,7 +619,10 @@ class LibraryConfig(BaseModel):
     @model_validator(mode="after")
     def check_leaving_soon_requires_preview(self):
         if self.leaving_soon is not None:
-            if self.preview_next is not None and self.preview_next == 0:
+            # When batch_size is set, preview_next=0 is allowed (batch_size takes over)
+            if self.leaving_soon.batch_size is not None:
+                pass
+            elif self.preview_next is not None and self.preview_next == 0:
                 raise ValueError(
                     "leaving_soon requires preview_next > 0 (cannot be explicitly set to 0)"
                 )
