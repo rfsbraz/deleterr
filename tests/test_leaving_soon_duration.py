@@ -354,13 +354,14 @@ class TestDurationEnforcement:
         assert "100" not in remaining
         assert "200" in remaining
 
-    def test_waiting_items_included_in_preview(self, deleterr_instance):
-        """Items waiting for duration should be included in preview_candidates.
+    def test_waiting_items_skip_candidate_scan(self, deleterr_instance):
+        """When all death row items are waiting, skip the expensive candidate scan.
 
         Scenario: schedule runs daily, duration is 7d.
-        Items tagged 2 days ago should NOT be deleted but MUST stay in the
-        collection (via preview_candidates) so they aren't dropped.
-        New candidates should NOT be added while items are still waiting.
+        Items tagged 2 days ago should NOT be deleted. Since all items are still
+        waiting, the candidate scan is skipped entirely (performance optimization)
+        and preview_candidates is None, signaling the caller to leave the
+        collection/state untouched.
         """
         now = datetime.now()
         # Item tagged 2 days ago - still within 7d duration
@@ -378,26 +379,9 @@ class TestDurationEnforcement:
         )
         deleterr_instance.media_server.get_items_with_label.return_value = []
 
-        # The waiting item is also a deletion candidate
-        waiting_media = {"id": 1, "title": "Waiting Movie", "tmdbId": "tt001", "year": 2024, "sizeOnDisk": 1000}
-        new_candidate = {"id": 2, "title": "New Movie", "tmdbId": "tt002", "year": 2023, "sizeOnDisk": 2000}
-
-        # find_item maps: plex_item for waiting movie, new_plex for new candidate
-        new_plex_item = self._make_plex_item(200, "New Movie")
-
-        def find_item_side_effect(lib, **kwargs):
-            tmdb = kwargs.get("tmdb_id")
-            if tmdb == "tt001":
-                return waiting_plex_item
-            if tmdb == "tt002":
-                return new_plex_item
-            return None
-
-        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
-
-        # _get_deletion_candidates returns both items
+        # _get_deletion_candidates should NOT be called (performance optimization)
         deleterr_instance._get_deletion_candidates = MagicMock(
-            return_value=[waiting_media, new_candidate]
+            return_value=[{"id": 1, "title": "Waiting Movie", "tmdbId": "tt001"}]
         )
 
         library = {
@@ -415,11 +399,11 @@ class TestDurationEnforcement:
         assert len(deleted_items) == 0
         assert saved_space == 0
 
-        # Only the waiting item should be in preview - no new candidates
-        # while items are still on death row
-        preview_titles = {m["title"] for m in preview_candidates}
-        assert "Waiting Movie" in preview_titles
-        assert "New Movie" not in preview_titles
+        # preview_candidates is None - signals caller to skip collection update
+        assert preview_candidates is None
+
+        # The expensive candidate scan was skipped
+        deleterr_instance._get_deletion_candidates.assert_not_called()
 
     def test_new_candidates_added_when_death_row_empty(self, deleterr_instance):
         """New candidates are added to preview when death row is empty (first run or after clearing)."""
