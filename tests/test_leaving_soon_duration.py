@@ -118,6 +118,26 @@ class TestComputeDeletionDate:
         # Should be from schedule, in the future
         assert result > datetime.now()
 
+    def test_with_tagged_at_uses_tagged_time(self):
+        """Test that tagged_at is used as base time instead of now."""
+        tagged_at = datetime(2026, 3, 1, 12, 0, 0)
+        result = compute_deletion_date(duration_str="7d", tagged_at=tagged_at)
+        expected = datetime(2026, 3, 8, 12, 0, 0)
+        assert result == expected
+
+    def test_without_tagged_at_uses_now(self):
+        """Test that without tagged_at, now is used as base time."""
+        result = compute_deletion_date(duration_str="7d")
+        expected = datetime.now() + timedelta(days=7)
+        assert abs((result - expected).total_seconds()) < 2
+
+    def test_tagged_at_produces_stable_date(self):
+        """Test that calling compute_deletion_date with same tagged_at always gives same result."""
+        tagged_at = datetime(2026, 3, 5, 10, 0, 0)
+        result1 = compute_deletion_date(duration_str="7d", tagged_at=tagged_at)
+        result2 = compute_deletion_date(duration_str="7d", tagged_at=tagged_at)
+        assert result1 == result2 == datetime(2026, 3, 12, 10, 0, 0)
+
     def test_with_invalid_schedule(self):
         """Test that invalid schedule returns None."""
         result = compute_deletion_date(schedule="not-a-cron")
@@ -387,7 +407,7 @@ class TestDurationEnforcement:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted_items, preview_candidates, saved_plex_items = deleterr_instance._process_death_row(
+            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -440,7 +460,7 @@ class TestDurationEnforcement:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted_items, preview_candidates, saved_plex_items = deleterr_instance._process_death_row(
+            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -495,7 +515,7 @@ class TestDurationEnforcement:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted_items, preview_candidates, saved_plex_items = deleterr_instance._process_death_row(
+            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -577,7 +597,7 @@ class TestBatchSize:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            _, _, preview_candidates, _ = deleterr_instance._process_death_row(
+            _, _, preview_candidates, _, _ = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -613,7 +633,7 @@ class TestBatchSize:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            _, _, preview_candidates, _ = deleterr_instance._process_death_row(
+            _, _, preview_candidates, _, _ = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -648,7 +668,7 @@ class TestBatchSize:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            _, _, preview_candidates, _ = deleterr_instance._process_death_row(
+            _, _, preview_candidates, _, _ = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -684,7 +704,7 @@ class TestBatchSize:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            _, _, preview_candidates, _ = deleterr_instance._process_death_row(
+            _, _, preview_candidates, _, _ = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -719,7 +739,7 @@ class TestBatchSize:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            _, _, preview_candidates, _ = deleterr_instance._process_death_row(
+            _, _, preview_candidates, _, _ = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -961,7 +981,7 @@ class TestSavedItems:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted_items, preview_candidates, saved_plex_items = deleterr_instance._process_death_row(
+            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -1034,3 +1054,220 @@ class TestFormatTitleWithLibrary:
         )
         result.saved_items = [item]
         assert result.has_content() is True
+
+
+class TestDuplicateLibraryNameStatePreservation:
+    """Regression test for the 'removal date advancing daily' bug.
+
+    When two library entries share the same Plex library name (e.g. two Sonarr
+    instances both configured as "TV Shows"), the first library entry's cleanup
+    was wiping state entries, causing the second entry to re-tag items with
+    fresh timestamps every run.  This made the notification's removal date
+    advance by one day with each run instead of staying fixed.
+
+    The fix ensures that death row items discovered before processing are
+    passed through to cleanup so their state entries are preserved even if
+    the collection is cleared during processing.
+    """
+
+    @pytest.fixture
+    def deleterr_instance(self, tmp_path):
+        """Create a Deleterr instance with real StateManager."""
+        state_file = str(tmp_path / ".deleterr_state.json")
+
+        with patch("app.deleterr.MediaCleaner", return_value=MagicMock()), \
+             patch("app.deleterr.PlexMediaServer", return_value=MagicMock()), \
+             patch("app.deleterr.NotificationManager", return_value=MagicMock()):
+            from app.deleterr import Deleterr
+            config = MagicMock()
+            config.settings = {
+                "dry_run": False,
+                "plex": {"url": "http://localhost:32400", "token": "test"},
+                "sonarr": [],
+                "radarr": [],
+                "notifications": {
+                    "leaving_soon": {
+                        "discord": {"webhook_url": "http://test"},
+                    },
+                },
+                "scheduler": {},
+            }
+            d = Deleterr.__new__(Deleterr)
+            d.config = config
+            d.media_server = MagicMock()
+            d.media_cleaner = MagicMock()
+            d.notifications = MagicMock()
+            d.notifications.is_leaving_soon_enabled.return_value = True
+            d.state_manager = StateManager(state_file=state_file)
+            d.run_result = MagicMock()
+            d.sonarr = {}
+            d.radarr = {}
+            d.libraries_processed = 0
+            d.libraries_failed = 0
+            return d
+
+    def _make_plex_item(self, rating_key, title="Test Item"):
+        item = MagicMock()
+        item.ratingKey = rating_key
+        item.title = title
+        item.year = 2024
+        return item
+
+    def test_second_library_entry_preserves_state_from_first(self, deleterr_instance):
+        """State entries survive when a second library entry with the same name processes.
+
+        Simulates the exact scenario from the bug report:
+        1. Library [1/3] "TV Shows" finds Derek/Manhunt in the collection,
+           but they don't match this instance's deletion rules.  Preview is
+           empty, so process_leaving_soon clears the collection.
+        2. Library [2/3] "TV Shows" processes next.  The state entries from
+           step 1 must still exist so that set_tagged_dates does NOT
+           overwrite them and notification dedup works correctly.
+        """
+        original_tagged_at = "2026-03-10T20:02:29"
+        plex_derek = self._make_plex_item(1001, "Derek")
+        plex_manhunt = self._make_plex_item(1002, "Manhunt (2019)")
+
+        # Seed state: items were tagged on March 10
+        deleterr_instance.state_manager.set_tagged_dates("TV Shows", {
+            "1001": original_tagged_at,
+            "1002": original_tagged_at,
+        })
+
+        library_1 = {
+            "name": "TV Shows",
+            "sonarr": "Sonarr-1",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+        }
+
+        # Library [1/3]: empty preview (items don't match this instance's rules)
+        # but death row had items before processing
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = []
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        # After process_leaving_soon clears the collection, _get_death_row_items
+        # returns empty (collection is now empty)
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+
+        deleterr_instance._process_library_leaving_soon(
+            library_1, [], "show",
+            death_row_plex_items=[plex_derek, plex_manhunt],
+        )
+
+        # State entries must still exist after library [1/3]'s cleanup
+        tagged_dates = deleterr_instance.state_manager.get_tagged_dates("TV Shows")
+        assert "1001" in tagged_dates, "Derek's state entry was wiped by cleanup"
+        assert "1002" in tagged_dates, "Manhunt's state entry was wiped by cleanup"
+        assert tagged_dates["1001"] == original_tagged_at
+        assert tagged_dates["1002"] == original_tagged_at
+
+    def test_second_library_entry_does_not_re_notify(self, deleterr_instance):
+        """With state preserved, the second library entry's dedup prevents re-notification.
+
+        This is the end-to-end scenario: library [1/3] processes (preserving
+        state), then library [2/3] tags the same items.  Because state already
+        has the keys, notification dedup filters them out.
+        """
+        original_tagged_at = "2026-03-10T20:02:29"
+        plex_derek = self._make_plex_item(1001, "Derek")
+        plex_manhunt = self._make_plex_item(1002, "Manhunt (2019)")
+
+        # Seed state
+        deleterr_instance.state_manager.set_tagged_dates("TV Shows", {
+            "1001": original_tagged_at,
+            "1002": original_tagged_at,
+        })
+
+        # --- Library [1/3]: empty preview, death row items passed for preservation ---
+        library_1 = {
+            "name": "TV Shows",
+            "sonarr": "Sonarr-1",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+        }
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = []
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+
+        deleterr_instance._process_library_leaving_soon(
+            library_1, [], "show",
+            death_row_plex_items=[plex_derek, plex_manhunt],
+        )
+
+        deleterr_instance.notifications.send_leaving_soon.reset_mock()
+
+        # --- Library [2/3]: tags the same items ---
+        library_2 = {
+            "name": "TV Shows",
+            "sonarr": "Sonarr-2",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+        }
+        preview_items = [
+            {"title": "Derek", "tvdbId": 101, "year": 2013,
+             "statistics": {"sizeOnDisk": 2330000000, "episodeFileCount": 14}},
+            {"title": "Manhunt (2019)", "tvdbId": 102, "year": 2019,
+             "statistics": {"sizeOnDisk": 3860000000, "episodeFileCount": 8}},
+        ]
+
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = [
+            plex_derek, plex_manhunt,
+        ]
+        # After tagging, death row now has items
+        deleterr_instance._get_death_row_items = MagicMock(
+            return_value=[plex_derek, plex_manhunt],
+        )
+
+        deleterr_instance._process_library_leaving_soon(
+            library_2, preview_items, "show",
+            death_row_plex_items=[],
+        )
+
+        # State timestamps must NOT have been overwritten
+        tagged_dates = deleterr_instance.state_manager.get_tagged_dates("TV Shows")
+        assert tagged_dates["1001"] == original_tagged_at
+        assert tagged_dates["1002"] == original_tagged_at
+
+        # No notification should have been sent (items were already in state)
+        assert not deleterr_instance.notifications.send_leaving_soon.called, \
+            "Notification was sent for items already in state (dedup failed)"
+
+    def test_deletion_date_uses_tagged_at_not_now(self, deleterr_instance):
+        """The notification deletion date must be based on tagged_at + duration, not now + duration.
+
+        When items were tagged on March 10 with a 7d duration, the removal
+        date must always be March 17 regardless of when the next run happens.
+        """
+        tagged_at = "2026-03-10T20:02:29"
+        plex_derek = self._make_plex_item(1001, "Derek")
+
+        deleterr_instance.state_manager.set_tagged_dates("TV Shows", {
+            "1001": tagged_at,
+        })
+
+        library = {
+            "name": "TV Shows",
+            "sonarr": "Sonarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+        }
+        preview = [
+            {"title": "Derek", "tvdbId": 101, "year": 2013,
+             "statistics": {"sizeOnDisk": 2330000000, "episodeFileCount": 14}},
+        ]
+
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = [plex_derek]
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_derek])
+
+        deleterr_instance._process_library_leaving_soon(
+            library, preview, "show",
+            death_row_plex_items=[plex_derek],
+        )
+
+        # Check the deletion_date passed to process_leaving_soon
+        call_kwargs = deleterr_instance.media_cleaner.process_leaving_soon.call_args
+        deletion_date = call_kwargs[1].get("deletion_date") or call_kwargs[0][4] if len(call_kwargs[0]) > 4 else None
+        if deletion_date is None:
+            deletion_date = call_kwargs[1].get("deletion_date")
+
+        # The deletion date should be tagged_at + 7d = March 17, NOT now + 7d
+        expected = datetime.fromisoformat(tagged_at) + timedelta(days=7)
+        assert deletion_date == expected, \
+            f"Deletion date {deletion_date} should be {expected} (tagged_at + 7d), not now + 7d"

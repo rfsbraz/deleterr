@@ -60,18 +60,21 @@ def parse_leaving_soon_duration(duration_str):
         return timedelta(hours=value)
 
 
-def compute_deletion_date(duration_str=None, schedule=None):
+def compute_deletion_date(duration_str=None, schedule=None, tagged_at=None):
     """
     Compute the expected deletion date for leaving soon items.
 
     Priority:
-        1. If duration is set, use now + duration
+        1. If duration is set, use tagged_at + duration (or now + duration for new items)
         2. If schedule is available, compute next fire time from schedule
         3. Otherwise, return None (no date available)
 
     Args:
         duration_str: Optional duration string like '7d' or '24h'
         schedule: Optional schedule string (cron expression or preset)
+        tagged_at: Optional datetime when the item was tagged.
+                   If provided, deletion date = tagged_at + duration.
+                   If None, deletion date = now + duration (new items).
 
     Returns:
         datetime of expected deletion, or None if not determinable
@@ -82,7 +85,8 @@ def compute_deletion_date(duration_str=None, schedule=None):
     if duration_str:
         try:
             delta = parse_leaving_soon_duration(duration_str)
-            return now + delta
+            base_time = tagged_at if tagged_at is not None else now
+            return base_time + delta
         except ValueError as e:
             logger.warning(f"Invalid leaving_soon duration '{duration_str}': {e}")
             # Fall through to schedule-based calculation

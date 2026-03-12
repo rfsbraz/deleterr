@@ -342,7 +342,8 @@ class Deleterr:
             all_data: All show data from Sonarr (only needed for shows)
 
         Returns:
-            tuple: (saved_space, deleted_items, preview_candidates, saved_plex_items)
+            tuple: (saved_space, deleted_items, preview_candidates, saved_plex_items,
+                    all_death_row_plex_items)
         """
         from app.media_cleaner import library_meets_disk_space_threshold
 
@@ -355,7 +356,7 @@ class Deleterr:
                     "death row will be cleared (no deletions needed)",
                     library_name,
                 )
-            return 0, [], [], []
+            return 0, [], [], [], []
 
         library_name = library.get("name", "Unknown")
 
@@ -374,7 +375,7 @@ class Deleterr:
             plex_library = self.media_server.get_library(library_name)
         except Exception as e:
             logger.error(f"Failed to get Plex library '{library_name}': {e}")
-            return 0, [], [], []
+            return 0, [], [], [], []
 
         # Get death row items (items tagged on previous run)
         all_death_row_plex_items = self._get_death_row_items(library, plex_library)
@@ -576,7 +577,7 @@ class Deleterr:
             ][:preview_next]
             preview_candidates = waiting_media_items + new_candidates
 
-        return saved_space, deleted_items, preview_candidates, saved_plex_items
+        return saved_space, deleted_items, preview_candidates, saved_plex_items, all_death_row_plex_items
 
     def _get_deletion_candidates(self, library, media_instance, plex_library, media_type, all_data=None, limit=None):
         """
@@ -643,7 +644,7 @@ class Deleterr:
 
                     if leaving_soon_config:
                         # Death row pattern: delete previously tagged items, tag new preview
-                        space, deleted, preview, saved = self._process_death_row(
+                        space, deleted, preview, saved, prior_death_row = self._process_death_row(
                             library, radarr, "movie"
                         )
                     else:
@@ -652,6 +653,7 @@ class Deleterr:
                             library, radarr
                         )
                         saved = []
+                        prior_death_row = None
 
                     saved_space += space
                     self.libraries_processed += 1
@@ -666,7 +668,8 @@ class Deleterr:
                         # Process leaving_soon feature - tag preview items for next run
                         # Don't add to all_preview as these items are being tagged, not deleted
                         self._process_library_leaving_soon(
-                            library, preview, "movie", saved_plex_items=saved
+                            library, preview, "movie", saved_plex_items=saved,
+                            death_row_plex_items=prior_death_row,
                         )
                     else:
                         # Normal flow: preview items will be deleted on next run
@@ -708,7 +711,7 @@ class Deleterr:
 
                     if leaving_soon_config:
                         # Death row pattern: delete previously tagged items, tag new preview
-                        space, deleted, preview, saved = self._process_death_row(
+                        space, deleted, preview, saved, prior_death_row = self._process_death_row(
                             library, sonarr, "show", unfiltered_all_show_data
                         )
                     else:
@@ -717,6 +720,7 @@ class Deleterr:
                             library, sonarr, unfiltered_all_show_data
                         )
                         saved = []
+                        prior_death_row = None
 
                     saved_space += space
                     self.libraries_processed += 1
@@ -731,7 +735,8 @@ class Deleterr:
                         # Process leaving_soon feature - tag preview items for next run
                         # Don't add to all_preview as these items are being tagged, not deleted
                         self._process_library_leaving_soon(
-                            library, preview, "show", saved_plex_items=saved
+                            library, preview, "show", saved_plex_items=saved,
+                            death_row_plex_items=prior_death_row,
                         )
                     else:
                         # Normal flow: preview items will be deleted on next run
@@ -749,7 +754,7 @@ class Deleterr:
             # Log preview of next scheduled deletions
             self._log_preview(all_preview, "show")
 
-    def _process_library_leaving_soon(self, library, preview, media_type, saved_plex_items=None):
+    def _process_library_leaving_soon(self, library, preview, media_type, saved_plex_items=None, death_row_plex_items=None):
         """
         Process leaving_soon feature for a library.
 
@@ -763,6 +768,9 @@ class Deleterr:
             preview: List of items that would be deleted next run
             media_type: 'movie' or 'show'
             saved_plex_items: List of Plex items that were saved from death row
+            death_row_plex_items: List of Plex items that were on death row before processing.
+                                  Used to preserve state entries during cleanup when multiple
+                                  library entries share the same Plex library name.
         """
         from app.media_cleaner import compute_deletion_date
 
@@ -771,12 +779,27 @@ class Deleterr:
             return
 
         is_dry_run = self.config.settings.get("dry_run", True)
+        library_name = library.get("name", "Unknown")
 
         # Compute deletion date from duration or schedule
+        # Use the earliest tagged_at from state so existing items show a stable date
         scheduler_config = self.config.settings.get("scheduler", {})
+        duration_str_for_date = leaving_soon_config.get("duration")
+        earliest_tagged_at = None
+        if duration_str_for_date:
+            tagged_dates = self.state_manager.get_tagged_dates(library_name)
+            for ts_str in tagged_dates.values():
+                try:
+                    ts = datetime.fromisoformat(ts_str)
+                    if earliest_tagged_at is None or ts < earliest_tagged_at:
+                        earliest_tagged_at = ts
+                except (ValueError, TypeError):
+                    pass
+
         deletion_date = compute_deletion_date(
-            duration_str=leaving_soon_config.get("duration"),
+            duration_str=duration_str_for_date,
             schedule=scheduler_config.get("schedule"),
+            tagged_at=earliest_tagged_at,
         )
 
         # In dry_run mode, log what would be tagged but don't actually tag
@@ -813,7 +836,6 @@ class Deleterr:
             return
 
         # Capture existing state keys BEFORE recording new tagged timestamps (for dedup)
-        library_name = library.get("name", "Unknown")
         existing_keys = set(self.state_manager.get_tagged_dates(library_name).keys())
 
         # Process leaving_soon - tag preview items for next run
@@ -840,12 +862,18 @@ class Deleterr:
 
         # Clean up state entries for items no longer in collection
         # (handles items removed manually from the collection)
-        death_row_plex_items = self._get_death_row_items(library, plex_library)
-        active_keys = {item.ratingKey for item in death_row_plex_items}
+        current_death_row = self._get_death_row_items(library, plex_library)
+        active_keys = {item.ratingKey for item in current_death_row}
         # Also include the items we just tagged
         for plex_item in resolved_plex_items:
             if plex_item:
                 active_keys.add(plex_item.ratingKey)
+        # Preserve state for items that were on death row before this library entry
+        # processed them. This prevents a library entry from wiping state that belongs
+        # to another library entry sharing the same Plex library name.
+        if death_row_plex_items:
+            for item in death_row_plex_items:
+                active_keys.add(item.ratingKey)
         self.state_manager.cleanup_library(library_name, active_keys)
 
         # Determine which items to notify about
