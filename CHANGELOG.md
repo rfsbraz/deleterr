@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.15](https://github.com/rfsbraz/deleterr/compare/v0.2.14...v0.2.15) (2026-03-12)
+
+
+### Bug Fixes
+
+* **leaving-soon:** stable removal dates with duplicate library names ([#257](https://github.com/rfsbraz/deleterr/issues/257)) ([81dac87](https://github.com/rfsbraz/deleterr/commit/81dac87302bd2527d34b84f8662a71fbbdba92f2))
+
 ## [0.2.14](https://github.com/rfsbraz/deleterr/compare/v0.2.13...v0.2.14) (2026-03-11)
 
 
