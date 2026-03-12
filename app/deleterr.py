@@ -344,6 +344,8 @@ class Deleterr:
         Returns:
             tuple: (saved_space, deleted_items, preview_candidates, saved_plex_items,
                     all_death_row_plex_items)
+                preview_candidates is None when all death row items are waiting for
+                duration to elapse (signals caller to skip collection/state updates).
         """
         from app.media_cleaner import library_meets_disk_space_threshold
 
@@ -396,6 +398,17 @@ class Deleterr:
             ]
         else:
             death_row_plex_items = all_death_row_plex_items
+
+        # If all death row items are still waiting for duration, skip the expensive
+        # candidate scan. The collection/state are already correct from the previous run.
+        if duration_str and all_death_row_plex_items and not death_row_plex_items:
+            logger.info(
+                "All %d death row items in library '%s' are waiting for duration to elapse "
+                "- skipping candidate scan",
+                len(all_death_row_plex_items),
+                library_name,
+            )
+            return 0, [], None, [], all_death_row_plex_items
 
         death_row_keys = {item.ratingKey for item in death_row_plex_items}
 
@@ -664,14 +677,15 @@ class Deleterr:
                             DeletedItem.from_radarr(item, library_name, name)
                         )
 
-                    if leaving_soon_config:
+                    if leaving_soon_config and preview is not None:
                         # Process leaving_soon feature - tag preview items for next run
                         # Don't add to all_preview as these items are being tagged, not deleted
+                        # preview=None means all items are waiting - collection/state already correct
                         self._process_library_leaving_soon(
                             library, preview, "movie", saved_plex_items=saved,
                             death_row_plex_items=prior_death_row,
                         )
-                    else:
+                    elif not leaving_soon_config:
                         # Normal flow: preview items will be deleted on next run
                         all_preview.extend(preview)
 
@@ -731,14 +745,15 @@ class Deleterr:
                             DeletedItem.from_sonarr(item, library_name, name)
                         )
 
-                    if leaving_soon_config:
+                    if leaving_soon_config and preview is not None:
                         # Process leaving_soon feature - tag preview items for next run
                         # Don't add to all_preview as these items are being tagged, not deleted
+                        # preview=None means all items are waiting - collection/state already correct
                         self._process_library_leaving_soon(
                             library, preview, "show", saved_plex_items=saved,
                             death_row_plex_items=prior_death_row,
                         )
-                    else:
+                    elif not leaving_soon_config:
                         # Normal flow: preview items will be deleted on next run
                         all_preview.extend(preview)
 
