@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.16](https://github.com/rfsbraz/deleterr/compare/v0.2.15...v0.2.16) (2026-04-06)
+
+
+### Bug Fixes
+
+* **leaving-soon:** preserve collection items from other library entries sharing the same Plex library ([#264](https://github.com/rfsbraz/deleterr/issues/264)) ([9943ecd](https://github.com/rfsbraz/deleterr/commit/9943ecd00b01de7f033dbc9c68245ef945f2976d))
+
+
+### Performance
+
+* **leaving-soon:** skip candidate scan when all death row items are waiting ([#259](https://github.com/rfsbraz/deleterr/issues/259)) ([b5a2a16](https://github.com/rfsbraz/deleterr/commit/b5a2a166258a9d5bd20d2425611601513e81b47a))
+
 ## [0.2.15](https://github.com/rfsbraz/deleterr/compare/v0.2.14...v0.2.15) (2026-03-12)
 
 
