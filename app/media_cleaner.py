@@ -920,7 +920,7 @@ class MediaCleaner:
 
         return items_to_delete
 
-    def process_leaving_soon(self, library_config, plex_library, items_to_tag, media_type, deletion_date=None):
+    def process_leaving_soon(self, library_config, plex_library, items_to_tag, media_type, deletion_date=None, preserve_plex_items=None):
         """
         Update leaving soon collection and labels for preview items.
 
@@ -932,6 +932,9 @@ class MediaCleaner:
             items_to_tag: List of media items from Radarr/Sonarr to tag
             media_type: 'movie' or 'show'
             deletion_date: Optional datetime when items will be deleted
+            preserve_plex_items: List of Plex items from other library entries sharing the
+                                 same Plex library name. These are kept in the collection/labels
+                                 but not treated as newly tagged items.
 
         Returns:
             List of resolved Plex items (same order as items_to_tag, None for unresolved)
@@ -971,18 +974,33 @@ class MediaCleaner:
             f"Processing leaving_soon for library '{library_name}': {len(plex_items)} items to tag"
         )
 
+        # Combine own items with preserved foreign items for collection/label updates
+        all_collection_items = list(plex_items)
+        if preserve_plex_items:
+            # Avoid duplicates by ratingKey
+            existing_keys = {item.ratingKey for item in plex_items}
+            for item in preserve_plex_items:
+                if item.ratingKey not in existing_keys:
+                    all_collection_items.append(item)
+            if len(all_collection_items) > len(plex_items):
+                logger.debug(
+                    "Preserving %d foreign items in leaving_soon collection/labels for library '%s'",
+                    len(all_collection_items) - len(plex_items),
+                    library_name,
+                )
+
         # Update collection (presence of config = enabled)
         collection_config = leaving_soon_config.get("collection")
         if collection_config is not None:
             self._update_leaving_soon_collection(
-                plex_library, plex_items, collection_config, deletion_date=deletion_date
+                plex_library, all_collection_items, collection_config, deletion_date=deletion_date
             )
 
         # Update labels (presence of config = enabled)
         labels_config = leaving_soon_config.get("labels")
         if labels_config is not None:
             self._update_leaving_soon_labels(
-                plex_library, plex_items, labels_config
+                plex_library, all_collection_items, labels_config
             )
 
         return resolved_plex_items

@@ -540,7 +540,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_server.find_item.return_value = plex_item_a
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview, _saved, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved, _prior, _foreign = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -575,7 +575,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance._get_deletion_candidates = MagicMock(return_value=[])
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview, _saved, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved, _prior, _foreign = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -622,7 +622,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_server.find_item.return_value = plex_item_c
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview, _saved, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved, _prior, _foreign = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -681,7 +681,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview, _saved, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved, _prior, _foreign = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -738,7 +738,7 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_server.find_item.return_value = plex_item_a
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview, _saved, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved, _prior, _foreign = deleterr_instance._process_death_row(
                 library, sonarr_instance, "show", unfiltered_all_show_data
             )
 
@@ -1002,7 +1002,7 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
 
         # Mock _process_death_row to return preview items
         deleterr_instance._process_death_row = MagicMock(
-            return_value=(0, [], preview_items, [], [])  # saved_space=0, deleted=[], preview=items, saved=[], prior=[]
+            return_value=(0, [], preview_items, [], [], [])  # saved_space=0, deleted=[], preview=items, saved=[], prior=[], foreign=[]
         )
 
         # Track what _log_preview receives
@@ -1046,7 +1046,7 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
 
         # Mock _process_death_row to return preview items
         deleterr_instance._process_death_row = MagicMock(
-            return_value=(0, [], preview_items, [], [])  # saved_space=0, deleted=[], preview=items, saved=[], prior=[]
+            return_value=(0, [], preview_items, [], [], [])  # saved_space=0, deleted=[], preview=items, saved=[], prior=[], foreign=[]
         )
 
         # Track what _log_preview receives
@@ -1137,7 +1137,7 @@ class TestLeavingSoonPreviewDoesNotDuplicate:
         call_count = [0]
 
         def mock_death_row(*args):
-            return (0, [], leaving_soon_preview, [], [])
+            return (0, [], leaving_soon_preview, [], [], [])
 
         def mock_normal(*args):
             return (0, [], normal_preview)
@@ -1231,7 +1231,7 @@ class TestThresholdNotMetClearsDeathRow:
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=False):
             from app.deleterr import Deleterr
             # Call the actual method
-            saved_space, deleted, preview, _saved, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved, _prior, _foreign = deleterr_instance._process_death_row(
                 library, deleterr_instance.radarr["Radarr"], "movie"
             )
 
@@ -1600,7 +1600,7 @@ class TestDeathRowDeletionErrorHandling:
         deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview, _saved, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved, _prior, _foreign = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -1631,7 +1631,7 @@ class TestDeathRowDeletionErrorHandling:
         deleterr_instance.media_server.find_item.return_value = plex_item
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview, _saved, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved, _prior, _foreign = deleterr_instance._process_death_row(
                 library, radarr_instance, "movie"
             )
 
@@ -1718,7 +1718,7 @@ class TestDeathRowDeletionErrorHandling:
         deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted, preview, _saved, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted, preview, _saved, _prior, _foreign = deleterr_instance._process_death_row(
                 library, sonarr_instance, "show"
             )
 
@@ -1727,3 +1727,169 @@ class TestDeathRowDeletionErrorHandling:
         # Only Show B should be in deleted (Show A failed)
         assert len(deleted) == 1
         assert deleted[0]["title"] == "Show B"
+
+
+class TestSharedCollectionPreservation:
+    """Tests for preserving foreign items when multiple library entries share a Plex library.
+
+    When two library entries target the same Plex library name (e.g., "TV Shows" with
+    different series_type filters), they share the same leaving_soon collection. Each
+    entry must preserve items tagged by the other entry when updating the collection.
+    See: https://github.com/rfsbraz/deleterr/issues/259
+    """
+
+    @pytest.fixture
+    def mock_config(self):
+        return MagicMock(
+            settings={
+                "dry_run": False,
+                "plex": {"url": "http://localhost:32400", "token": "test_token"},
+                "radarr": [],
+                "sonarr": [{"name": "Sonarr", "url": "http://localhost:8989", "api_key": "test"}],
+                "libraries": [],
+                "ssl_verify": False,
+            }
+        )
+
+    @pytest.fixture
+    def deleterr_instance(self, mock_config):
+        with patch("app.deleterr.PlexMediaServer"), \
+             patch("app.deleterr.MediaCleaner"), \
+             patch("app.deleterr.NotificationManager"), \
+             patch("app.deleterr.DRadarr"), \
+             patch("app.deleterr.DSonarr"):
+
+            from app.deleterr import Deleterr
+
+            instance = object.__new__(Deleterr)
+            instance.config = mock_config
+            instance.media_server = MagicMock()
+            instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
+            instance.notifications = MagicMock()
+            instance.notifications.is_leaving_soon_enabled.return_value = False
+            instance.run_result = MagicMock()
+            instance.sonarr = {"Sonarr": MagicMock()}
+            instance.radarr = {}
+            instance.libraries_processed = 0
+            instance.libraries_failed = 0
+
+            return instance
+
+    def test_foreign_items_returned_when_not_in_candidates(self, deleterr_instance):
+        """Items in death row but not in this entry's candidates are returned as foreign."""
+        library = {
+            "name": "TV Shows",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+            "max_actions_per_run": 10,
+        }
+
+        # Entry 1 (daily) has show A in death row, but only show B is a candidate
+        plex_item_a = MagicMock(ratingKey=100)  # Tagged by entry 2 (standard)
+        plex_item_b = MagicMock(ratingKey=200)  # Tagged by entry 1 (daily)
+
+        deleterr_instance._get_death_row_items = MagicMock(
+            return_value=[plex_item_a, plex_item_b]
+        )
+
+        # Only show B matches this entry's deletion rules
+        media_b = {"id": 2, "title": "Daily Show B", "tvdbId": 200, "year": 2024,
+                   "statistics": {"sizeOnDisk": 5000, "episodeFileCount": 10}}
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[media_b])
+
+        # find_item maps media_b -> plex_item_b, media_a is not a candidate so not looked up
+        def find_item_side_effect(lib, **kwargs):
+            if kwargs.get("tvdb_id") == 200:
+                return plex_item_b
+            return None
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+
+        # State has both items tagged (by different entries, but same library name)
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        deleterr_instance.state_manager.get_tagged_dates.return_value = {
+            "100": (now - timedelta(days=10)).isoformat(),
+            "200": (now - timedelta(days=10)).isoformat(),
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            _, deleted, preview, saved, _, foreign = deleterr_instance._process_death_row(
+                library, deleterr_instance.sonarr["Sonarr"], "show"
+            )
+
+        # Show B was deleted (in candidates + eligible)
+        assert len(deleted) == 1
+        assert deleted[0]["title"] == "Daily Show B"
+
+        # Show A is foreign (in collection but not in this entry's candidates)
+        assert len(foreign) == 1
+        assert foreign[0].ratingKey == 100
+
+    def test_foreign_items_preserved_in_collection_update(self, standard_config, mock_media_server):
+        """Foreign items from other entries are included in collection update."""
+        mock_media_server.get_or_create_collection.return_value = MagicMock()
+
+        cleaner = MediaCleaner(standard_config, media_server=mock_media_server)
+
+        library_config = {
+            "name": "TV Shows",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        plex_library = MagicMock()
+
+        # This entry's items to tag
+        own_plex_item = MagicMock(ratingKey=200)
+        mock_media_server.find_item.return_value = own_plex_item
+
+        items_to_tag = [
+            {"title": "Daily Show", "year": 2024, "tvdbId": 200, "imdbId": None},
+        ]
+
+        # Foreign item from another entry
+        foreign_plex_item = MagicMock(ratingKey=100)
+
+        cleaner.process_leaving_soon(
+            library_config, plex_library, items_to_tag, "show",
+            preserve_plex_items=[foreign_plex_item],
+        )
+
+        # Collection should be updated with BOTH own and foreign items
+        set_items_call = mock_media_server.set_collection_items
+        assert set_items_call.called
+        collection_items = set_items_call.call_args[0][1]
+        item_keys = {item.ratingKey for item in collection_items}
+        assert 200 in item_keys, "Own item should be in collection"
+        assert 100 in item_keys, "Foreign item should be preserved in collection"
+
+    def test_foreign_items_not_duplicated(self, standard_config, mock_media_server):
+        """Foreign items already in own items are not duplicated."""
+        mock_media_server.get_or_create_collection.return_value = MagicMock()
+
+        cleaner = MediaCleaner(standard_config, media_server=mock_media_server)
+
+        library_config = {
+            "name": "TV Shows",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        plex_library = MagicMock()
+
+        plex_item = MagicMock(ratingKey=200)
+        mock_media_server.find_item.return_value = plex_item
+
+        items_to_tag = [
+            {"title": "Show", "year": 2024, "tvdbId": 200, "imdbId": None},
+        ]
+
+        # Same item passed as both own and foreign (edge case)
+        cleaner.process_leaving_soon(
+            library_config, plex_library, items_to_tag, "show",
+            preserve_plex_items=[plex_item],
+        )
+
+        # Should not duplicate
+        set_items_call = mock_media_server.set_collection_items
+        collection_items = set_items_call.call_args[0][1]
+        assert len(collection_items) == 1, "Item should not be duplicated"
