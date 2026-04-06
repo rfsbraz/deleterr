@@ -391,7 +391,7 @@ class TestDurationEnforcement:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior, _foreign = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -444,7 +444,7 @@ class TestDurationEnforcement:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior, _foreign = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -499,7 +499,7 @@ class TestDurationEnforcement:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior, _foreign = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -581,7 +581,7 @@ class TestBatchSize:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            _, _, preview_candidates, _, _ = deleterr_instance._process_death_row(
+            _, _, preview_candidates, _, _, _ = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -617,7 +617,7 @@ class TestBatchSize:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            _, _, preview_candidates, _, _ = deleterr_instance._process_death_row(
+            _, _, preview_candidates, _, _, _ = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -652,7 +652,7 @@ class TestBatchSize:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            _, _, preview_candidates, _, _ = deleterr_instance._process_death_row(
+            _, _, preview_candidates, _, _, _ = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -688,7 +688,7 @@ class TestBatchSize:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            _, _, preview_candidates, _, _ = deleterr_instance._process_death_row(
+            _, _, preview_candidates, _, _, _ = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -723,7 +723,7 @@ class TestBatchSize:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            _, _, preview_candidates, _, _ = deleterr_instance._process_death_row(
+            _, _, preview_candidates, _, _, _ = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 
@@ -965,7 +965,7 @@ class TestSavedItems:
         }
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior = deleterr_instance._process_death_row(
+            saved_space, deleted_items, preview_candidates, saved_plex_items, _prior, _foreign = deleterr_instance._process_death_row(
                 library, MagicMock(), "movie"
             )
 

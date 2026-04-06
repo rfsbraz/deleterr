@@ -358,7 +358,7 @@ class Deleterr:
                     "death row will be cleared (no deletions needed)",
                     library_name,
                 )
-            return 0, [], [], [], []
+            return 0, [], [], [], [], []
 
         library_name = library.get("name", "Unknown")
 
@@ -377,7 +377,7 @@ class Deleterr:
             plex_library = self.media_server.get_library(library_name)
         except Exception as e:
             logger.error(f"Failed to get Plex library '{library_name}': {e}")
-            return 0, [], [], [], []
+            return 0, [], [], [], [], []
 
         # Get death row items (items tagged on previous run)
         all_death_row_plex_items = self._get_death_row_items(library, plex_library)
@@ -408,7 +408,7 @@ class Deleterr:
                 len(all_death_row_plex_items),
                 library_name,
             )
-            return 0, [], None, [], all_death_row_plex_items
+            return 0, [], None, [], all_death_row_plex_items, []
 
         death_row_keys = {item.ratingKey for item in death_row_plex_items}
 
@@ -417,31 +417,32 @@ class Deleterr:
             library, media_instance, plex_library, media_type, all_data
         )
 
+        # Build a map of Plex ratingKey -> media item for all deletion candidates.
+        # This is needed both to find items to delete AND to identify which death row
+        # items belong to this library entry vs other entries sharing the same collection.
+        candidate_by_plex_key = {}
+        for media_item in all_deletion_candidates:
+            if media_type == "movie":
+                plex_item = self.media_server.find_item(
+                    plex_library,
+                    tmdb_id=media_item.get("tmdbId"),
+                    imdb_id=media_item.get("imdbId"),
+                    title=media_item.get("title"),
+                    year=media_item.get("year"),
+                )
+            else:
+                plex_item = self.media_server.find_item(
+                    plex_library,
+                    tvdb_id=media_item.get("tvdbId"),
+                    imdb_id=media_item.get("imdbId"),
+                    title=media_item.get("title"),
+                )
+            if plex_item:
+                candidate_by_plex_key[plex_item.ratingKey] = media_item
+
         # Items to delete = intersection of death row AND current candidates
-        # Only build the Plex lookup map if there are death row items to check
         items_to_delete = []
         if death_row_keys:
-            # Build a map of Plex ratingKey -> media item for candidates
-            candidate_by_plex_key = {}
-            for media_item in all_deletion_candidates:
-                if media_type == "movie":
-                    plex_item = self.media_server.find_item(
-                        plex_library,
-                        tmdb_id=media_item.get("tmdbId"),
-                        imdb_id=media_item.get("imdbId"),
-                        title=media_item.get("title"),
-                        year=media_item.get("year"),
-                    )
-                else:
-                    plex_item = self.media_server.find_item(
-                        plex_library,
-                        tvdb_id=media_item.get("tvdbId"),
-                        imdb_id=media_item.get("imdbId"),
-                        title=media_item.get("title"),
-                    )
-                if plex_item:
-                    candidate_by_plex_key[plex_item.ratingKey] = media_item
-
             for plex_key in death_row_keys:
                 if plex_key in candidate_by_plex_key:
                     items_to_delete.append(candidate_by_plex_key[plex_key])
@@ -451,20 +452,25 @@ class Deleterr:
         saved_plex_items = []
         is_dry_run = self.config.settings.get("dry_run", True)
 
+        # Log death row status and identify saved items.
+        # An item is "saved" if it's on death row, has a state entry (was tagged by this
+        # library name), but is NOT being deleted. This correctly identifies items that were
+        # previously eligible but are now protected (watched, excluded, etc.), even when
+        # multiple library entries share the same Plex library/collection name.
         if death_row_plex_items:
-            filtered_out = len(death_row_plex_items) - len(items_to_delete)
+            tagged_dates = self.state_manager.get_tagged_dates(library_name)
+            delete_keys = {k for k in candidate_by_plex_key if candidate_by_plex_key[k] in items_to_delete}
+            for plex_item in death_row_plex_items:
+                key = str(plex_item.ratingKey)
+                if key in tagged_dates and plex_item.ratingKey not in delete_keys:
+                    saved_plex_items.append(plex_item)
+
+            unmatched_count = len(death_row_plex_items) - len(items_to_delete)
             logger.info(
                 f"Found {len(death_row_plex_items)} items in leaving_soon, "
                 f"{len(items_to_delete)} still match deletion criteria"
-                + (f" ({filtered_out} protected by thresholds, exclusions, or watch activity since tagging)" if filtered_out > 0 else "")
+                + (f" ({unmatched_count} protected by thresholds, exclusions, or watch activity since tagging)" if unmatched_count > 0 else "")
             )
-            # Items "saved" from death row: they were on death row (eligible for deletion)
-            # but no longer match deletion criteria (watched, excluded, etc.)
-            if filtered_out > 0:
-                delete_keys = {k for k in candidate_by_plex_key if candidate_by_plex_key[k] in items_to_delete}
-                for plex_item in death_row_plex_items:
-                    if plex_item.ratingKey not in delete_keys:
-                        saved_plex_items.append(plex_item)
         else:
             logger.info("No items in leaving_soon (first run or empty death row)")
 
@@ -536,43 +542,47 @@ class Deleterr:
 
         deleted_ids = {m.get("id") for m in deleted_items}
 
-        # Get media items for duration-waiting Plex items (they need to stay in collection)
+        # Get media items for duration-waiting Plex items (they need to stay in collection).
+        # Items waiting but NOT in this entry's candidates are "foreign" - tagged by another
+        # library entry sharing the same Plex library/collection. These are preserved as raw
+        # Plex items since we can't look up their Radarr/Sonarr data.
         waiting_media_items = []
+        foreign_plex_items = []
         if duration_waiting_items:
-            # Build candidate_by_plex_key if not already built
-            if not death_row_keys:
-                candidate_by_plex_key = {}
-                for media_item in all_deletion_candidates:
-                    if media_type == "movie":
-                        plex_item = self.media_server.find_item(
-                            plex_library,
-                            tmdb_id=media_item.get("tmdbId"),
-                            imdb_id=media_item.get("imdbId"),
-                            title=media_item.get("title"),
-                            year=media_item.get("year"),
-                        )
-                    else:
-                        plex_item = self.media_server.find_item(
-                            plex_library,
-                            tvdb_id=media_item.get("tvdbId"),
-                            imdb_id=media_item.get("imdbId"),
-                            title=media_item.get("title"),
-                        )
-                    if plex_item:
-                        candidate_by_plex_key[plex_item.ratingKey] = media_item
-
             waiting_keys = {item.ratingKey for item in duration_waiting_items}
             waiting_media_items = [
                 candidate_by_plex_key[key]
                 for key in waiting_keys
                 if key in candidate_by_plex_key
             ]
+            # Foreign waiting items: in collection but not this entry's candidates
+            foreign_plex_items = [
+                item for item in duration_waiting_items
+                if item.ratingKey not in candidate_by_plex_key
+            ]
 
-        # When duration is configured and items are still on death row (waiting or just deleted),
-        # don't add new candidates. This ensures the current batch is fully processed before
-        # a new batch enters the collection. New candidates are only added when death row is empty.
-        if duration_str and all_death_row_plex_items:
-            # Death row has items - only keep the waiting ones, no new additions
+        # Also preserve eligible items from other entries (their duration may differ)
+        foreign_eligible = [
+            item for item in death_row_plex_items
+            if item.ratingKey not in candidate_by_plex_key
+        ]
+        foreign_plex_items.extend(foreign_eligible)
+
+        if foreign_plex_items:
+            logger.debug(
+                "Preserving %d items in collection from other library entries sharing '%s'",
+                len(foreign_plex_items),
+                library_name,
+            )
+
+        # When duration is configured and this entry has items on death row (waiting or just
+        # deleted), don't add new candidates. This ensures the current batch is fully processed
+        # before a new batch enters. Only check own items - foreign items don't block new batches.
+        own_in_death_row = any(
+            item.ratingKey in candidate_by_plex_key for item in all_death_row_plex_items
+        )
+        if duration_str and own_in_death_row:
+            # Own items on death row - hold the batch, no new additions
             preview_candidates = waiting_media_items
             if waiting_media_items:
                 logger.debug(
@@ -582,7 +592,7 @@ class Deleterr:
                     len(waiting_media_items),
                 )
         else:
-            # No duration or empty death row - add new candidates as usual
+            # No duration, empty own death row, or only foreign items - add new candidates
             waiting_ids = {m.get("id") for m in waiting_media_items}
             new_candidates = [
                 m for m in all_deletion_candidates
@@ -590,7 +600,7 @@ class Deleterr:
             ][:preview_next]
             preview_candidates = waiting_media_items + new_candidates
 
-        return saved_space, deleted_items, preview_candidates, saved_plex_items, all_death_row_plex_items
+        return saved_space, deleted_items, preview_candidates, saved_plex_items, all_death_row_plex_items, foreign_plex_items
 
     def _get_deletion_candidates(self, library, media_instance, plex_library, media_type, all_data=None, limit=None):
         """
@@ -657,7 +667,7 @@ class Deleterr:
 
                     if leaving_soon_config:
                         # Death row pattern: delete previously tagged items, tag new preview
-                        space, deleted, preview, saved, prior_death_row = self._process_death_row(
+                        space, deleted, preview, saved, prior_death_row, foreign = self._process_death_row(
                             library, radarr, "movie"
                         )
                     else:
@@ -667,6 +677,7 @@ class Deleterr:
                         )
                         saved = []
                         prior_death_row = None
+                        foreign = []
 
                     saved_space += space
                     self.libraries_processed += 1
@@ -684,6 +695,7 @@ class Deleterr:
                         self._process_library_leaving_soon(
                             library, preview, "movie", saved_plex_items=saved,
                             death_row_plex_items=prior_death_row,
+                            foreign_plex_items=foreign,
                         )
                     elif not leaving_soon_config:
                         # Normal flow: preview items will be deleted on next run
@@ -725,7 +737,7 @@ class Deleterr:
 
                     if leaving_soon_config:
                         # Death row pattern: delete previously tagged items, tag new preview
-                        space, deleted, preview, saved, prior_death_row = self._process_death_row(
+                        space, deleted, preview, saved, prior_death_row, foreign = self._process_death_row(
                             library, sonarr, "show", unfiltered_all_show_data
                         )
                     else:
@@ -735,6 +747,7 @@ class Deleterr:
                         )
                         saved = []
                         prior_death_row = None
+                        foreign = []
 
                     saved_space += space
                     self.libraries_processed += 1
@@ -752,6 +765,7 @@ class Deleterr:
                         self._process_library_leaving_soon(
                             library, preview, "show", saved_plex_items=saved,
                             death_row_plex_items=prior_death_row,
+                            foreign_plex_items=foreign,
                         )
                     elif not leaving_soon_config:
                         # Normal flow: preview items will be deleted on next run
@@ -769,7 +783,7 @@ class Deleterr:
             # Log preview of next scheduled deletions
             self._log_preview(all_preview, "show")
 
-    def _process_library_leaving_soon(self, library, preview, media_type, saved_plex_items=None, death_row_plex_items=None):
+    def _process_library_leaving_soon(self, library, preview, media_type, saved_plex_items=None, death_row_plex_items=None, foreign_plex_items=None):
         """
         Process leaving_soon feature for a library.
 
@@ -786,6 +800,9 @@ class Deleterr:
             death_row_plex_items: List of Plex items that were on death row before processing.
                                   Used to preserve state entries during cleanup when multiple
                                   library entries share the same Plex library name.
+            foreign_plex_items: List of Plex items in the collection/labels that belong to
+                                another library entry sharing the same Plex library name.
+                                These must be preserved through collection/label updates.
         """
         from app.media_cleaner import compute_deletion_date
 
@@ -855,7 +872,8 @@ class Deleterr:
 
         # Process leaving_soon - tag preview items for next run
         resolved_plex_items = self.media_cleaner.process_leaving_soon(
-            library, plex_library, preview, media_type, deletion_date=deletion_date
+            library, plex_library, preview, media_type, deletion_date=deletion_date,
+            preserve_plex_items=foreign_plex_items,
         )
 
         # Record tagged timestamps for duration enforcement
