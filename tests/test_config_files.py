@@ -8,6 +8,7 @@ from app.modules import tautulli, trakt, radarr, seerr
 
 
 class TestConfigFiles(unittest.TestCase):
+    @patch("app.config.test_radarr_connection", return_value=True)
     @patch.object(trakt.Trakt, "test_connection")
     @patch.object(seerr.Seerr, "test_connection", return_value=True)
     @patch.object(Config, "test_api_connection")
@@ -25,6 +26,7 @@ class TestConfigFiles(unittest.TestCase):
         mock_arr_test_connection,
         mock_seerr_test_connection,
         mock_trakt_test_connection,
+        mock_test_radarr_connection,
     ):
         config = load_config(filename)
         config.validate()
