@@ -1,6 +1,6 @@
 import os
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -449,3 +449,158 @@ class TestRootLevelKeyValidation:
         warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
         assert len(warning_messages) == 3, \
             f"Expected 3 warnings for 3 misplaced keys, got {len(warning_messages)}: {warning_messages}"
+
+
+class TestTransientRetryBehavior:
+    """Validation should retry transient connection errors so deleterr
+    self-heals when dependencies come up after it during stack boot, but must
+    fail fast on permanent errors and never restart-loop after exhausted retries.
+    """
+
+    def _build_config(self):
+        return Config({
+            "tautulli": {"url": "http://tautulli:8181", "api_key": "key"},
+            "libraries": [
+                {"name": "Movies", "action_mode": "delete", "radarr": "test"}
+            ],
+            "radarr": [
+                {"name": "test", "url": "http://radarr:7878", "api_key": "key"}
+            ],
+        })
+
+    def test_transient_failures_retry_then_succeed(self):
+        config = self._build_config()
+        config.VALIDATION_BASE_DELAY_SECONDS = 0
+        config.VALIDATION_MAX_DELAY_SECONDS = 0
+
+        # First two attempts fail transiently, third succeeds
+        attempts = {"n": 0}
+
+        def fake_validate_config():
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                config._last_failure_transient = True
+                return False
+            return True
+
+        with patch.object(Config, "validate_config", side_effect=fake_validate_config), \
+             patch("app.config.time.sleep") as mock_sleep:
+            config.validate()
+
+        assert attempts["n"] == 3
+        # Slept between attempts 1->2 and 2->3
+        assert mock_sleep.call_count == 2
+
+    def test_permanent_failure_does_not_retry(self):
+        config = self._build_config()
+
+        attempts = {"n": 0}
+
+        def fake_validate_config():
+            attempts["n"] += 1
+            config._last_failure_transient = False
+            return False
+
+        with patch.object(Config, "validate_config", side_effect=fake_validate_config), \
+             patch("app.config.time.sleep") as mock_sleep:
+            with pytest.raises(SystemExit):
+                config.validate()
+
+        assert attempts["n"] == 1
+        mock_sleep.assert_not_called()
+
+    def test_exhausted_transient_retries_eventually_hangs(self):
+        config = self._build_config()
+        config.VALIDATION_BASE_DELAY_SECONDS = 0
+        config.VALIDATION_MAX_DELAY_SECONDS = 0
+
+        def fake_validate_config():
+            config._last_failure_transient = True
+            return False
+
+        with patch.object(Config, "validate_config", side_effect=fake_validate_config), \
+             patch("app.config.time.sleep"):
+            with pytest.raises(SystemExit):
+                config.validate()
+
+    def test_tautulli_connection_refused_marks_transient(self):
+        config = self._build_config()
+
+        def raise_connection_refused():
+            raise Exception(
+                "HTTPConnectionPool(host='tautulli', port=8181): Max retries exceeded "
+                "with url: /api/v2 (Caused by NewConnectionError('Connection refused'))"
+            )
+
+        mock_tautulli = MagicMock()
+        mock_tautulli.test_connection.side_effect = raise_connection_refused
+
+        with patch("app.config.Tautulli", return_value=mock_tautulli):
+            assert config._validate_tautulli_watch_provider() is False
+
+        assert config._last_failure_transient is True
+
+    def test_tautulli_auth_failure_does_not_mark_transient(self):
+        config = self._build_config()
+
+        def raise_unauthorized():
+            raise Exception("HTTP 401 Unauthorized: invalid API key")
+
+        mock_tautulli = MagicMock()
+        mock_tautulli.test_connection.side_effect = raise_unauthorized
+
+        with patch("app.config.Tautulli", return_value=mock_tautulli):
+            assert config._validate_tautulli_watch_provider() is False
+
+        assert config._last_failure_transient is False
+
+    def test_radarr_connection_refused_marks_transient(self):
+        from app.config import test_radarr_connection
+        import requests as req
+
+        config = self._build_config()
+        connection = {
+            "name": "Radarr",
+            "url": "http://radarr:7878",
+            "api_key": "key",
+        }
+
+        with patch("app.config.requests.get", side_effect=req.exceptions.ConnectionError("refused")):
+            assert test_radarr_connection(connection, config=config) is False
+
+        assert config._last_failure_transient is True
+
+    def test_radarr_401_does_not_mark_transient(self):
+        from app.config import test_radarr_connection
+        import requests as req
+
+        config = self._build_config()
+        connection = {
+            "name": "Radarr",
+            "url": "http://radarr:7878",
+            "api_key": "key",
+        }
+
+        response = MagicMock()
+        response.status_code = 401
+        response.raise_for_status.side_effect = req.exceptions.HTTPError(response=response)
+
+        with patch("app.config.requests.get", return_value=response):
+            assert test_radarr_connection(connection, config=config) is False
+
+        assert config._last_failure_transient is False
+
+    def test_sonarr_connection_refused_marks_transient(self):
+        import requests as req
+
+        config = self._build_config()
+        connection = {
+            "name": "Sonarr",
+            "url": "http://sonarr:8989",
+            "api_key": "key",
+        }
+
+        with patch("app.config.requests.get", side_effect=req.exceptions.ConnectionError("refused")):
+            assert config.test_api_connection(connection) is False
+
+        assert config._last_failure_transient is True
