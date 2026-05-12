@@ -94,13 +94,13 @@ def test_test_leaving_soon_passes_seerr_url():
             return True
 
     config = {
-        "plex": {"url": "http://plex.example.com"},
-        "seerr": {"url": "http://seerr.example.com"},
+        "plex": {"url": "https://plex.example.com"},
+        "seerr": {"url": "https://seerr.example.com"},
     }
 
     assert test_notifications.test_leaving_soon(FakeManager(), config) is True
-    assert captured["plex_url"] == "http://plex.example.com"
-    assert captured["seerr_url"] == "http://seerr.example.com"
+    assert captured["plex_url"] == "https://plex.example.com"
+    assert captured["seerr_url"] == "https://seerr.example.com"
 
 
 def test_filter_providers_limits_run_summary_manager():
