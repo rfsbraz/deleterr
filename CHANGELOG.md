@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.18](https://github.com/rfsbraz/deleterr/compare/v0.2.17...v0.2.18) (2026-05-30)
+
+
+### Bug Fixes
+
+* **leaving-soon:** drop saved items from collection instead of preserving them as foreign ([#270](https://github.com/rfsbraz/deleterr/issues/270)) ([44ee2de](https://github.com/rfsbraz/deleterr/commit/44ee2decb6d4e49a3a4566285f7319a4942c0173))
+* **notifications:** make test notification script work ([#269](https://github.com/rfsbraz/deleterr/issues/269)) ([0b48fbf](https://github.com/rfsbraz/deleterr/commit/0b48fbf84313516227a32568be07af5ddb4fb8df))
+
 ## [0.2.17](https://github.com/rfsbraz/deleterr/compare/v0.2.16...v0.2.17) (2026-05-06)
 
 
