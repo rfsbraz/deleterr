@@ -275,9 +275,13 @@ docker run --rm -v ./config:/config deleterr \
 docker run --rm -v ./config:/config deleterr \
   python -m scripts.test_notifications --type run_summary
 
-# Test specific provider only
+# Test a specific provider only for leaving_soon notifications
 docker run --rm -v ./config:/config deleterr \
   python -m scripts.test_notifications --provider email
+
+# Test a specific provider only for run summary notifications
+docker run --rm -v ./config:/config deleterr \
+  python -m scripts.test_notifications --type run_summary --provider email
 
 # Preview without sending (dry run)
 docker run --rm -v ./config:/config deleterr \

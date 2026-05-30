@@ -15,8 +15,11 @@ Examples:
     # Test all leaving_soon notifications
     docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications
 
-    # Test only email provider
+    # Test only email provider for leaving_soon notifications
     docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications --provider email
+
+    # Test only email provider for run summary notifications
+    docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications --type run_summary --provider email
 
     # Test run summary notifications
     docker run --rm -v ./config:/config deleterr python -m scripts.test_notifications --type run_summary
@@ -26,6 +29,7 @@ Examples:
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -37,6 +41,39 @@ from app.config import load_config
 from app.modules.notifications.models import DeletedItem, RunResult
 from app.modules.notifications.manager import NotificationManager
 
+DEFAULT_CONFIG_PATH = "/config/settings.yaml"
+
+
+def init_console_logging() -> None:
+    """Initialize console logging for the standalone script."""
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    logger.init_logger(console=True, verbose=log_level == "DEBUG")
+
+
+def filter_providers(
+    manager: NotificationManager,
+    provider_filter: str | None,
+    leaving_soon: bool = False,
+) -> bool:
+    """Optionally limit the manager to a single provider by name."""
+    if not provider_filter:
+        return True
+
+    attr_name = "leaving_soon_providers" if leaving_soon else "providers"
+    providers = getattr(manager, attr_name)
+    filtered_providers = [provider for provider in providers if provider.name == provider_filter]
+    setattr(manager, attr_name, filtered_providers)
+
+    if filtered_providers:
+        logger.info(f"Testing only provider: {provider_filter}")
+        return True
+
+    notification_type = "leaving_soon" if leaving_soon else "run_summary"
+    logger.warning(
+        f"Provider '{provider_filter}' is not configured for {notification_type} notifications"
+    )
+    return False
+
 
 def create_sample_items() -> list[DeletedItem]:
     """Create sample DeletedItem objects for testing."""
@@ -47,9 +84,7 @@ def create_sample_items() -> list[DeletedItem]:
             media_type="movie",
             size_bytes=15_000_000_000,  # 15 GB
             library_name="Movies",
-            plex_id=12345,
-            tmdb_id=603,
-            imdb_id="tt0133093",
+            instance_name="Radarr",
         ),
         DeletedItem(
             title="Inception",
@@ -57,9 +92,7 @@ def create_sample_items() -> list[DeletedItem]:
             media_type="movie",
             size_bytes=12_500_000_000,  # 12.5 GB
             library_name="Movies",
-            plex_id=12346,
-            tmdb_id=27205,
-            imdb_id="tt1375666",
+            instance_name="Radarr",
         ),
         DeletedItem(
             title="Interstellar",
@@ -67,9 +100,7 @@ def create_sample_items() -> list[DeletedItem]:
             media_type="movie",
             size_bytes=18_000_000_000,  # 18 GB
             library_name="4K Movies",
-            plex_id=12347,
-            tmdb_id=157336,
-            imdb_id="tt0816692",
+            instance_name="Radarr",
         ),
         DeletedItem(
             title="Breaking Bad",
@@ -77,9 +108,7 @@ def create_sample_items() -> list[DeletedItem]:
             media_type="show",
             size_bytes=85_000_000_000,  # 85 GB
             library_name="TV Shows",
-            plex_id=22345,
-            tmdb_id=1396,
-            imdb_id="tt0903747",
+            instance_name="Sonarr",
         ),
         DeletedItem(
             title="The Office",
@@ -87,9 +116,7 @@ def create_sample_items() -> list[DeletedItem]:
             media_type="show",
             size_bytes=120_000_000_000,  # 120 GB
             library_name="TV Shows",
-            plex_id=22346,
-            tmdb_id=2316,
-            imdb_id="tt0386676",
+            instance_name="Sonarr",
         ),
     ]
 
@@ -99,14 +126,14 @@ def create_sample_run_result(is_dry_run: bool = False) -> RunResult:
     items = create_sample_items()
     movies = [item for item in items if item.media_type == "movie"]
     shows = [item for item in items if item.media_type == "show"]
-
-    return RunResult(
-        deleted_movies=movies[:2],  # 2 deleted movies
-        deleted_shows=shows[:1],     # 1 deleted show
-        preview_items=items[2:],     # remaining as preview
-        total_freed_bytes=sum(item.size_bytes for item in movies[:2] + shows[:1]),
-        is_dry_run=is_dry_run,
-    )
+    result = RunResult(is_dry_run=is_dry_run)
+    for item in movies[:2]:  # 2 deleted movies
+        result.add_deleted(item)
+    for item in shows[:1]:  # 1 deleted show
+        result.add_deleted(item)
+    for item in items[2:]:  # remaining as preview
+        result.add_preview(item)
+    return result
 
 
 def test_leaving_soon(
@@ -120,23 +147,28 @@ def test_leaving_soon(
         logger.warning("No leaving_soon notifications configured")
         return False
 
+    if not filter_providers(manager, provider_filter, leaving_soon=True):
+        return False
+
     items = create_sample_items()
 
     # Get URLs from config
     plex_url = None
-    overseerr_url = None
+    seerr_url = None
 
     if "plex" in config:
         plex_url = config["plex"].get("url")
-    if "overseerr" in config:
-        overseerr_url = config["overseerr"].get("url")
+    if "seerr" in config:
+        seerr_url = config["seerr"].get("url")
+    elif "overseerr" in config:
+        seerr_url = config["overseerr"].get("url")
 
     logger.info("=" * 60)
     logger.info("Testing Leaving Soon Notifications")
     logger.info("=" * 60)
     logger.info(f"Sample items: {len(items)} ({sum(1 for i in items if i.media_type == 'movie')} movies, {sum(1 for i in items if i.media_type == 'show')} shows)")
     logger.info(f"Plex URL: {plex_url or 'Not configured'}")
-    logger.info(f"Overseerr URL: {overseerr_url or 'Not configured'}")
+    logger.info(f"Seerr URL: {seerr_url or 'Not configured'}")
     logger.info("-" * 60)
 
     if dry_run:
@@ -148,7 +180,7 @@ def test_leaving_soon(
     success = manager.send_leaving_soon(
         items=items,
         plex_url=plex_url,
-        overseerr_url=overseerr_url,
+        seerr_url=seerr_url,
     )
 
     if success:
@@ -165,11 +197,14 @@ def test_run_summary(
     dry_run: bool = False,
 ) -> bool:
     """Test run summary notifications."""
-    if not manager.enabled:
+    if not manager.is_enabled():
         logger.warning("Notifications are disabled in config")
         return False
 
-    result = create_sample_run_result(is_dry_run=False)
+    if not filter_providers(manager, provider_filter, leaving_soon=False):
+        return False
+
+    result = create_sample_run_result(is_dry_run=dry_run)
 
     logger.info("=" * 60)
     logger.info("Testing Run Summary Notifications")
@@ -184,7 +219,7 @@ def test_run_summary(
         logger.info("[DRY-RUN] Would send run summary notification")
         return True
 
-    success = manager.send(result)
+    success = manager.send_run_summary(result)
 
     if success:
         logger.info("Run summary notification sent successfully!")
@@ -230,6 +265,8 @@ def show_config_status(config: dict) -> None:
 
 
 def main():
+    init_console_logging()
+
     parser = argparse.ArgumentParser(
         description="Test notification providers with sample data",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -256,35 +293,42 @@ def main():
         action="store_true",
         help="Show configuration status only",
     )
+    parser.add_argument(
+        "--config",
+        default=DEFAULT_CONFIG_PATH,
+        help=f"Path to config file (default: {DEFAULT_CONFIG_PATH})",
+    )
 
     args = parser.parse_args()
 
     # Load config
     try:
-        config = load_config()
+        config = load_config(args.config)
     except Exception as e:
         logger.error(f"Failed to load config: {e}")
-        logger.error("Make sure /config/settings.yaml exists and is valid")
+        logger.error(f"Make sure {args.config} exists and is valid")
         sys.exit(1)
 
+    settings = config.settings
+
     if args.status:
-        show_config_status(config)
+        show_config_status(settings)
         sys.exit(0)
 
     # Show config status first
-    show_config_status(config)
+    show_config_status(settings)
 
     # Initialize notification manager
-    notifications_config = config.get("notifications", {})
+    notifications_config = settings.get("notifications", {})
     if not notifications_config:
         logger.error("No notifications configured in settings.yaml")
         sys.exit(1)
 
-    manager = NotificationManager(notifications_config)
+    manager = NotificationManager(config)
 
     # Run the appropriate test
     if args.type == "leaving_soon":
-        success = test_leaving_soon(manager, config, args.provider, args.dry_run)
+        success = test_leaving_soon(manager, settings, args.provider, args.dry_run)
     else:
         success = test_run_summary(manager, args.provider, args.dry_run)
 
