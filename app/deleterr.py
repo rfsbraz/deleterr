@@ -542,29 +542,47 @@ class Deleterr:
 
         deleted_ids = {m.get("id") for m in deleted_items}
 
-        # Get media items for duration-waiting Plex items (they need to stay in collection).
-        # Items waiting but NOT in this entry's candidates are "foreign" - tagged by another
-        # library entry sharing the same Plex library/collection. These are preserved as raw
-        # Plex items since we can't look up their Radarr/Sonarr data.
+        # Distinguish items this entry owns from items tagged by another library entry
+        # sharing the same Plex library/collection name.
+        #
+        # An item is OWN if it belongs to this entry's media universe (everything the entry
+        # manages, BEFORE deletion rules are applied). Own items that are not current deletion
+        # candidates have been "saved" since tagging (watched, excluded, or no longer past
+        # threshold) and must LEAVE the collection - they are no longer leaving soon.
+        #
+        # An item is FOREIGN if it is NOT in this entry's universe; it was tagged by a sibling
+        # library entry and must be PRESERVED so that entry doesn't lose its items.
+        #
+        # Using candidate membership alone (the previous heuristic) wrongly treated own saved
+        # items as foreign and preserved them forever, causing the collection to grow without
+        # bound across runs.
+        universe_ids = self._get_universe_ids(library, media_instance, media_type, all_data)
+        own_plex_keys = set(candidate_by_plex_key.keys())
+        for item in all_death_row_plex_items:
+            if self._is_universe_member(item, universe_ids):
+                own_plex_keys.add(item.ratingKey)
+
+        # Get media items for duration-waiting Plex items that are still deletion candidates
+        # (they need to stay in the collection until their duration elapses).
         waiting_media_items = []
         foreign_plex_items = []
         if duration_waiting_items:
-            waiting_keys = {item.ratingKey for item in duration_waiting_items}
             waiting_media_items = [
-                candidate_by_plex_key[key]
-                for key in waiting_keys
-                if key in candidate_by_plex_key
+                candidate_by_plex_key[item.ratingKey]
+                for item in duration_waiting_items
+                if item.ratingKey in candidate_by_plex_key
             ]
-            # Foreign waiting items: in collection but not this entry's candidates
+            # Foreign waiting items belong to another library entry, not this one.
             foreign_plex_items = [
                 item for item in duration_waiting_items
-                if item.ratingKey not in candidate_by_plex_key
+                if item.ratingKey not in own_plex_keys
             ]
 
-        # Also preserve eligible items from other entries (their duration may differ)
+        # Preserve eligible (duration elapsed) items from other entries too. Own eligible
+        # items that aren't current candidates are saved and intentionally dropped here.
         foreign_eligible = [
             item for item in death_row_plex_items
-            if item.ratingKey not in candidate_by_plex_key
+            if item.ratingKey not in own_plex_keys
         ]
         foreign_plex_items.extend(foreign_eligible)
 
@@ -643,6 +661,58 @@ class Deleterr:
                 break
 
         return candidates
+
+    def _get_universe_ids(self, library, media_instance, media_type, all_data=None):
+        """
+        Build the set of media identifiers belonging to a library entry's universe.
+
+        The "universe" is every item the entry manages BEFORE deletion rules are applied
+        (all movies in the Radarr instance, or the shows matching this entry's filters).
+        It is used to tell items this entry tagged (own) apart from items tagged by another
+        library entry sharing the same Plex library/collection name (foreign).
+
+        Returns:
+            dict with 'tmdb', 'tvdb', 'imdb' id sets. Empty sets on failure - a conservative
+            fallback that treats unknown items as foreign and preserves them, rather than
+            risking removal of a sibling entry's items.
+        """
+        ids = {"tmdb": set(), "tvdb": set(), "imdb": set()}
+        try:
+            if media_type == "movie":
+                media_data = media_instance.get_movies()
+            else:
+                media_data = (
+                    self.media_cleaner.filter_shows(library, all_data) if all_data else []
+                )
+            for item in media_data:
+                if item.get("tmdbId"):
+                    ids["tmdb"].add(item["tmdbId"])
+                if item.get("tvdbId"):
+                    ids["tvdb"].add(item["tvdbId"])
+                if item.get("imdbId"):
+                    ids["imdb"].add(item["imdbId"])
+        except Exception as e:
+            logger.debug(
+                "Could not build media universe for library '%s': %s. "
+                "Death row items will be conservatively treated as foreign.",
+                library.get("name", "Unknown"),
+                e,
+            )
+
+        return ids
+
+    def _is_universe_member(self, plex_item, universe_ids):
+        """
+        Check whether a Plex item maps to a media item in the entry's universe.
+
+        Returns True only when one of the item's GUIDs matches a known universe id.
+        """
+        guids = self.media_server.get_guids(plex_item)
+        return bool(
+            (guids.get("tmdb_id") and guids["tmdb_id"] in universe_ids["tmdb"])
+            or (guids.get("tvdb_id") and guids["tvdb_id"] in universe_ids["tvdb"])
+            or (guids.get("imdb_id") and guids["imdb_id"] in universe_ids["imdb"])
+        )
 
     def process_radarr(self):
         for name, radarr in self.radarr.items():

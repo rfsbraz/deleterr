@@ -975,6 +975,123 @@ class TestSavedItems:
         assert len(saved_plex_items) == 1
         assert saved_plex_items[0].title == "Saved Movie"
 
+    def test_saved_items_not_preserved_as_foreign(self, deleterr_instance):
+        """
+        Regression: own items that no longer match deletion criteria must LEAVE the
+        collection, not be preserved as 'foreign'.
+
+        A single-entry library has no sibling entries, so nothing is ever foreign. Before
+        the fix, every protected death-row item was misclassified as foreign and re-added
+        to the collection on every run, growing it without bound.
+        """
+        now = datetime.now()
+        # All three items eligible (tagged long enough ago)
+        deleterr_instance.state_manager.set_tagged_dates("Movies", {
+            "100": (now - timedelta(days=10)).isoformat(),
+            "200": (now - timedelta(days=10)).isoformat(),
+            "300": (now - timedelta(days=10)).isoformat(),
+        })
+
+        plex_100 = self._make_plex_item(100, "Deleted Movie")
+        plex_200 = self._make_plex_item(200, "Saved Movie A")
+        plex_300 = self._make_plex_item(300, "Saved Movie B")
+
+        deleterr_instance._get_death_row_items = MagicMock(
+            return_value=[plex_100, plex_200, plex_300]
+        )
+
+        # Only movie 100 still matches deletion criteria; 200 and 300 were watched/protected.
+        media_100 = {"id": 1, "title": "Deleted Movie", "tmdbId": 100, "year": 2024, "sizeOnDisk": 1000}
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[media_100])
+
+        # The universe (all Radarr movies) contains all three - they are all OWN items.
+        media_instance = MagicMock()
+        media_instance.get_movies.return_value = [
+            media_100,
+            {"id": 2, "title": "Saved Movie A", "tmdbId": 200, "year": 2024},
+            {"id": 3, "title": "Saved Movie B", "tmdbId": 300, "year": 2024},
+        ]
+
+        guid_map = {100: 100, 200: 200, 300: 300}
+
+        def get_guids_side_effect(item):
+            return {"tmdb_id": guid_map.get(item.ratingKey), "tvdb_id": None, "imdb_id": None}
+
+        deleterr_instance.media_server.get_guids.side_effect = get_guids_side_effect
+
+        def find_item_side_effect(lib, **kwargs):
+            return plex_100 if kwargs.get("tmdb_id") == 100 else None
+
+        deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            _, deleted_items, _, saved_plex_items, _prior, foreign = deleterr_instance._process_death_row(
+                library, media_instance, "movie"
+            )
+
+        # Movie 100 deleted; 200 and 300 saved.
+        assert len(deleted_items) == 1
+        assert {item.ratingKey for item in saved_plex_items} == {200, 300}
+        # Crucially, the saved items are NOT preserved as foreign - they leave the collection.
+        assert foreign == []
+
+    def test_foreign_items_preserved_via_universe(self, deleterr_instance):
+        """
+        With sibling entries (same Plex library name), an item tagged by another entry
+        is not in this entry's universe and must be preserved in the shared collection.
+        """
+        now = datetime.now()
+        deleterr_instance.state_manager.set_tagged_dates("TV Shows", {
+            "100": (now - timedelta(days=10)).isoformat(),  # foreign (other entry)
+            "200": (now - timedelta(days=10)).isoformat(),  # own, saved
+        })
+
+        plex_foreign = self._make_plex_item(100, "Standard Show")
+        plex_own = self._make_plex_item(200, "Daily Show")
+
+        deleterr_instance._get_death_row_items = MagicMock(
+            return_value=[plex_foreign, plex_own]
+        )
+
+        # No current deletion candidates for this entry (the own show was saved).
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[])
+
+        # This entry's universe (filter_shows) contains only the own show (tvdb 200).
+        deleterr_instance.media_cleaner.filter_shows.return_value = [
+            {"id": 2, "title": "Daily Show", "tvdbId": 200},
+        ]
+
+        guid_map = {100: 999, 200: 200}  # 999 is not in the universe -> foreign
+
+        def get_guids_side_effect(item):
+            return {"tmdb_id": None, "tvdb_id": guid_map.get(item.ratingKey), "imdb_id": None}
+
+        deleterr_instance.media_server.get_guids.side_effect = get_guids_side_effect
+        deleterr_instance.media_server.find_item.return_value = None
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+
+        library = {
+            "name": "TV Shows",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+            "series_type": "daily",
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            _, _, _, _saved, _prior, foreign = deleterr_instance._process_death_row(
+                library, MagicMock(), "show", all_data=[{"id": 2, "title": "Daily Show", "tvdbId": 200}]
+            )
+
+        # The foreign show (other entry) is preserved; the own saved show is not.
+        assert {item.ratingKey for item in foreign} == {100}
+
 
 class TestFormatTitleWithLibrary:
     """Tests for DeletedItem.format_title_with_library()."""
