@@ -452,17 +452,34 @@ class Deleterr:
         saved_plex_items = []
         is_dry_run = self.config.settings.get("dry_run", True)
 
+        # Distinguish items this entry OWNS (in its media universe) from FOREIGN items tagged by
+        # a sibling library entry sharing the same Plex library/collection name. Death-row state
+        # is keyed by library name, so two entries with the same name (e.g. "TV Shows" split by
+        # series_type) share state; without this distinction a sibling's items get misclassified.
+        # Computed once here and reused for the collection rebuild below.
+        universe_ids = self._get_universe_ids(library, media_instance, media_type, all_data)
+        own_plex_keys = set(candidate_by_plex_key.keys())
+        for item in all_death_row_plex_items:
+            if self._is_universe_member(item, universe_ids):
+                own_plex_keys.add(item.ratingKey)
+
         # Log death row status and identify saved items.
-        # An item is "saved" if it's on death row, has a state entry (was tagged by this
-        # library name), but is NOT being deleted. This correctly identifies items that were
-        # previously eligible but are now protected (watched, excluded, etc.), even when
-        # multiple library entries share the same Plex library/collection name.
+        # An item is "saved" only if it is OWN (in this entry's universe), has a state entry (was
+        # tagged under this library name), and is NOT being deleted - i.e. it was eligible when
+        # tagged but is now protected (watched, excluded, no longer past threshold). FOREIGN items
+        # belonging to a sibling entry must NOT be reported as saved: the sibling may still be
+        # deleting them in this same run, which previously produced contradictory
+        # "Saved from Deletion" + "Deleted" notifications for the same titles.
         if death_row_plex_items:
             tagged_dates = self.state_manager.get_tagged_dates(library_name)
             delete_keys = {k for k in candidate_by_plex_key if candidate_by_plex_key[k] in items_to_delete}
             for plex_item in death_row_plex_items:
                 key = str(plex_item.ratingKey)
-                if key in tagged_dates and plex_item.ratingKey not in delete_keys:
+                if (
+                    key in tagged_dates
+                    and plex_item.ratingKey not in delete_keys
+                    and plex_item.ratingKey in own_plex_keys
+                ):
                     saved_plex_items.append(plex_item)
 
             unmatched_count = len(death_row_plex_items) - len(items_to_delete)
@@ -556,11 +573,7 @@ class Deleterr:
         # Using candidate membership alone (the previous heuristic) wrongly treated own saved
         # items as foreign and preserved them forever, causing the collection to grow without
         # bound across runs.
-        universe_ids = self._get_universe_ids(library, media_instance, media_type, all_data)
-        own_plex_keys = set(candidate_by_plex_key.keys())
-        for item in all_death_row_plex_items:
-            if self._is_universe_member(item, universe_ids):
-                own_plex_keys.add(item.ratingKey)
+        # (universe_ids and own_plex_keys are computed above, right after items_to_delete.)
 
         # Get media items for duration-waiting Plex items that are still deletion candidates
         # (they need to stay in the collection until their duration elapses).
