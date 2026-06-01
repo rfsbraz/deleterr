@@ -947,7 +947,13 @@ class TestSavedItems:
 
         # Only item 100 still matches deletion criteria (200 was watched)
         media_100 = {"id": 1, "title": "Deleted Movie", "tmdbId": "tt001", "year": 2024, "sizeOnDisk": 1000}
+        media_200 = {"id": 2, "title": "Saved Movie", "tmdbId": "tt002", "year": 2024, "sizeOnDisk": 2000}
         deleterr_instance._get_deletion_candidates = MagicMock(return_value=[media_100])
+
+        # The entry's universe (all movies in Radarr, before deletion rules) includes both, so
+        # item 200 is recognised as OWN -> a genuine save, not a foreign sibling's item.
+        media_instance = MagicMock()
+        media_instance.get_movies.return_value = [media_100, media_200]
 
         def find_item_side_effect(lib, **kwargs):
             tmdb = kwargs.get("tmdb_id")
@@ -956,6 +962,11 @@ class TestSavedItems:
             return None
 
         deleterr_instance.media_server.find_item.side_effect = find_item_side_effect
+        deleterr_instance.media_server.get_guids.side_effect = lambda item: (
+            {"tmdb_id": "tt001"} if item is plex_item_100
+            else {"tmdb_id": "tt002"} if item is plex_item_200
+            else {}
+        )
         deleterr_instance.media_server.get_library.return_value = MagicMock()
 
         library = {
@@ -966,7 +977,7 @@ class TestSavedItems:
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
             saved_space, deleted_items, preview_candidates, saved_plex_items, _prior, _foreign = deleterr_instance._process_death_row(
-                library, MagicMock(), "movie"
+                library, media_instance, "movie"
             )
 
         # Item 100 was deleted, item 200 was saved
@@ -974,6 +985,44 @@ class TestSavedItems:
         assert deleted_items[0]["title"] == "Deleted Movie"
         assert len(saved_plex_items) == 1
         assert saved_plex_items[0].title == "Saved Movie"
+
+    def test_foreign_death_row_item_not_reported_as_saved(self, deleterr_instance):
+        """A death-row item tagged by a sibling entry (same library name, not in this entry's
+        universe) must NOT be reported as 'saved' - the sibling may delete it in the same run,
+        which previously produced contradictory Saved + Deleted notifications for one title."""
+        now = datetime.now()
+        # Shared state under the common library name includes the sibling's item.
+        deleterr_instance.state_manager.set_tagged_dates("Movies", {
+            "300": (now - timedelta(days=10)).isoformat(),
+        })
+
+        foreign_item = self._make_plex_item(300, "Foreign Sibling Movie")
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[foreign_item])
+
+        # This entry has no deletion candidates and an empty universe -> item 300 is foreign.
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[])
+        media_instance = MagicMock()
+        media_instance.get_movies.return_value = []
+
+        deleterr_instance.media_server.find_item.return_value = None
+        deleterr_instance.media_server.get_guids.side_effect = lambda item: {"tmdb_id": "tt300"}
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            _space, deleted_items, _preview, saved_plex_items, _prior, foreign_plex_items = deleterr_instance._process_death_row(
+                library, media_instance, "movie"
+            )
+
+        # Foreign item: not deleted by this entry, not "saved", and preserved as foreign.
+        assert deleted_items == []
+        assert saved_plex_items == []
+        assert any(i.ratingKey == 300 for i in foreign_plex_items)
 
     def test_saved_items_not_preserved_as_foreign(self, deleterr_instance):
         """
