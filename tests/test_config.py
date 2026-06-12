@@ -285,6 +285,80 @@ class TestJustWatchValidation:
         assert validator.validate_libraries() == True
 
 
+class TestQualityProfileExclusionValidation:
+    """quality_profiles exclusions must be validated without requiring a tags
+    exclusion, and against every configured instance."""
+
+    def _radarr_library(self, exclude):
+        return {
+            "name": "Movies",
+            "action_mode": "delete",
+            "radarr": "test",
+            "exclude": {"radarr": exclude},
+        }
+
+    def test_radarr_quality_profiles_without_tags_does_not_raise(self):
+        library = self._radarr_library({"quality_profiles": ["HD-1080p"]})
+        radarr_config = [
+            {"name": "test", "url": "http://localhost:7878", "api_key": "API_KEY"}
+        ]
+        validator = Config({"libraries": [library], "radarr": radarr_config})
+
+        mock_instance = MagicMock()
+        mock_instance.get_quality_profiles.return_value = [{"name": "HD-1080p"}]
+
+        with patch("app.config.DRadarr", return_value=mock_instance):
+            assert validator.validate_radarr_exclusions(library) is True
+
+        mock_instance.get_quality_profiles.assert_called_once()
+
+    def test_radarr_quality_profiles_checked_against_all_instances(self, caplog):
+        import logging
+
+        library = self._radarr_library({"quality_profiles": ["HD-1080p"]})
+        radarr_config = [
+            {"name": "first", "url": "http://localhost:7878", "api_key": "API_KEY"},
+            {"name": "second", "url": "http://localhost:7879", "api_key": "API_KEY"},
+        ]
+        validator = Config({"libraries": [library], "radarr": radarr_config})
+
+        # Profile exists in the first instance but not in the second
+        first = MagicMock()
+        first.get_quality_profiles.return_value = [{"name": "HD-1080p"}]
+        second = MagicMock()
+        second.get_quality_profiles.return_value = [{"name": "SD"}]
+
+        with patch("app.config.DRadarr", side_effect=[first, second]):
+            with caplog.at_level(logging.WARNING):
+                assert validator.validate_radarr_exclusions(library) is True
+
+        warnings = [r.message for r in caplog.records]
+        assert any(
+            "HD-1080p" in message and "second" in message for message in warnings
+        ), f"Expected warning for instance 'second', got: {warnings}"
+        assert not any("first" in message for message in warnings)
+
+    def test_sonarr_quality_profiles_without_tags_does_not_raise(self):
+        library = {
+            "name": "TV Shows",
+            "action_mode": "delete",
+            "sonarr": "test",
+            "exclude": {"sonarr": {"quality_profiles": ["HD-1080p"]}},
+        }
+        sonarr_config = [
+            {"name": "test", "url": "http://localhost:8989", "api_key": "API_KEY"}
+        ]
+        validator = Config({"libraries": [library], "sonarr": sonarr_config})
+
+        mock_instance = MagicMock()
+        mock_instance.get_quality_profiles.return_value = [{"name": "HD-1080p"}]
+
+        with patch("app.config.DSonarr", return_value=mock_instance):
+            assert validator.validate_sonarr_exclusions(library) is True
+
+        mock_instance.get_quality_profiles.assert_called_once()
+
+
 # Test cases for preview_next schema validation
 class TestPreviewNextSchema:
     """Tests for preview_next configuration field."""
