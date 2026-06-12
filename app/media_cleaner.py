@@ -8,7 +8,7 @@ from plexapi.server import PlexServer
 from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 
 from app import logger
-from app.modules.justwatch import JustWatch
+from app.modules.justwatch import JustWatch, JustWatchError
 from app.modules.seerr import Seerr
 from app.modules.watch_provider import create_watch_provider
 from app.modules.mdblist import Mdblist
@@ -1779,6 +1779,10 @@ def check_excluded_justwatch(media_data, plex_media_item, exclude, justwatch_ins
     Returns:
         True if media should NOT be excluded (i.e., is actionable)
         False if media should be excluded (i.e., skip this media)
+
+    Fails safe: if the JustWatch API cannot be queried (timeout, rate limit,
+    network error), the item is excluded from deletion this run rather than
+    treating the outage as "not available on streaming".
     """
     jw_config = exclude.get("justwatch", {})
 
@@ -1790,21 +1794,28 @@ def check_excluded_justwatch(media_data, plex_media_item, exclude, justwatch_ins
     # Determine media type based on data structure
     media_type = "movie" if "tmdbId" in media_data else "show"
 
-    # Check available_on mode (exclude if available on specified providers)
-    if providers := jw_config.get("available_on"):
-        if justwatch_instance.available_on(title, year, media_type, providers):
-            logger.debug(
-                f"{title} is available on streaming service(s) {providers}, skipping"
-            )
-            return False
+    try:
+        # Check available_on mode (exclude if available on specified providers)
+        if providers := jw_config.get("available_on"):
+            if justwatch_instance.available_on(title, year, media_type, providers):
+                logger.debug(
+                    f"{title} is available on streaming service(s) {providers}, skipping"
+                )
+                return False
 
-    # Check not_available_on mode (exclude if NOT available on specified providers)
-    if providers := jw_config.get("not_available_on"):
-        if justwatch_instance.is_not_available_on(title, year, media_type, providers):
-            logger.debug(
-                f"{title} is not available on streaming service(s) {providers}, skipping"
-            )
-            return False
+        # Check not_available_on mode (exclude if NOT available on specified providers)
+        if providers := jw_config.get("not_available_on"):
+            if justwatch_instance.is_not_available_on(title, year, media_type, providers):
+                logger.debug(
+                    f"{title} is not available on streaming service(s) {providers}, skipping"
+                )
+                return False
+    except JustWatchError as e:
+        logger.warning(
+            f"Could not check JustWatch availability for '{title}' ({year}): {e}. "
+            "Failing safe and skipping this item for this run."
+        )
+        return False
 
     return True
 

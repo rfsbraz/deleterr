@@ -1852,6 +1852,53 @@ class TestCheckExcludedJustWatch:
 
         assert result is True  # Not excluded
 
+    def test_available_on_api_error_fails_safe(self, mocker):
+        """When the JustWatch API errors, the item must be excluded from deletion."""
+        from app.media_cleaner import check_excluded_justwatch
+        from app.modules.justwatch import JustWatchError
+
+        mock_logger = mocker.patch("app.media_cleaner.logger")
+        media_data = {"title": "Test Movie", "tmdbId": 123, "year": 2022}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Movie"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"available_on": ["netflix"]}}
+
+        mock_justwatch = MagicMock()
+        mock_justwatch.available_on.side_effect = JustWatchError("API timeout")
+
+        result = check_excluded_justwatch(
+            media_data, plex_media_item, exclude, mock_justwatch
+        )
+
+        # Fail safe: the check could not be performed, so skip the item
+        assert result is False
+        mock_logger.warning.assert_called_once()
+        assert "Test Movie" in mock_logger.warning.call_args[0][0]
+
+    def test_not_available_on_api_error_fails_safe(self, mocker):
+        """When the JustWatch API errors, not_available_on must also fail safe."""
+        from app.media_cleaner import check_excluded_justwatch
+        from app.modules.justwatch import JustWatchError
+
+        mock_logger = mocker.patch("app.media_cleaner.logger")
+        media_data = {"title": "Test Movie", "tmdbId": 123, "year": 2022}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Movie"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"not_available_on": ["netflix"]}}
+
+        mock_justwatch = MagicMock()
+        mock_justwatch.is_not_available_on.side_effect = JustWatchError("API down")
+
+        result = check_excluded_justwatch(
+            media_data, plex_media_item, exclude, mock_justwatch
+        )
+
+        # Fail safe: the check could not be performed, so skip the item
+        assert result is False
+        mock_logger.warning.assert_called_once()
+
     def test_detects_movie_type_from_tmdb_id(self, mocker):
         """Should detect movie type from tmdbId in media_data."""
         from app.media_cleaner import check_excluded_justwatch

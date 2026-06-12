@@ -42,6 +42,33 @@ def test_process_radarr(radarr_mock, sonarr_mock, deleterr):
 
 @patch("app.deleterr.DSonarr")
 @patch("app.modules.radarr.DRadarr")
+def test_process_radarr_trakt_failure_skips_library(radarr_mock, sonarr_mock, deleterr):
+    """A Trakt outage must skip the library (no deletions) instead of crashing."""
+    from app.modules.trakt import TraktError
+
+    # Arrange
+    deleterr.radarr = {"Radarr1": MagicMock()}
+    deleterr.config.settings = {
+        "libraries": [{"radarr": "Radarr1"}],
+    }
+    deleterr.media_cleaner.process_library_movies = MagicMock(
+        side_effect=TraktError("Failed to fetch Trakt list 'watchlist' for movies")
+    )
+    deleterr.run_result = MagicMock()
+    failed_before = deleterr.libraries_failed
+    processed_before = deleterr.libraries_processed
+
+    # Act - must not raise
+    deleterr.process_radarr()
+
+    # Assert - library counted as failed, nothing deleted
+    assert deleterr.libraries_failed == failed_before + 1
+    assert deleterr.libraries_processed == processed_before
+    deleterr.run_result.add_deleted.assert_not_called()
+
+
+@patch("app.deleterr.DSonarr")
+@patch("app.modules.radarr.DRadarr")
 def test_process_sonarr(radarr_mock, sonarr_mock, deleterr):
     # Arrange
     deleterr.sonarr = {
