@@ -8,7 +8,7 @@ import pytest
 from app.modules.notifications.models import DeletedItem, RunResult
 from app.modules.notifications.providers.webhook import WebhookProvider
 from app.modules.notifications.providers.discord import DiscordProvider
-from app.modules.notifications.providers.email import EmailProvider
+from app.modules.notifications.providers.email import DEFAULT_TEMPLATE_PATH, EmailProvider
 from app.modules.notifications.providers.slack import SlackProvider
 from app.modules.notifications.providers.telegram import TelegramProvider
 
@@ -645,6 +645,63 @@ class TestEmailProvider:
         assert context["movie_count"] == 2
         assert context["show_count"] == 1
         assert context["plex_url"] == "http://test"
+
+    def test_default_template_exists(self):
+        """Test the default leaving soon template ships with the application."""
+        assert DEFAULT_TEMPLATE_PATH.exists(), (
+            f"Default leaving soon template missing at {DEFAULT_TEMPLATE_PATH}. "
+            "Without it, every email silently falls back to the built-in HTML."
+        )
+        assert DEFAULT_TEMPLATE_PATH.read_text(encoding="utf-8").strip()
+
+    def test_default_template_renders_with_full_context(self):
+        """Test the default template renders through the provider's real code path."""
+        provider = EmailProvider({})
+
+        items = [
+            DeletedItem("Movie 1", 2020, "movie", 1000000000, "Movies", "Radarr"),
+            DeletedItem("Show 1", 2019, "show", 2000000000, "TV Shows", "Sonarr"),
+        ]
+
+        context = provider._build_leaving_soon_context(
+            items,
+            {
+                "plex_url": "http://plex.local:32400",
+                "seerr_url": "http://seerr.local:5055",
+                "deletion_date_str": "June 20, 2026",
+            },
+            saved_items=[items[0]],
+        )
+
+        html = provider._render_leaving_soon_template(None, context)
+
+        # The shipped template was used, not the built-in fallback
+        assert "How to Keep a Title" in html
+
+        # Items, dates, links and totals from the context are rendered
+        assert "Movie 1" in html
+        assert "Show 1" in html
+        assert "2020" in html
+        assert "June 20, 2026" in html
+        assert "http://plex.local:32400" in html
+        assert "http://seerr.local:5055" in html
+        assert "2 items" in html
+
+    def test_default_template_renders_with_minimal_context(self):
+        """Test the default template renders without optional context variables."""
+        provider = EmailProvider({})
+
+        items = [
+            DeletedItem("Movie 1", 2020, "movie", 1000000000, "Movies", "Radarr"),
+        ]
+
+        context = provider._build_leaving_soon_context(items, {})
+
+        html = provider._render_leaving_soon_template(None, context)
+
+        assert "How to Keep a Title" in html
+        assert "Movie 1" in html
+        assert "scheduled for deletion on the next cleanup cycle" in html
 
     @patch("app.modules.notifications.providers.email.smtplib.SMTP")
     def test_test_connection_success(self, mock_smtp_class):
