@@ -16,6 +16,7 @@ from app import logger
 from app.config import hang_on_error, load_config
 from app.media_cleaner import ConfigurationError, MediaCleaner, parse_leaving_soon_duration
 from app.modules.notifications import NotificationManager, RunResult, DeletedItem, LibraryStats
+from app.modules.tautulli import TautulliApiError
 from app.state import StateManager
 from app.utils import print_readable_freed_space
 
@@ -787,7 +788,7 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except ConfigurationError as e:
+                except (ConfigurationError, TautulliApiError) as e:
                     logger.error(str(e))
                     self.libraries_failed += 1
 
@@ -857,7 +858,7 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except ConfigurationError as e:
+                except (ConfigurationError, TautulliApiError) as e:
                     logger.error(str(e))
                     self.libraries_failed += 1
 
