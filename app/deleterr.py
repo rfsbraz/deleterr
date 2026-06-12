@@ -300,9 +300,13 @@ class Deleterr:
         # Try TVDB ID first (most reliable for shows)
         if guids.get("tvdb_id"):
             try:
-                series = sonarr_instance.get_series(guids["tvdb_id"])
-                if series:
+                series = sonarr_instance.get_series_by_tvdb(guids["tvdb_id"])
+                # Sonarr returns a list when looking up by TVDB ID, but be
+                # defensive in case a single dict is returned
+                if isinstance(series, dict):
                     return series
+                if series:
+                    return series[0]
             except Exception as e:
                 logger.debug(f"Sonarr lookup by TVDB ID {guids.get('tvdb_id')} failed: {e}")
 
