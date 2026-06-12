@@ -612,7 +612,7 @@ class MediaCleaner:
         disk_size = sonarr_show.get("statistics", {}).get("sizeOnDisk", 0)
         total_episodes = sonarr_show.get("statistics", {}).get("episodeFileCount", 0)
 
-        is_dry_run = self.config.settings.get("dry_run")
+        is_dry_run = self.config.settings.get("dry_run", True)
 
         logger.log_deletion(
             title=sonarr_show["title"],
@@ -759,7 +759,7 @@ class MediaCleaner:
     ):
         disk_size = radarr_movie.get("sizeOnDisk", 0)
 
-        is_dry_run = self.config.settings.get("dry_run")
+        is_dry_run = self.config.settings.get("dry_run", True)
 
         logger.log_deletion(
             title=radarr_movie["title"],

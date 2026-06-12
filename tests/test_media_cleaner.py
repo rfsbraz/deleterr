@@ -436,6 +436,37 @@ def test_process_show_not_dry_run(mock_delete_show_if_allowed, standard_config):
     assert result == 100
 
 
+@patch.object(MediaCleaner, "delete_show_if_allowed")
+def test_process_show_missing_dry_run_defaults_to_dry_run(
+    mock_delete_show_if_allowed, standard_config
+):
+    # Arrange
+    library = {}
+    sonarr_instance = MagicMock()
+    sonarr_show = {
+        "title": "Test Show",
+        "statistics": {"sizeOnDisk": 100, "episodeFileCount": 10},
+    }
+    actions_performed = 0
+    max_actions_per_run = 1
+
+    media_cleaner = MediaCleaner(standard_config)
+    media_cleaner.config.settings = {}
+
+    # Act
+    result = media_cleaner.process_show(
+        library,
+        sonarr_instance,
+        sonarr_show,
+        actions_performed,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_delete_show_if_allowed.assert_not_called()
+    assert result == 100
+
+
 def test_check_exclusions(mocker, standard_config):
     # Arrange
     library = {"name": "Test Library", "exclude": {}}
@@ -936,6 +967,34 @@ def test_process_movie_dry_run(mock_delete_movie_if_allowed, standard_config):
 
     media_cleaner_instance = MediaCleaner(standard_config)
     media_cleaner_instance.config.settings = {"dry_run": True}
+
+    # Act
+    result = media_cleaner_instance.process_movie(
+        library,
+        radarr_instance,
+        radarr_movie,
+        actions_performed,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_delete_movie_if_allowed.assert_not_called()
+    assert result == radarr_movie["sizeOnDisk"]
+
+
+@patch("app.media_cleaner.MediaCleaner.delete_movie_if_allowed")
+def test_process_movie_missing_dry_run_defaults_to_dry_run(
+    mock_delete_movie_if_allowed, standard_config
+):
+    # Arrange
+    library = {"name": "Test Library"}
+    radarr_instance = MagicMock()
+    radarr_movie = {"title": "Test Movie", "sizeOnDisk": 100}
+    actions_performed = 0
+    max_actions_per_run = 1
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+    media_cleaner_instance.config.settings = {}
 
     # Act
     result = media_cleaner_instance.process_movie(
