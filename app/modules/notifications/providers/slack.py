@@ -41,10 +41,22 @@ class SlackProvider(BaseNotificationProvider):
             response.raise_for_status()
 
             # Slack returns "ok" for successful requests
-            return response.text == "ok"
+            if response.text != "ok":
+                logger.error(
+                    f"Slack notification failed: webhook returned HTTP {response.status_code} "
+                    f"with unexpected body: {response.text[:500]}"
+                )
+                return False
+            return True
 
+        except requests.exceptions.HTTPError as e:
+            # Avoid logging str(e): it includes the webhook URL, which contains a secret
+            status = e.response.status_code if e.response is not None else "unknown"
+            body = e.response.text[:500] if e.response is not None else ""
+            logger.error(f"Slack notification failed: HTTP {status}, response: {body}")
+            return False
         except requests.exceptions.RequestException as e:
-            logger.error(f"Slack notification failed: {e}")
+            logger.error(f"Slack notification failed: {type(e).__name__}: {e}")
             return False
 
     def test_connection(self) -> bool:

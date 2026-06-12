@@ -927,6 +927,86 @@ class TestLeavingSoonNotifications:
         assert items[0].title == "Show 1"
         assert items[0].media_type == "show"
 
+    def test_send_leaving_soon_notification_failure_logs_error(
+        self, deleterr_with_notifications, mock_notification_manager, caplog
+    ):
+        """Test that a failed leaving_soon send logs that users were not notified."""
+        import logging
+
+        mock_notification_manager.send_leaving_soon.return_value = False
+
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        preview = [
+            {"title": "Movie 1", "year": 2020, "tmdbId": 550, "sizeOnDisk": 1000000000},
+        ]
+
+        deleterr_with_notifications.media_server.get_library.return_value = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            deleterr_with_notifications._process_library_leaving_soon(library, preview, "movie")
+
+        assert any(
+            record.levelno >= logging.WARNING and "NOT notified" in record.message
+            for record in caplog.records
+        ), f"Expected failure log about users not notified, got: {[r.message for r in caplog.records]}"
+
+    def test_send_leaving_soon_notification_success_no_failure_log(
+        self, deleterr_with_notifications, mock_notification_manager, caplog
+    ):
+        """Test that a successful leaving_soon send does not log a failure."""
+        import logging
+
+        mock_notification_manager.send_leaving_soon.return_value = True
+
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        preview = [
+            {"title": "Movie 1", "year": 2020, "tmdbId": 550, "sizeOnDisk": 1000000000},
+        ]
+
+        deleterr_with_notifications.media_server.get_library.return_value = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            deleterr_with_notifications._process_library_leaving_soon(library, preview, "movie")
+
+        assert not any(
+            "NOT notified" in record.message for record in caplog.records
+        ), f"Unexpected failure log, got: {[r.message for r in caplog.records]}"
+
+    def test_send_leaving_soon_notification_exception_logs_error(
+        self, deleterr_with_notifications, mock_notification_manager, caplog
+    ):
+        """Test that an exception during leaving_soon send logs that users were not notified."""
+        import logging
+
+        mock_notification_manager.send_leaving_soon.side_effect = Exception("boom")
+
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        preview = [
+            {"title": "Movie 1", "year": 2020, "tmdbId": 550, "sizeOnDisk": 1000000000},
+        ]
+
+        deleterr_with_notifications.media_server.get_library.return_value = MagicMock()
+
+        with caplog.at_level(logging.ERROR):
+            deleterr_with_notifications._process_library_leaving_soon(library, preview, "movie")
+
+        assert any(
+            record.levelno >= logging.ERROR and "NOT notified" in record.message
+            for record in caplog.records
+        ), f"Expected exception log about users not notified, got: {[r.message for r in caplog.records]}"
+
 
 class TestLeavingSoonPreviewDoesNotDuplicate:
     """Tests ensuring leaving_soon preview items don't appear in 'would be deleted' list.

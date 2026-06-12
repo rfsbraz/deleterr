@@ -219,6 +219,62 @@ class TestDiscordProvider:
         assert success is False
 
     @patch("app.modules.notifications.providers.discord.requests.post")
+    def test_send_http_error_logs_status_and_body(self, mock_post, caplog):
+        """Test that HTTP errors log status code and response body, but not the webhook URL."""
+        import logging
+        import requests as req
+
+        webhook_url = "https://discord.com/api/webhooks/123456/secret-token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 429
+        mock_response.text = '{"message": "You are being rate limited.", "retry_after": 1.5}'
+        mock_response.raise_for_status.side_effect = req.exceptions.HTTPError(
+            f"429 Too Many Requests for url: {webhook_url}",
+            response=mock_response,
+        )
+        mock_post.return_value = mock_response
+
+        provider = DiscordProvider({"webhook_url": webhook_url})
+        result = create_test_result(deleted_movies=1)
+
+        with caplog.at_level(logging.ERROR):
+            success = provider.send(result)
+
+        assert success is False
+        error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+        assert any(
+            "429" in msg and "rate limited" in msg for msg in error_messages
+        ), f"Expected status and body in error log, got: {error_messages}"
+        # The webhook URL contains a secret and must not be logged
+        assert not any("secret-token" in msg for msg in error_messages)
+
+    @patch("app.modules.notifications.providers.discord.requests.post")
+    def test_send_http_error_truncates_body(self, mock_post, caplog):
+        """Test that long response bodies are truncated in error logs."""
+        import logging
+        import requests as req
+
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.text = "x" * 2000
+        mock_response.raise_for_status.side_effect = req.exceptions.HTTPError(
+            "400 Bad Request", response=mock_response
+        )
+        mock_post.return_value = mock_response
+
+        provider = DiscordProvider({"webhook_url": "https://discord.com/api/webhooks/..."})
+        result = create_test_result(deleted_movies=1)
+
+        with caplog.at_level(logging.ERROR):
+            success = provider.send(result)
+
+        assert success is False
+        error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+        assert error_messages, "Expected an error log"
+        assert all(len(msg) < 1000 for msg in error_messages)
+
+    @patch("app.modules.notifications.providers.discord.requests.post")
     def test_custom_username(self, mock_post):
         """Test custom username."""
         mock_response = MagicMock()
@@ -284,19 +340,58 @@ class TestSlackProvider:
         mock_post.assert_called_once()
 
     @patch("app.modules.notifications.providers.slack.requests.post")
-    def test_send_not_ok(self, mock_post):
-        """Test Slack send with non-ok response."""
+    def test_send_not_ok(self, mock_post, caplog):
+        """Test Slack send with non-ok response logs an error."""
+        import logging
+
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
+        mock_response.status_code = 200
         mock_response.text = "invalid_token"
         mock_post.return_value = mock_response
 
         provider = SlackProvider({"webhook_url": "https://hooks.slack.com/services/..."})
         result = create_test_result(deleted_movies=1)
 
-        success = provider.send(result)
+        with caplog.at_level(logging.ERROR):
+            success = provider.send(result)
 
         assert success is False
+        error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+        assert any(
+            "invalid_token" in msg for msg in error_messages
+        ), f"Expected error log with response body, got: {error_messages}"
+
+    @patch("app.modules.notifications.providers.slack.requests.post")
+    def test_send_http_error_logs_status_without_url(self, mock_post, caplog):
+        """Test that HTTP errors log status and body, but not the webhook URL."""
+        import logging
+        import requests as req
+
+        webhook_url = "https://hooks.slack.com/services/T00/B00/secret-token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.text = "no_service"
+        mock_response.raise_for_status.side_effect = req.exceptions.HTTPError(
+            f"404 Not Found for url: {webhook_url}",
+            response=mock_response,
+        )
+        mock_post.return_value = mock_response
+
+        provider = SlackProvider({"webhook_url": webhook_url})
+        result = create_test_result(deleted_movies=1)
+
+        with caplog.at_level(logging.ERROR):
+            success = provider.send(result)
+
+        assert success is False
+        error_messages = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+        assert any(
+            "404" in msg and "no_service" in msg for msg in error_messages
+        ), f"Expected status and body in error log, got: {error_messages}"
+        # The webhook URL contains a secret and must not be logged
+        assert not any("secret-token" in msg for msg in error_messages)
 
     @patch("app.modules.notifications.providers.slack.requests.post")
     def test_custom_channel(self, mock_post):
