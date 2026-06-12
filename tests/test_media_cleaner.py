@@ -1649,9 +1649,16 @@ def test_check_collections(
 @pytest.mark.parametrize(
     "media_data, trakt_movies, expected",
     [
-        ({"title": "movie1", "tvdb_id": "1"}, {"1": {"list": "watched"}}, False),
-        ({"title": "movie2", "tmdbId": "2"}, {"2": {"list": "watched"}}, False),
-        ({"title": "movie3", "tvdb_id": "3"}, {"4": {"list": "watched"}}, True),
+        # Movie found in trakt list by tmdbId → excluded
+        ({"title": "movie1", "tmdbId": 123}, {123: {"list": "https://trakt.tv/users/user/lists/list"}}, False),
+        # Show found in trakt list by tvdbId → excluded
+        ({"title": "show1", "tvdbId": 456}, {456: {"list": "https://trakt.tv/users/user/lists/list"}}, False),
+        # Show with both ids matches the trakt list keyed by tvdbId → excluded
+        ({"title": "show2", "tmdbId": 789, "tvdbId": 456}, {456: {"list": "url"}}, False),
+        # Item not found in trakt list → actionable
+        ({"title": "movie2", "tmdbId": 789}, {123: {"list": "url"}}, True),
+        # Empty trakt dict → actionable
+        ({"title": "movie3", "tmdbId": 999}, {}, True),
     ],
 )
 def test_check_trakt_movies(media_data, trakt_movies, expected, media_cleaner):

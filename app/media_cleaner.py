@@ -1479,11 +1479,16 @@ class MediaCleaner:
         return True
 
     def check_trakt_movies(self, media_data, trakt_movies):
-        if media_data.get("tvdb_id", media_data.get("tmdbId")) in trakt_movies:
-            logger.debug(
-                f"{media_data['title']} found in trakt watched list {trakt_movies[media_data.get('tvdb_id', media_data.get('tmdbId'))]['list']}, skipping"
-            )
-            return False
+        if not trakt_movies:
+            return True
+
+        # Check by tmdbId (movies) or tvdbId (shows)
+        for media_id in (media_data.get("tmdbId"), media_data.get("tvdbId")):
+            if media_id and media_id in trakt_movies:
+                logger.debug(
+                    f"{media_data['title']} found in trakt watched list {trakt_movies[media_id]['list']}, skipping"
+                )
+                return False
 
         return True
 
