@@ -17,6 +17,15 @@ _DEFAULT_GRAPHQL_API_URL = "https://apis.justwatch.com/graphql"
 _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 
+class JustWatchError(Exception):
+    """Raised when the JustWatch API cannot be reached or returns an error.
+
+    Distinguishes a service failure (timeout, rate limit, network error) from a
+    genuine "title not found" result, so callers can fail safe instead of
+    treating an outage as "not available on streaming".
+    """
+
+
 def _get_graphql_url() -> str:
     """Get the JustWatch API URL, reading from environment at call time.
 
@@ -55,10 +64,15 @@ class JustWatch:
 
     def _search(self, title, max_results=5, detailed=False):
         """
-        Search for a title on JustWatch API with caching and error handling.
+        Search for a title on JustWatch API with caching.
 
         Returns:
-            List of MediaEntry objects, or empty list on error
+            List of MediaEntry objects (empty when the title is not found)
+
+        Raises:
+            JustWatchError: when the JustWatch API cannot be reached or
+                returns an error, so callers can tell a service failure
+                apart from a "title not found" result.
         """
         global _rate_limit_warned
         cache_key = f"{title}:{max_results}:{detailed}"
@@ -72,15 +86,15 @@ class JustWatch:
             self._search_cache[cache_key] = results
             _rate_limit_warned = False  # Reset on successful request
             return results
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as e:
             logger.warning(f"JustWatch API timeout while searching for '{title}' - the service may be slow")
-            return []
+            raise JustWatchError(f"JustWatch API timeout for '{title}'") from e
         except httpx.HTTPStatusError as e:
             status_code = e.response.status_code
             if status_code == 429:
                 if not _rate_limit_warned:
                     logger.warning(
-                        "JustWatch API rate limit hit. Streaming availability checks will be skipped. "
+                        "JustWatch API rate limit hit. Streaming availability checks cannot be performed. "
                         "Consider reducing the number of items processed per run."
                     )
                     _rate_limit_warned = True
@@ -90,13 +104,13 @@ class JustWatch:
                 logger.warning(f"JustWatch API server error (HTTP {status_code}) - service may be unavailable")
             else:
                 logger.warning(f"JustWatch API error (HTTP {status_code}) for '{title}'")
-            return []
-        except httpx.ConnectError:
+            raise JustWatchError(f"JustWatch API error (HTTP {status_code}) for '{title}'") from e
+        except httpx.ConnectError as e:
             logger.warning("Cannot reach JustWatch API - check internet connection")
-            return []
+            raise JustWatchError(f"Cannot reach JustWatch API while searching for '{title}'") from e
         except Exception as e:
             logger.warning(f"JustWatch search failed for '{title}': {type(e).__name__}: {e}")
-            return []
+            raise JustWatchError(f"JustWatch search failed for '{title}': {type(e).__name__}: {e}") from e
 
     def search_by_title_and_year(self, title, year, media_type):
         """
