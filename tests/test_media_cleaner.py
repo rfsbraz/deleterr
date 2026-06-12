@@ -969,7 +969,7 @@ def test_delete_series_server_error(standard_config):
     media_cleaner_instance = MediaCleaner(standard_config)
 
     # Act
-    media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
+    result = media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
 
     # Assert
     mock_sonarr.get_episode.assert_called_once_with(sonarr_show["id"], series=True)
@@ -978,6 +978,7 @@ def test_delete_series_server_error(standard_config):
     )
     assert mock_sonarr.del_episode_file.call_count == 2
     mock_sonarr.del_series.assert_not_called()
+    assert result is False
 
 
 def test_delete_series_resource_not_found(standard_config):
@@ -998,7 +999,7 @@ def test_delete_series_resource_not_found(standard_config):
     media_cleaner_instance = MediaCleaner(standard_config)
 
     # Act
-    media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
+    result = media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
 
     # Assert
     mock_sonarr.get_episode.assert_called_once_with(sonarr_show["id"], series=True)
@@ -1007,6 +1008,7 @@ def test_delete_series_resource_not_found(standard_config):
     )
     assert mock_sonarr.del_episode_file.call_count == 2
     mock_sonarr.del_series.assert_called_once_with(sonarr_show["id"], delete_files=True)
+    assert result is True
 
 
 def test_delete_series_no_errors(standard_config):
@@ -1023,7 +1025,7 @@ def test_delete_series_no_errors(standard_config):
     media_cleaner_instance = MediaCleaner(standard_config)
 
     # Act
-    media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
+    result = media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
 
     # Assert
     mock_sonarr.get_episode.assert_called_once_with(sonarr_show["id"], series=True)
@@ -1032,6 +1034,28 @@ def test_delete_series_no_errors(standard_config):
     )
     assert mock_sonarr.del_episode_file.call_count == 2
     mock_sonarr.del_series.assert_called_once_with(sonarr_show["id"], delete_files=True)
+    assert result is True
+
+
+def test_delete_show_if_allowed_skips_seerr_update_when_deletion_skipped(standard_config):
+    # Arrange
+    library = {"name": "Test Library"}
+    mock_sonarr = MagicMock()
+    sonarr_show = {"id": 1, "title": "Test Show"}
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    with patch.object(
+        MediaCleaner, "delete_series", return_value=False
+    ) as mock_delete_series, patch.object(
+        MediaCleaner, "_update_seerr_status"
+    ) as mock_update_seerr:
+        # Act
+        media_cleaner_instance.delete_show_if_allowed(library, mock_sonarr, sonarr_show)
+
+    # Assert
+    mock_delete_series.assert_called_once_with(mock_sonarr, sonarr_show)
+    mock_update_seerr.assert_not_called()
 
 
 def test_delete_movie_if_allowed(standard_config):

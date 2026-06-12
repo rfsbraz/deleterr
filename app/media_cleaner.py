@@ -639,7 +639,8 @@ class MediaCleaner:
             sonarr_instance,
             sonarr_show,
     ):
-        self.delete_series(sonarr_instance, sonarr_show)
+        if not self.delete_series(sonarr_instance, sonarr_show):
+            return
 
         # Update Seerr status after successful deletion
         self._update_seerr_status(library, sonarr_show, "tv")
@@ -779,7 +780,15 @@ class MediaCleaner:
 
         return disk_size
 
-    def delete_series(self, sonarr, sonarr_show):
+    def delete_series(self, sonarr, sonarr_show) -> bool:
+        """
+        Delete a series and its episode files from Sonarr.
+
+        Returns:
+            bool: True if the series was deleted, False if deletion was skipped
+                because an episode file could not be deleted (callers must keep
+                the item pending so it is retried on the next run).
+        """
         # PyArr doesn't support deleting the series files, so we need to do it manually
         episodes = sonarr.get_episode(sonarr_show["id"], series=True)
 
@@ -815,12 +824,14 @@ class MediaCleaner:
                 break
 
         # delete the series
-        if not skip_deleting_show:
-            sonarr.del_series(sonarr_show["id"], delete_files=True)
-        else:
+        if skip_deleting_show:
             logger.warning(
                 f"Skipping deletion of '{sonarr_show['title']}' - will be deleted on the next run"
             )
+            return False
+
+        sonarr.del_series(sonarr_show["id"], delete_files=True)
+        return True
 
     def delete_movie_if_allowed(
             self,
