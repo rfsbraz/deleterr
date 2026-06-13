@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.20](https://github.com/rfsbraz/deleterr/compare/v0.2.19...v0.2.20) (2026-06-13)
+
+
+### Bug Fixes
+
+* **config:** validate quality_profiles exclusions without requiring tags ([#276](https://github.com/rfsbraz/deleterr/issues/276)) ([ebf5304](https://github.com/rfsbraz/deleterr/commit/ebf530427735ef0a317e95907aa716947a31490a))
+* **exclusions:** match Sonarr shows against Trakt lists by tvdbId ([#274](https://github.com/rfsbraz/deleterr/issues/274)) ([412e1aa](https://github.com/rfsbraz/deleterr/commit/412e1aafa837492d2dd1bbaf3e64c13ba6169a6a))
+* **leaving-soon:** retry series whose deletion was skipped instead of clearing state ([#278](https://github.com/rfsbraz/deleterr/issues/278)) ([e46a047](https://github.com/rfsbraz/deleterr/commit/e46a04734c3cad190f7fb314a9c8881d46e51f13))
+* **media_cleaner:** treat missing dry_run setting as dry run ([#275](https://github.com/rfsbraz/deleterr/issues/275)) ([fcaa09b](https://github.com/rfsbraz/deleterr/commit/fcaa09b0c90ee860d28e1ac90d3eafdb3ae82c20))
+* **notifications:** add timeout to SMTP connections ([#277](https://github.com/rfsbraz/deleterr/issues/277)) ([eec14b4](https://github.com/rfsbraz/deleterr/commit/eec14b4417263015c254334b60ed594e9be1230a))
+* **notifications:** surface send failures in logs ([#282](https://github.com/rfsbraz/deleterr/issues/282)) ([b0b6cd8](https://github.com/rfsbraz/deleterr/commit/b0b6cd8bb42caeb999dee8b179445758f37eb4bc))
+* **tautulli:** raise a clear error on invalid history responses ([#280](https://github.com/rfsbraz/deleterr/issues/280)) ([0619f87](https://github.com/rfsbraz/deleterr/commit/0619f87d0248414c09827f6ef7de6850f2333080))
+
 ## [0.2.19](https://github.com/rfsbraz/deleterr/compare/v0.2.18...v0.2.19) (2026-06-01)
 
 
