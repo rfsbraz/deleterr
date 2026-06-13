@@ -3,7 +3,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.modules.tautulli import HISTORY_PAGE_SIZE, Tautulli, filter_by_most_recent
+from app.modules.tautulli import (
+    HISTORY_PAGE_SIZE,
+    Tautulli,
+    TautulliApiError,
+    filter_by_most_recent,
+)
 
 
 @pytest.mark.parametrize(
@@ -75,6 +80,56 @@ def test_fetch_history_data(mock_api):
         length=HISTORY_PAGE_SIZE,
         include_activity=1,
     )
+
+
+@patch(
+    "app.modules.tautulli.RawAPI",
+    return_value=MagicMock(get_history=MagicMock(return_value=None)),
+)
+def test_fetch_history_data_none_response_raises(mock_api):
+    """A None response (e.g. network/server error) raises a clear error."""
+    tautulli_instance = Tautulli("id", "secret")
+
+    with pytest.raises(TautulliApiError, match=r"section test_section \(offset 0\)"):
+        tautulli_instance._fetch_history_data("test_section")
+
+
+@patch(
+    "app.modules.tautulli.RawAPI",
+    return_value=MagicMock(
+        get_history=MagicMock(side_effect=[{"data": ["item1", "item2"]}, None])
+    ),
+)
+def test_fetch_history_data_none_response_mid_pagination_raises(mock_api):
+    """A failure on a later page raises instead of returning partial history."""
+    tautulli_instance = Tautulli("id", "secret")
+
+    with pytest.raises(TautulliApiError, match=r"section test_section \(offset 2\)"):
+        tautulli_instance._fetch_history_data("test_section")
+
+
+@patch(
+    "app.modules.tautulli.RawAPI",
+    return_value=MagicMock(get_history=MagicMock(return_value="<html>error</html>")),
+)
+def test_fetch_history_data_non_dict_response_raises(mock_api):
+    """A non-dict response raises a clear error mentioning the received type."""
+    tautulli_instance = Tautulli("id", "secret")
+
+    with pytest.raises(TautulliApiError, match="got str"):
+        tautulli_instance._fetch_history_data("test_section")
+
+
+@patch(
+    "app.modules.tautulli.RawAPI",
+    return_value=MagicMock(get_history=MagicMock(return_value={"error": "boom"})),
+)
+def test_fetch_history_data_missing_data_key_raises(mock_api):
+    """A dict response without a 'data' key raises a clear error."""
+    tautulli_instance = Tautulli("id", "secret")
+
+    with pytest.raises(TautulliApiError, match="expected a dict with a 'data' key"):
+        tautulli_instance._fetch_history_data("test_section")
 
 
 @patch("app.modules.tautulli.RawAPI", MagicMock())
