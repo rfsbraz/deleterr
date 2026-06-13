@@ -1776,7 +1776,7 @@ class TestDeathRowDeletionErrorHandling:
         sonarr_instance = deleterr_instance.sonarr["Sonarr"]
         # First call raises, second succeeds
         deleterr_instance.media_cleaner.delete_series.side_effect = [
-            Exception("Sonarr API timeout"), None
+            Exception("Sonarr API timeout"), True
         ]
 
         deleterr_instance.media_server.get_library.return_value = MagicMock()
@@ -1807,6 +1807,46 @@ class TestDeathRowDeletionErrorHandling:
         # Only Show B should be in deleted (Show A failed)
         assert len(deleted) == 1
         assert deleted[0]["title"] == "Show B"
+
+    def test_show_skipped_deletion_keeps_state_for_retry(self, deleterr_instance):
+        """A show whose deletion was skipped (delete_series returns False) is not
+        counted as deleted and its leaving_soon state is kept so it is retried."""
+        library = {
+            "name": "TV Shows",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        plex_item = MagicMock(ratingKey=2001)
+        sonarr_show = {
+            "id": 201, "title": "Stuck Show", "tvdbId": 81189,
+            "statistics": {"sizeOnDisk": 5000, "episodeFileCount": 10},
+        }
+
+        sonarr_instance = deleterr_instance.sonarr["Sonarr"]
+        # delete_series signals a skipped deletion (e.g. episode file in use)
+        deleterr_instance.media_cleaner.delete_series.return_value = False
+
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item])
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[sonarr_show])
+        deleterr_instance.media_server.find_item.return_value = plex_item
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted, preview, _saved, _prior, _foreign = deleterr_instance._process_death_row(
+                library, sonarr_instance, "show"
+            )
+
+        deleterr_instance.media_cleaner.delete_series.assert_called_once_with(
+            sonarr_instance, sonarr_show
+        )
+        # The show was not deleted, so it must not be counted as deleted
+        assert len(deleted) == 0
+        # Seerr must not be told the show was deleted
+        deleterr_instance.media_cleaner._update_seerr_status.assert_not_called()
+        # State must be kept so the show is retried on the next run
+        deleterr_instance.state_manager.remove_items.assert_not_called()
 
 
 class TestSharedCollectionPreservation:

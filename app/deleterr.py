@@ -523,7 +523,11 @@ class Deleterr:
                         )
                         self.media_cleaner._update_seerr_status(library, media_item, "movie")
                     else:
-                        self.media_cleaner.delete_series(media_instance, media_item)
+                        if not self.media_cleaner.delete_series(media_instance, media_item):
+                            # Deletion was skipped (e.g. an episode file is in use).
+                            # Keep the item in the leaving_soon state so it is
+                            # retried on the next run.
+                            continue
                         self.media_cleaner._update_seerr_status(library, media_item, "tv")
                 except Exception as e:
                     logger.error(
