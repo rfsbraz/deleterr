@@ -46,8 +46,14 @@ class DiscordProvider(BaseNotificationProvider):
             response.raise_for_status()
             return True
 
+        except requests.exceptions.HTTPError as e:
+            # Avoid logging str(e): it includes the webhook URL, which contains a secret
+            status = e.response.status_code if e.response is not None else "unknown"
+            body = e.response.text[:500] if e.response is not None else ""
+            logger.error(f"Discord notification failed: HTTP {status}, response: {body}")
+            return False
         except requests.exceptions.RequestException as e:
-            logger.error(f"Discord notification failed: {e}")
+            logger.error(f"Discord notification failed: {type(e).__name__}: {e}")
             return False
 
     def test_connection(self) -> bool:

@@ -1072,15 +1072,23 @@ class Deleterr:
         seerr_url = self.config.settings.get("seerr", {}).get("url")
 
         try:
-            self.notifications.send_leaving_soon(
+            success = self.notifications.send_leaving_soon(
                 items,
                 plex_url=plex_url,
                 seerr_url=seerr_url,
                 deletion_date=deletion_date,
                 saved_items=saved_items,
             )
+            if not success and (items or saved_items):
+                logger.error(
+                    f"Leaving soon notification failed for library '{library_name}': "
+                    "users were NOT notified about upcoming deletions"
+                )
         except Exception as e:
-            logger.error(f"Failed to send leaving_soon notification: {e}")
+            logger.error(
+                f"Failed to send leaving_soon notification for library '{library_name}': {e} "
+                "- users were NOT notified about upcoming deletions"
+            )
 
     def _log_preview(self, preview_items, media_type):
         """
