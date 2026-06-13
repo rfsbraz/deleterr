@@ -619,6 +619,50 @@ class TestEmailProvider:
         mock_smtp_ssl_class.assert_called_once()
 
     @patch("app.modules.notifications.providers.email.smtplib.SMTP")
+    def test_smtp_connection_uses_timeout(self, mock_smtp_class):
+        """Test plain/STARTTLS SMTP connection is created with a timeout."""
+        from app.modules.notifications.providers.email import SMTP_TIMEOUT_SECONDS
+
+        mock_smtp = MagicMock()
+        mock_smtp_class.return_value = mock_smtp
+
+        provider = EmailProvider({
+            "smtp_server": "smtp.example.com",
+            "smtp_port": 587,
+            "from_address": "test@example.com",
+            "to_addresses": ["user@example.com"],
+        })
+
+        provider._create_smtp_connection()
+
+        mock_smtp_class.assert_called_once_with(
+            "smtp.example.com", 587, timeout=SMTP_TIMEOUT_SECONDS
+        )
+
+    @patch("app.modules.notifications.providers.email.smtplib.SMTP_SSL")
+    def test_smtp_ssl_connection_uses_timeout(self, mock_smtp_ssl_class):
+        """Test implicit SSL SMTP connection is created with a timeout."""
+        from app.modules.notifications.providers.email import SMTP_TIMEOUT_SECONDS
+
+        mock_smtp = MagicMock()
+        mock_smtp_ssl_class.return_value = mock_smtp
+
+        provider = EmailProvider({
+            "smtp_server": "smtp.example.com",
+            "smtp_port": 465,
+            "from_address": "test@example.com",
+            "to_addresses": ["user@example.com"],
+            "use_ssl": True,
+            "use_tls": False,
+        })
+
+        provider._create_smtp_connection()
+
+        assert mock_smtp_ssl_class.call_count == 1
+        _, kwargs = mock_smtp_ssl_class.call_args
+        assert kwargs["timeout"] == SMTP_TIMEOUT_SECONDS
+
+    @patch("app.modules.notifications.providers.email.smtplib.SMTP")
     def test_send_failure(self, mock_smtp_class):
         """Test failed email send."""
         mock_smtp_class.side_effect = Exception("Connection failed")
