@@ -32,7 +32,7 @@ class DSonarr:
         return self.instance.get_series()
 
     def get_series_by_tvdb(self, tvdb_id):
-        return self.instance.get_series(tvdb_id=tvdb_id)
+        return self.instance.get_series(tvdb_id, tvdb=True)
 
     def get_tags(self):
         if not self.tags:
