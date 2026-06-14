@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.21](https://github.com/rfsbraz/deleterr/compare/v0.2.20...v0.2.21) (2026-06-14)
+
+
+### Bug Fixes
+
+* **leaving-soon:** look up Sonarr series by TVDB ID correctly ([#279](https://github.com/rfsbraz/deleterr/issues/279)) ([10005ea](https://github.com/rfsbraz/deleterr/commit/10005ea496fb768138aea8c99eda175ac3f76dcd))
+
 ## [0.2.20](https://github.com/rfsbraz/deleterr/compare/v0.2.19...v0.2.20) (2026-06-13)
 
 
