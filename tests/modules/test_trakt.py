@@ -3,7 +3,12 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 import trakt
 
-from app.modules.trakt import Trakt, _process_trakt_item_list, extract_info_from_url
+from app.modules.trakt import (
+    Trakt,
+    TraktError,
+    _process_trakt_item_list,
+    extract_info_from_url,
+)
 
 
 @pytest.fixture
@@ -131,6 +136,36 @@ def test_fetch_list_items(
     # Test with no username, listname, or recurrence
     result = trakt_instance._fetch_list_items("movie", None, None, None, 100)
     assert result == []
+
+
+@patch.object(
+    Trakt, "_fetch_user_list_items", side_effect=Exception("Trakt API unavailable")
+)
+def test_fetch_list_items_failure_raises_trakt_error(
+    mock_user, trakt_instance_and_mock
+):
+    """A fetch failure must not be silently treated as an empty exclusion list."""
+    trakt_instance, _ = trakt_instance_and_mock
+
+    with pytest.raises(TraktError):
+        trakt_instance._fetch_list_items("movie", "username", "listname", None, 100)
+
+
+@patch.object(
+    Trakt, "_fetch_general_list_items", side_effect=Exception("Trakt API unavailable")
+)
+def test_get_all_items_for_url_propagates_fetch_failure(
+    mock_general, trakt_instance_and_mock
+):
+    """Errors fetching a configured list must propagate to the caller."""
+    trakt_instance, _ = trakt_instance_and_mock
+    trakt_config = {
+        "max_items_per_list": 100,
+        "lists": ["https://trakt.tv/movies/trending"],
+    }
+
+    with pytest.raises(TraktError):
+        trakt_instance.get_all_items_for_url("movie", trakt_config)
 
 
 def test_process_trakt_item_list():

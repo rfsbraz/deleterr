@@ -5,6 +5,15 @@ import trakt
 from app import logger
 
 
+class TraktError(Exception):
+    """Raised when a configured Trakt list cannot be fetched.
+
+    Treating a fetch failure as an empty list would silently disable the
+    exclusion and allow deletion of items the user wanted protected, so
+    callers must handle this error and fail safe instead.
+    """
+
+
 class Trakt:
     def __init__(self, trakt_id, trakt_secret):
         self._configure_trakt(trakt_id, trakt_secret)
@@ -53,6 +62,10 @@ class Trakt:
         except Exception as e:
             logger.error(f"Failed to fetch list items for {media_type} {listname}")
             logger.debug(f"Error: {e}")
+            raise TraktError(
+                f"Failed to fetch Trakt list '{listname}' for {media_type}s: "
+                f"{type(e).__name__}: {e}"
+            ) from e
         return []
 
     def _fetch_user_list_items(

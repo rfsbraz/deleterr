@@ -15,6 +15,7 @@ from app.modules.plex import PlexMediaServer
 from app import logger
 from app.config import hang_on_error, load_config
 from app.media_cleaner import ConfigurationError, MediaCleaner, parse_leaving_soon_duration
+from app.modules.trakt import TraktError
 from app.modules.notifications import NotificationManager, RunResult, DeletedItem, LibraryStats
 from app.modules.tautulli import TautulliApiError
 from app.state import StateManager
@@ -799,6 +800,13 @@ class Deleterr:
                 except (ConfigurationError, TautulliApiError) as e:
                     logger.error(str(e))
                     self.libraries_failed += 1
+                except TraktError as e:
+                    logger.error(
+                        f"Skipping library '{library_name}': {e}. "
+                        "Trakt exclusions could not be verified, so no items were "
+                        "deleted from this library this run."
+                    )
+                    self.libraries_failed += 1
 
             logger.log_freed_space(saved_space, "movie", self.config.settings.get("dry_run", True))
 
@@ -868,6 +876,13 @@ class Deleterr:
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
                 except (ConfigurationError, TautulliApiError) as e:
                     logger.error(str(e))
+                    self.libraries_failed += 1
+                except TraktError as e:
+                    logger.error(
+                        f"Skipping library '{library_name}': {e}. "
+                        "Trakt exclusions could not be verified, so no items were "
+                        "deleted from this library this run."
+                    )
                     self.libraries_failed += 1
 
             logger.log_freed_space(saved_space, "show", self.config.settings.get("dry_run", True))
