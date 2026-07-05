@@ -183,3 +183,88 @@ def test__fetch_general_list_items(media_type, trakt_instance_and_mock):
     # Test with other list
     result = trakt_instance._fetch_general_list_items(media_type, "other", 100)
     assert result == []
+
+
+class TestFavorites:
+    """Favorites are fetched via the Trakt REST API (issue #27)."""
+
+    def _rest_item(self, media_type, ids):
+        return {media_type: {"ids": ids, "title": "Test"}, "type": media_type}
+
+    @patch("app.modules.trakt.requests.get")
+    def test_favorites_fetched_via_rest(self, mock_get, trakt_instance_and_mock):
+        trakt_instance, _ = trakt_instance_and_mock
+        mock_response = MagicMock()
+        mock_response.json.return_value = [
+            self._rest_item("movie", {"tmdb": 603, "tvdb": None}),
+            self._rest_item("movie", {"tmdb": 604, "tvdb": None}),
+        ]
+        mock_get.return_value = mock_response
+
+        result = trakt_instance._fetch_user_list_items(
+            "movie", "johndoe", "favorites", 100
+        )
+
+        # REST endpoint hit with client-id auth headers
+        args, kwargs = mock_get.call_args
+        assert args[0] == "https://api.trakt.tv/users/johndoe/favorites/movies"
+        assert kwargs["headers"]["trakt-api-key"] == "trakt_id"
+        assert kwargs["headers"]["trakt-api-version"] == "2"
+        assert kwargs["params"] == {"limit": 100}
+
+        # Items expose get_key() like trakt.py objects
+        assert [item.get_key("tmdb") for item in result] == [603, 604]
+
+    @patch("app.modules.trakt.requests.get")
+    def test_favorites_items_flow_into_exclusion_dict(
+        self, mock_get, trakt_instance_and_mock
+    ):
+        """End-to-end: a favorites URL must populate the exclusion items."""
+        trakt_instance, _ = trakt_instance_and_mock
+        mock_response = MagicMock()
+        mock_response.json.return_value = [
+            self._rest_item("movie", {"tmdb": 550, "tvdb": None}),
+        ]
+        mock_get.return_value = mock_response
+
+        url = "https://trakt.tv/users/johndoe/favorites"
+        items = trakt_instance.get_all_items_for_url(
+            "movie", {"max_items_per_list": 100, "lists": [url]}
+        )
+
+        assert 550 in items
+        assert items[550]["list"] == url
+
+    @patch("app.modules.trakt.requests.get")
+    def test_favorites_shows_use_tvdb_key(self, mock_get, trakt_instance_and_mock):
+        trakt_instance, _ = trakt_instance_and_mock
+        mock_response = MagicMock()
+        mock_response.json.return_value = [
+            self._rest_item("show", {"tmdb": 1399, "tvdb": 121361}),
+        ]
+        mock_get.return_value = mock_response
+
+        items = trakt_instance.get_all_items_for_url(
+            "show",
+            {"lists": ["https://trakt.tv/users/johndoe/favorites"]},
+        )
+
+        assert 121361 in items
+        args, _ = mock_get.call_args
+        assert args[0].endswith("/favorites/shows")
+
+    @patch("app.modules.trakt.requests.get")
+    def test_favorites_http_error_does_not_crash(
+        self, mock_get, trakt_instance_and_mock
+    ):
+        """A REST failure is handled like any other list fetch failure."""
+        trakt_instance, _ = trakt_instance_and_mock
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = Exception("404 Not Found")
+        mock_get.return_value = mock_response
+
+        result = trakt_instance._fetch_list_items(
+            "movie", "johndoe", "favorites", None, 100
+        )
+
+        assert result == []
