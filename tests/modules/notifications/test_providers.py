@@ -620,8 +620,8 @@ class TestEmailProvider:
         success = provider.send_leaving_soon(
             items,
             context={
-                "plex_url": "http://plex.local:32400",
-                "seerr_url": "http://seerr.local:5055",
+                "plex_url": "https://plex.local:32400",
+                "seerr_url": "https://seerr.local:5055",
             },
         )
 
@@ -666,8 +666,8 @@ class TestEmailProvider:
         context = provider._build_leaving_soon_context(
             items,
             {
-                "plex_url": "http://plex.local:32400",
-                "seerr_url": "http://seerr.local:5055",
+                "plex_url": "https://plex.local:32400",
+                "seerr_url": "https://seerr.local:5055",
                 "deletion_date_str": "June 20, 2026",
             },
             saved_items=[items[0]],
@@ -683,8 +683,8 @@ class TestEmailProvider:
         assert "Show 1" in html
         assert "2020" in html
         assert "June 20, 2026" in html
-        assert "http://plex.local:32400" in html
-        assert "http://seerr.local:5055" in html
+        assert "https://plex.local:32400" in html
+        assert "https://seerr.local:5055" in html
         assert "2 items" in html
 
     def test_default_template_renders_with_minimal_context(self):
