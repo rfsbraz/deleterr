@@ -13,6 +13,18 @@ updates:
       python-packages:
         patterns:
           - "*"
+    ignore:
+      # tautulli pins PlexAPI==4.15.* - bumping PlexAPI past that makes
+      # pip resolution impossible. Remove when tautulli lifts the pin.
+      - dependency-name: "PlexAPI"
+        versions: [">=4.16.0"]
+      # tautulli -> objectrest 2.0.0 pins httpx==0.23.*, while pyarr>=6 and
+      # simple-justwatch-python-api>=1 require httpx>=0.28. Remove when
+      # tautulli/objectrest move to a modern httpx.
+      - dependency-name: "pyarr"
+        versions: [">=6.0.0"]
+      - dependency-name: "simple-justwatch-python-api"
+        versions: [">=1.0.0"]
   - package-ecosystem: docker
     # Look for a `Dockerfile` in the `root` directory
     directory: "/"
