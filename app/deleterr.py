@@ -728,6 +728,22 @@ class Deleterr:
             or (guids.get("imdb_id") and guids["imdb_id"] in universe_ids["imdb"])
         )
 
+    def _handle_library_failure(self, library_name, error):
+        """Log a per-library failure and count it, without aborting the run.
+
+        TraktError means exclusions could not be verified, so the library is
+        skipped entirely (fail safe). ConfigurationError keeps its own message.
+        """
+        if isinstance(error, TraktError):
+            logger.error(
+                f"Skipping library '{library_name}': {error}. "
+                "Trakt exclusions could not be verified, so no items were "
+                "deleted from this library this run."
+            )
+        else:
+            logger.error(str(error))
+        self.libraries_failed += 1
+
     def process_radarr(self):
         for name, radarr in self.radarr.items():
             logger.info(f"Processing radarr instance: '{name}'")
@@ -788,16 +804,8 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except ConfigurationError as e:
-                    logger.error(str(e))
-                    self.libraries_failed += 1
-                except TraktError as e:
-                    logger.error(
-                        f"Skipping library '{library_name}': {e}. "
-                        "Trakt exclusions could not be verified, so no items were "
-                        "deleted from this library this run."
-                    )
-                    self.libraries_failed += 1
+                except (ConfigurationError, TraktError) as e:
+                    self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "movie", self.config.settings.get("dry_run", True))
 
@@ -865,16 +873,8 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except ConfigurationError as e:
-                    logger.error(str(e))
-                    self.libraries_failed += 1
-                except TraktError as e:
-                    logger.error(
-                        f"Skipping library '{library_name}': {e}. "
-                        "Trakt exclusions could not be verified, so no items were "
-                        "deleted from this library this run."
-                    )
-                    self.libraries_failed += 1
+                except (ConfigurationError, TraktError) as e:
+                    self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "show", self.config.settings.get("dry_run", True))
 
