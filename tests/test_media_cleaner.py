@@ -2896,3 +2896,49 @@ class TestPlexLibraryIndexFilenameMatching:
         # Search for non-existent file
         result = index.find_by_filename("Nonexistent.Movie.2020.mkv")
         assert result is None
+
+
+class TestGuardEmptyWatchActivity:
+    """Empty watch activity must not turn a library into deletion candidates (#287)."""
+
+    def test_raises_for_unwatched_rule_with_empty_activity(self, media_cleaner):
+        from app.media_cleaner import WatchDataError
+
+        library = {"name": "Movies", "watch_status": "unwatched"}
+        with pytest.raises(WatchDataError):
+            media_cleaner.guard_empty_watch_activity(library, {}, 500)
+
+    def test_raises_for_last_watched_threshold_with_empty_activity(self, media_cleaner):
+        from app.media_cleaner import WatchDataError
+
+        library = {"name": "Movies", "last_watched_threshold": 90}
+        with pytest.raises(WatchDataError):
+            media_cleaner.guard_empty_watch_activity(library, {}, 500)
+
+    def test_passes_with_activity(self, media_cleaner):
+        library = {"name": "Movies", "watch_status": "unwatched"}
+        media_cleaner.guard_empty_watch_activity(library, {"guid": {}}, 500)
+
+    def test_passes_for_empty_library(self, media_cleaner):
+        library = {"name": "Movies", "watch_status": "unwatched"}
+        media_cleaner.guard_empty_watch_activity(library, {}, 0)
+
+    def test_passes_without_watch_rules(self, media_cleaner):
+        # No watch-based rules: empty activity is irrelevant to decisions
+        library = {"name": "Movies", "added_at_threshold": 180}
+        media_cleaner.guard_empty_watch_activity(library, {}, 500)
+
+    def test_passes_for_watched_rule(self, media_cleaner):
+        # watch_status: watched fails safe on empty data (nothing matches)
+        library = {"name": "Movies", "watch_status": "watched"}
+        media_cleaner.guard_empty_watch_activity(library, {}, 500)
+
+    def test_opt_out_allows_empty_history(self, media_cleaner, mocker):
+        mock_logger = mocker.patch("app.media_cleaner.logger")
+        library = {
+            "name": "Movies",
+            "watch_status": "unwatched",
+            "allow_empty_watch_history": True,
+        }
+        media_cleaner.guard_empty_watch_activity(library, {}, 500)
+        mock_logger.warning.assert_called_once()

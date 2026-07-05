@@ -476,6 +476,50 @@ class MediaCleaner:
     def get_movie_activity(self, library, movies_library):
         return self.watch_provider.get_activity(movies_library.key)
 
+    @staticmethod
+    def _library_uses_watch_rules(library):
+        """True when deletion decisions for this library depend on watch data
+        in the dangerous direction (empty data => everything actionable).
+
+        watch_status: watched already fails safe on empty data (nothing
+        matches), so it does not need the guard.
+        """
+        return (
+            library.get("watch_status") == "unwatched"
+            or library.get("last_watched_threshold") is not None
+            or bool(library.get("apply_last_watch_threshold_to_collections"))
+        )
+
+    def guard_empty_watch_activity(self, library, activity, library_size):
+        """Refuse to act on a non-empty library with zero watch activity.
+
+        An empty activity set makes find_watched_data return None for every
+        item, bypassing last_watched_threshold and the unwatched check - one
+        degraded Tautulli response (DB rebuild, section mismatch, empty auth
+        result) would mass-delete recently watched content. Fail safe instead.
+
+        Genuinely never-watched libraries can opt out with
+        allow_empty_watch_history: true.
+        """
+        if activity or not library_size:
+            return
+        if not self._library_uses_watch_rules(library):
+            return
+        if library.get("allow_empty_watch_history", False):
+            logger.warning(
+                f"Library '{library.get('name')}' has no watch history but "
+                f"allow_empty_watch_history is set - treating all "
+                f"{library_size} items as unwatched."
+            )
+            return
+        raise WatchDataError(
+            f"No watch history returned for library '{library.get('name')}' "
+            f"({library_size} items). Treating every item as unwatched could "
+            f"mass-delete watched content, so this library is skipped. If the "
+            f"library really has never been watched, set "
+            f"allow_empty_watch_history: true for it."
+        )
+
     def filter_shows(self, library, unfiltered_all_show_data):
         return [
             show
@@ -529,6 +573,7 @@ class MediaCleaner:
 
         show_activity = self.get_show_activity(library, plex_library)
         logger.info(f"Got {len(show_activity)} items in tautulli activity")
+        self.guard_empty_watch_activity(library, show_activity, plex_library.totalSize)
 
         return self.process_shows(
             library,
@@ -677,6 +722,7 @@ class MediaCleaner:
             logger.info(f"Got {len(mdblist_movies)} mdblist items to exclude")
 
         movie_activity = self.get_movie_activity(library, movies_library)
+        self.guard_empty_watch_activity(library, movie_activity, movies_library.totalSize)
 
         return self.process_movies(
             library,
@@ -2241,6 +2287,16 @@ def _get_config_value(config, key, default=None):
 
 class ConfigurationError(Exception):
     """Raised when there's a configuration error that prevents processing."""
+    pass
+
+
+class WatchDataError(Exception):
+    """Raised when watch activity data looks unusable for deletion decisions.
+
+    An empty activity set makes every item look never-watched, which with
+    unwatched/threshold rules turns the entire library into deletion
+    candidates. Callers must handle this error and skip the library instead.
+    """
     pass
 
 

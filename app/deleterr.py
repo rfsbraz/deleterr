@@ -14,7 +14,7 @@ from app.modules.plex import PlexMediaServer
 
 from app import logger
 from app.config import hang_on_error, load_config
-from app.media_cleaner import ConfigurationError, MediaCleaner, parse_leaving_soon_duration
+from app.media_cleaner import ConfigurationError, MediaCleaner, WatchDataError, parse_leaving_soon_duration
 from app.modules.mdblist import MdblistError
 from app.modules.trakt import TraktError
 from app.modules.notifications import NotificationManager, RunResult, DeletedItem, LibraryStats
@@ -736,7 +736,9 @@ class Deleterr:
         library is skipped entirely (fail safe). ConfigurationError keeps its
         own message.
         """
-        if isinstance(error, (TraktError, MdblistError)):
+        if isinstance(error, WatchDataError):
+            logger.error(f"Skipping library '{library_name}': {error}")
+        elif isinstance(error, (TraktError, MdblistError)):
             logger.error(
                 f"Skipping library '{library_name}': {error}. "
                 "Exclusions could not be verified, so no items were "
@@ -806,7 +808,7 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except (ConfigurationError, TraktError, MdblistError) as e:
+                except (ConfigurationError, TraktError, MdblistError, WatchDataError) as e:
                     self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "movie", self.config.settings.get("dry_run", True))
@@ -875,7 +877,7 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except (ConfigurationError, TraktError, MdblistError) as e:
+                except (ConfigurationError, TraktError, MdblistError, WatchDataError) as e:
                     self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "show", self.config.settings.get("dry_run", True))

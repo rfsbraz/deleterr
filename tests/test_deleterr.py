@@ -96,6 +96,33 @@ def test_process_radarr_mdblist_failure_skips_library(radarr_mock, sonarr_mock, 
 
 @patch("app.deleterr.DSonarr")
 @patch("app.modules.radarr.DRadarr")
+def test_process_radarr_empty_watch_data_skips_library(radarr_mock, sonarr_mock, deleterr):
+    """Unusable watch data must skip the library (no deletions) instead of crashing."""
+    from app.media_cleaner import WatchDataError
+
+    # Arrange
+    deleterr.radarr = {"Radarr1": MagicMock()}
+    deleterr.config.settings = {
+        "libraries": [{"radarr": "Radarr1"}],
+    }
+    deleterr.media_cleaner.process_library_movies = MagicMock(
+        side_effect=WatchDataError("No watch history returned for library 'Movies'")
+    )
+    deleterr.run_result = MagicMock()
+    failed_before = deleterr.libraries_failed
+    processed_before = deleterr.libraries_processed
+
+    # Act - must not raise
+    deleterr.process_radarr()
+
+    # Assert - library counted as failed, nothing deleted
+    assert deleterr.libraries_failed == failed_before + 1
+    assert deleterr.libraries_processed == processed_before
+    deleterr.run_result.add_deleted.assert_not_called()
+
+
+@patch("app.deleterr.DSonarr")
+@patch("app.modules.radarr.DRadarr")
 def test_process_sonarr(radarr_mock, sonarr_mock, deleterr):
     # Arrange
     deleterr.sonarr = {
