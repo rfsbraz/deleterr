@@ -968,14 +968,28 @@ class Deleterr:
             preserve_plex_items=foreign_plex_items,
         )
 
-        # Record tagged timestamps for duration enforcement
+        # Re-read what actually made it onto the death row in Plex. The collection /
+        # label add can fail (e.g. Plex rejects a batch add with 400), and a failed
+        # add must NOT be recorded as tagged - otherwise state claims an item is on
+        # death row while Plex shows it empty, the duration clock is reset every run,
+        # and nothing is ever deleted. Plex is the source of truth here.
+        current_death_row = self._get_death_row_items(library, plex_library)
+        actually_tagged_keys = {item.ratingKey for item in current_death_row}
+
+        # Record tagged timestamps for duration enforcement (only for items that
+        # genuinely landed on death row in Plex).
         tagged_items = {}
+        failed_to_tag = 0
         if preview:
             now_iso = datetime.now().isoformat()
             for i, item in enumerate(preview):
                 plex_item = resolved_plex_items[i] if i < len(resolved_plex_items) else None
-                if plex_item:
+                if plex_item is None:
+                    continue
+                if plex_item.ratingKey in actually_tagged_keys:
                     tagged_items[str(plex_item.ratingKey)] = now_iso
+                else:
+                    failed_to_tag += 1
 
             if tagged_items:
                 self.state_manager.set_tagged_dates(library_name, tagged_items)
@@ -984,22 +998,37 @@ class Deleterr:
                     len(tagged_items),
                     library_name,
                 )
+            if failed_to_tag:
+                logger.warning(
+                    "%d item(s) for library '%s' could not be tagged into the leaving_soon "
+                    "collection/labels in Plex and were NOT recorded as tagged - they will be "
+                    "retried next run (see the Plex API warnings above)",
+                    failed_to_tag,
+                    library_name,
+                )
 
-        # Clean up state entries for items no longer in collection
-        # (handles items removed manually from the collection)
-        current_death_row = self._get_death_row_items(library, plex_library)
-        active_keys = {item.ratingKey for item in current_death_row}
-        # Also include the items we just tagged
-        for plex_item in resolved_plex_items:
-            if plex_item:
-                active_keys.add(plex_item.ratingKey)
+        # Clean up stale state entries (items removed from the collection/labels).
+        # active_keys = what is actually tagged in Plex now + items that were on death
+        # row before this entry ran (siblings sharing the same Plex library name).
+        active_keys = set(actually_tagged_keys)
         # Preserve state for items that were on death row before this library entry
         # processed them. This prevents a library entry from wiping state that belongs
         # to another library entry sharing the same Plex library name.
         if death_row_plex_items:
             for item in death_row_plex_items:
                 active_keys.add(item.ratingKey)
-        self.state_manager.cleanup_library(library_name, active_keys)
+        # Never clean up with an empty active set: state is keyed by Plex library name,
+        # so an entry that tagged nothing this run (e.g. the daily half of a split
+        # "TV Shows" library) would otherwise wipe a sibling entry's timestamps and
+        # reset its duration clock every run.
+        if active_keys:
+            self.state_manager.cleanup_library(library_name, active_keys)
+        else:
+            logger.debug(
+                "Skipping leaving_soon state cleanup for library '%s' - nothing is tagged "
+                "this run (avoids wiping a sibling entry's shared state)",
+                library_name,
+            )
 
         # Determine which items to notify about
         if not self.notifications.is_leaving_soon_enabled():
