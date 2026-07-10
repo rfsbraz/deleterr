@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.22](https://github.com/rfsbraz/deleterr/compare/v0.2.21...v0.2.22) (2026-07-10)
+
+
+### Bug Fixes
+
+* **leaving_soon:** only record death-row state for items actually tagged in Plex ([#302](https://github.com/rfsbraz/deleterr/issues/302)) ([a7a0ea4](https://github.com/rfsbraz/deleterr/commit/a7a0ea497e5386a7bb2072aeac4c6f9123c478c8)), closes [#300](https://github.com/rfsbraz/deleterr/issues/300) [#301](https://github.com/rfsbraz/deleterr/issues/301)
+
 ## [0.2.21](https://github.com/rfsbraz/deleterr/compare/v0.2.20...v0.2.21) (2026-06-14)
 
 
