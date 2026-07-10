@@ -793,7 +793,8 @@ class TestNotificationDedup:
         # process_leaving_soon returns resolved plex items
         deleterr_instance.media_cleaner.process_leaving_soon.return_value = [plex_a, plex_b]
         deleterr_instance.media_server.get_library.return_value = MagicMock()
-        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+        # Items land on the death row in Plex (re-read source of truth for tagging)
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_a, plex_b])
 
         with patch("app.media_cleaner.compute_deletion_date", return_value=None):
             deleterr_instance._process_library_leaving_soon(library, preview, "movie")
@@ -821,7 +822,8 @@ class TestNotificationDedup:
         plex_a = self._make_plex_item(100, "Movie A")
         deleterr_instance.media_cleaner.process_leaving_soon.return_value = [plex_a]
         deleterr_instance.media_server.get_library.return_value = MagicMock()
-        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+        # Item is on the death row in Plex, but was already tagged in a prior run
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_a])
 
         # Simulate first run: record item in state
         deleterr_instance.state_manager.set_tagged_dates("Movies", {"100": "2026-03-01T00:00:00"})
@@ -848,7 +850,8 @@ class TestNotificationDedup:
         plex_c = self._make_plex_item(300, "Movie C")
         deleterr_instance.media_cleaner.process_leaving_soon.return_value = [plex_a, plex_c]
         deleterr_instance.media_server.get_library.return_value = MagicMock()
-        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+        # Both items land on the death row in Plex (re-read source of truth for tagging)
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_a, plex_c])
 
         # Movie A was already tagged in state
         deleterr_instance.state_manager.set_tagged_dates("Movies", {"100": "2026-03-01T00:00:00"})
@@ -863,6 +866,72 @@ class TestNotificationDedup:
         # Only Movie C should be in the notified items
         assert len(notified_items) == 1
         assert notified_items[0].title == "Movie C"
+
+    def test_failed_plex_add_not_recorded_in_state(self, deleterr_instance):
+        """If the Plex add fails (nothing lands on death row), the item is NOT recorded
+        in state and no notification fires - state must mirror Plex (issue #300)."""
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+        }
+        preview = [{"title": "Movie A", "tmdbId": 1, "year": 2024, "sizeOnDisk": 1000}]
+        plex_a = self._make_plex_item(100, "Movie A")
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = [plex_a]
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        # Nothing landed on the death row in Plex (the add failed)
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+
+        with patch("app.media_cleaner.compute_deletion_date", return_value=None):
+            deleterr_instance._process_library_leaving_soon(library, preview, "movie")
+
+        assert deleterr_instance.state_manager.get_tagged_dates("Movies") == {}
+        assert not deleterr_instance.notifications.send_leaving_soon.called
+
+    def test_partial_plex_add_records_only_landed_items(self, deleterr_instance):
+        """Only items that actually landed on the Plex death row are recorded (issue #300)."""
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+        }
+        preview = [
+            {"title": "Movie A", "tmdbId": 1, "year": 2024, "sizeOnDisk": 1000},
+            {"title": "Movie B", "tmdbId": 2, "year": 2023, "sizeOnDisk": 2000},
+        ]
+        plex_a = self._make_plex_item(100, "Movie A")
+        plex_b = self._make_plex_item(200, "Movie B")
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = [plex_a, plex_b]
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        # Only Movie A landed in Plex
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_a])
+
+        with patch("app.media_cleaner.compute_deletion_date", return_value=None):
+            deleterr_instance._process_library_leaving_soon(library, preview, "movie")
+
+        assert set(deleterr_instance.state_manager.get_tagged_dates("Movies").keys()) == {"100"}
+
+    def test_cleanup_does_not_wipe_sibling_state_when_nothing_tagged(self, deleterr_instance):
+        """An entry that tags nothing must not wipe a sibling entry's timestamps in the
+        shared, name-keyed state bucket (issue #301 - the shifting removal date)."""
+        library = {
+            "name": "TV Shows",
+            "sonarr": "Sonarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+        }
+        # A sibling "TV Shows" entry tagged item 999 on a previous run.
+        deleterr_instance.state_manager.set_tagged_dates("TV Shows", {"999": "2026-03-01T00:00:00"})
+        # This entry has no candidates and nothing on its death-row read.
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = []
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[])
+
+        with patch("app.media_cleaner.compute_deletion_date", return_value=None):
+            deleterr_instance._process_library_leaving_soon(library, [], "show")
+
+        assert deleterr_instance.state_manager.get_tagged_dates("TV Shows") == {
+            "999": "2026-03-01T00:00:00"
+        }
 
     def test_no_duration_always_notifies(self, deleterr_instance):
         """Without duration config, all items are notified every run."""

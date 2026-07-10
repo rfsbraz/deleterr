@@ -151,6 +151,68 @@ class TestPlexMediaServerCollections:
         mock_collection.removeItems.assert_called_once_with(current_items)
         mock_collection.addItems.assert_not_called()
 
+    def test_set_collection_items_returns_added_on_success(self, plex_server):
+        """A successful batch add returns the full list of items."""
+        plex, _ = plex_server
+        mock_collection = MagicMock()
+        mock_collection.items.return_value = []
+        new_items = [MagicMock(), MagicMock()]
+
+        added = plex.set_collection_items(mock_collection, new_items)
+
+        assert added == new_items
+
+    def test_set_collection_items_falls_back_to_per_item_on_batch_failure(self, plex_server):
+        """If the batch add is rejected (e.g. Plex 400), fall back to per-item adds."""
+        plex, _ = plex_server
+        mock_collection = MagicMock()
+        mock_collection.items.return_value = []
+        item_a, item_b = MagicMock(), MagicMock()
+
+        def add_items_side_effect(items):
+            # Reject the multi-item batch (mirrors the Plex 400 on the batch URI),
+            # accept single-item adds.
+            if len(items) > 1:
+                raise Exception("(400) bad_request")
+
+        mock_collection.addItems.side_effect = add_items_side_effect
+
+        added = plex.set_collection_items(mock_collection, [item_a, item_b])
+
+        assert added == [item_a, item_b]
+        # One failed batch call + one successful call per item
+        assert mock_collection.addItems.call_count == 3
+
+    def test_set_collection_items_returns_only_successfully_added(self, plex_server):
+        """Per-item fallback returns only the items that were actually added."""
+        plex, _ = plex_server
+        mock_collection = MagicMock()
+        mock_collection.items.return_value = []
+        item_ok, item_bad = MagicMock(), MagicMock()
+
+        def add_items_side_effect(items):
+            if len(items) > 1:
+                raise Exception("(400) bad_request")  # batch fails
+            if items == [item_bad]:
+                raise Exception("(400) bad_request")  # this one keeps failing
+
+        mock_collection.addItems.side_effect = add_items_side_effect
+
+        added = plex.set_collection_items(mock_collection, [item_ok, item_bad])
+
+        assert added == [item_ok]
+
+    def test_set_collection_items_returns_empty_when_all_fail(self, plex_server):
+        """When nothing can be added, return an empty list (state must stay honest)."""
+        plex, _ = plex_server
+        mock_collection = MagicMock()
+        mock_collection.items.return_value = []
+        mock_collection.addItems.side_effect = Exception("(400) bad_request")
+
+        added = plex.set_collection_items(mock_collection, [MagicMock(), MagicMock()])
+
+        assert added == []
+
 
 class TestPlexMediaServerLabels:
     """Test label operations."""

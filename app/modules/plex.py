@@ -119,12 +119,15 @@ class PlexMediaServer(BaseMediaServer):
                 "The collection will still work but won't show the deletion date."
             )
 
-    def set_collection_items(self, collection: Any, items: list) -> None:
+    def set_collection_items(self, collection: Any, items: list) -> list:
         """Replace collection contents with given items.
 
         Args:
             collection: The Plex collection.
             items: List of Plex media items to set in the collection.
+
+        Returns:
+            The list of items that were successfully added to the collection.
         """
         # Get current items in collection
         try:
@@ -142,15 +145,39 @@ class PlexMediaServer(BaseMediaServer):
                     "Some items may remain in the collection."
                 )
 
-        # Add new items
-        if items:
+        if not items:
+            return []
+
+        # Try a single batch add first. Some Plex servers reject the batch add-items
+        # URI (e.g. a 400 on a long multi-id request), so fall back to adding items
+        # one at a time rather than losing the whole set. Return the items that made
+        # it in so the caller only records genuinely-tagged items in state.
+        try:
+            collection.addItems(items)
+            return list(items)
+        except Exception as e:
+            logger.warning(
+                f"Batch add of {len(items)} items to collection '{collection.title}' failed: {e}. "
+                "Retrying one item at a time."
+            )
+
+        added = []
+        for item in items:
             try:
-                collection.addItems(items)
+                collection.addItems([item])
+                added.append(item)
             except Exception as e:
                 logger.warning(
-                    f"Error adding {len(items)} items to collection '{collection.title}': {e}. "
-                    "Some items may be missing from the leaving_soon collection."
+                    f"Could not add '{getattr(item, 'title', 'Unknown')}' to collection "
+                    f"'{collection.title}': {e}."
                 )
+
+        if not added:
+            logger.error(
+                f"Failed to add any of {len(items)} items to collection '{collection.title}'. "
+                "The leaving_soon death row cannot progress until items can be tagged in Plex."
+            )
+        return added
 
     def add_label(self, item: Any, label: str) -> None:
         """Add a label to a Plex media item.
