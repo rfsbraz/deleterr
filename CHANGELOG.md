@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.23](https://github.com/rfsbraz/deleterr/compare/v0.2.22...v0.2.23) (2026-07-12)
+
+
+### Features
+
+* **on-demand:** add --free-up emergency cleanup mode ([#304](https://github.com/rfsbraz/deleterr/issues/304)) ([a6e2d59](https://github.com/rfsbraz/deleterr/commit/a6e2d594a50a19412df9b2707d3cc2141a88a176)), closes [#299](https://github.com/rfsbraz/deleterr/issues/299)
+
 ## [0.2.22](https://github.com/rfsbraz/deleterr/compare/v0.2.21...v0.2.22) (2026-07-10)
 
 
