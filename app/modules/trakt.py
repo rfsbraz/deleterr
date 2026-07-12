@@ -1,12 +1,37 @@
 import re
 
+import requests
 import trakt
 
 from app import logger
 
+TRAKT_API_URL = "https://api.trakt.tv"
+
+
+class _FavoriteItem:
+    """Adapter giving Trakt REST favorites items the get_key() interface
+    that _process_trakt_item_list expects from trakt.py objects.
+
+    The favorites endpoint is not supported by the pinned trakt.py library,
+    so those items come from a direct REST call and arrive as plain dicts:
+    {"type": "movie", "movie": {"ids": {"tmdb": ..., "tvdb": ...}, ...}}
+    """
+
+    def __init__(self, data):
+        self._data = data
+
+    def get_key(self, key):
+        media = self._data.get(self._data.get("type"), {})
+        return media.get("ids", {}).get(key)
+
+    def __repr__(self):
+        media = self._data.get(self._data.get("type"), {})
+        return f"<FavoriteItem {media.get('title', 'unknown')}>"
+
 
 class Trakt:
     def __init__(self, trakt_id, trakt_secret):
+        self._trakt_id = trakt_id
         self._configure_trakt(trakt_id, trakt_secret)
 
     def _configure_trakt(self, trakt_id, trakt_secret):
@@ -69,10 +94,11 @@ class Trakt:
                 or []
             )  # Return empty list if no items are found
         elif listname == "favorites":
-            logger.warning(
-                f"Traktpy does not support {listname} {media_type}s. Skipping..."
+            # trakt.py has no favorites interface (the endpoint postdates the
+            # library), so fetch them with a direct REST call instead
+            return self._fetch_favorites_items(
+                media_type, username, max_items_per_list
             )
-            return []
 
         return (
             trakt.Trakt["users/*/lists/*"].items(
@@ -84,6 +110,27 @@ class Trakt:
             )
             or []  # Return empty list if no items are found
         )
+
+    def _fetch_favorites_items(self, media_type, username, max_items_per_list):
+        """Fetch a user's favorites via the Trakt REST API.
+
+        GET /users/{id}/favorites/{type} - a distinct top-level endpoint that
+        cannot be routed through the library's users/*/lists/* interface.
+        Public profiles only need the client id (no OAuth). Errors propagate
+        to _fetch_list_items' handler like every other list type.
+        """
+        response = requests.get(
+            f"{TRAKT_API_URL}/users/{username}/favorites/{media_type}s",
+            headers={
+                "Content-Type": "application/json",
+                "trakt-api-version": "2",
+                "trakt-api-key": self._trakt_id,
+            },
+            params={"limit": max_items_per_list},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return [_FavoriteItem(item) for item in response.json()]
 
     def _fetch_recurrent_list_items(self, media_type, listname):
         logger.warning(
