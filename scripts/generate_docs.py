@@ -407,6 +407,52 @@ scheduler:
 
 ---
 
+## On-Demand Emergency Cleanup (`--free-up`)
+
+An ad-hoc emergency mode for when you need space *now*: it sweeps across **all**
+libraries (Radarr and Sonarr together) and deletes actionable content immediately
+until each targeted disk has the requested amount of free space, then stops.
+
+```bash
+python -m app --free-up 1TB                             # free every disk up to 1TB free, then stop
+python -m app --free-up 1TB --free-up-path /data/media  # restrict to one mount/root folder
+python -m app --free-up 1TB --dry-run                   # preview only, delete nothing
+```
+
+**How it differs from `disk_size_threshold`.** The per-library disk threshold is a
+one-shot on/off gate ("skip this library if free space is already above X").
+`--free-up` is cross-library, drives toward a free-space **target per disk**,
+deletes **incrementally**, and stops the instant the target is met.
+
+**Behavior:**
+
+- **Per disk.** The target is checked per Radarr/Sonarr root-folder path (per
+  mount). Folders that are the same physical mount are deduped so free space is
+  never double-counted.
+- **Immediate hard delete.** Bypasses the Leaving Soon grace period entirely and
+  deletes right away.
+- **Protections honored.** Exclusions, genres, Trakt/mdblist lists,
+  `last_watched_threshold` and `added_at_threshold` are all still respected, and
+  each library's `sort` order is used to pick what goes first. Only
+  `max_actions_per_run` and the per-library disk gate are overridden.
+- **Round-robin.** For each under-target disk it rotates through the libraries on
+  that disk (config order), deleting one candidate at a time and re-checking the
+  target after each deletion, until the target is met or the candidates run out
+  (in which case it warns how much of the needed space it managed to free).
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--free-up <SIZE>` | Target free space per disk (e.g. `1TB`, `500GB`, `750MB`). Implies a single immediate run. |
+| `--free-up-path <PATH>` | Restrict cleanup to a single mount/root folder. |
+| `--dry-run` | Simulate the run and log what would be freed per disk without deleting anything. |
+
+> `--free-up` is an emergency action. If the built-in scheduler is mid-run, it
+> proceeds anyway rather than waiting for the lock.
+
+---
+
 ## Notifications
 
 Optional. Configure notification providers to receive alerts when Deleterr deletes media.

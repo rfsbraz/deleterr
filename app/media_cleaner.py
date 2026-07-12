@@ -484,6 +484,52 @@ class MediaCleaner:
                == library.get("series_type", DEFAULT_SONARR_SERIES_TYPE)
         ]
 
+    def get_ordered_candidates(self, library, media_instance, media_type, all_data=None):
+        """
+        Return media items that currently match this library's deletion rules,
+        in the order the library's ``sort`` config produces.
+
+        Reuses :meth:`process_library_rules` unchanged, so exclusions, genres,
+        Trakt/mdblist lists, ``last_watched_threshold`` and ``added_at_threshold``
+        are all honored. Neither ``max_actions_per_run`` nor the per-library disk
+        gate is applied - the caller (on-demand cleanup) decides how many to consume.
+
+        Args:
+            library: Library configuration dict
+            media_instance: Radarr or Sonarr instance
+            media_type: 'movie' or 'show'
+            all_data: Unfiltered Sonarr series list (shows only). Fetched from the
+                instance when omitted.
+
+        Returns:
+            List of media dicts in the library's sort order. Each item carries
+            ``path`` and its size (``sizeOnDisk`` for movies, ``statistics.sizeOnDisk``
+            for shows), which on-demand cleanup uses for disk mapping and accounting.
+        """
+        plex_library = self.get_plex_library(library)
+
+        if media_type == "movie":
+            trakt_items = self.get_trakt_items("movie", library)
+            mdblist_items = self.get_mdblist_items("movie", library)
+            activity = self.get_movie_activity(library, plex_library)
+            media_data = media_instance.get_movies()
+            instance_kwargs = {"radarr_instance": media_instance}
+        else:
+            if all_data is None:
+                all_data = media_instance.get_series()
+            media_data = self.filter_shows(library, all_data)
+            trakt_items = self.get_trakt_items("show", library)
+            mdblist_items = self.get_mdblist_items("show", library)
+            activity = self.get_show_activity(library, plex_library)
+            instance_kwargs = {"sonarr_instance": media_instance}
+
+        return list(
+            self.process_library_rules(
+                library, plex_library, media_data, activity, trakt_items,
+                mdblist_items=mdblist_items, **instance_kwargs
+            )
+        )
+
     def process_library(self, library, sonarr_instance, unfiltered_all_show_data):
         """
         Process a Sonarr library.
