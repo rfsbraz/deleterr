@@ -1293,6 +1293,29 @@ def main():
         action="store_true",
         help="Force single run mode (overrides scheduler config)",
     )
+    parser.add_argument(
+        "--free-up",
+        dest="free_up",
+        default=None,
+        metavar="SIZE",
+        help=(
+            "On-demand emergency cleanup: delete across ALL libraries until every "
+            "disk has SIZE free, then stop (e.g. '1TB'). Forces a single immediate "
+            "run and bypasses the leaving_soon grace period."
+        ),
+    )
+    parser.add_argument(
+        "--free-up-path",
+        dest="free_up_path",
+        default=None,
+        metavar="PATH",
+        help="Restrict --free-up to a single mount/root folder (e.g. '/data/media')",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="With --free-up, preview what would be deleted without deleting anything",
+    )
 
     args, unknown = parser.parse_known_args()
 
@@ -1311,6 +1334,37 @@ def main():
         print(providers)
         logger.info("# of Trakt Providers: " + str(len(providers)))
 
+        return
+
+    # On-demand emergency cleanup (--free-up): single immediate run across all
+    # libraries until each disk hits the free-space target, then stop.
+    if args.free_up:
+        from app.on_demand import OnDemandCleaner
+        from app.utils import parse_size_to_bytes
+
+        try:
+            target_bytes = parse_size_to_bytes(args.free_up)
+        except (ValueError, IndexError):
+            logger.error(
+                "Invalid --free-up size '%s'. Use a value like '1TB', '500GB' or '750MB' "
+                "(uppercase unit).",
+                args.free_up,
+            )
+            sys.exit(1)
+
+        if args.dry_run:
+            config.settings["dry_run"] = True
+
+        # This is an explicit emergency action. If the scheduler daemon holds the
+        # instance lock, proceed anyway rather than blocking - the user asked for
+        # space now. We don't hold the lock ourselves (single short-lived run).
+        if not acquire_instance_lock():
+            logger.warning(
+                "Another deleterr instance is running, but --free-up is an emergency "
+                "action - proceeding anyway."
+            )
+
+        OnDemandCleaner(config).run(target_bytes, free_up_path=args.free_up_path)
         return
 
     # Determine run mode
