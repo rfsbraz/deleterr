@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.24](https://github.com/rfsbraz/deleterr/compare/v0.2.23...v0.2.24) (2026-08-18)
+
+
+### Bug Fixes
+
+* **plex:** recreate leaving_soon collection when it rejects every add ([a22b58c](https://github.com/rfsbraz/deleterr/commit/a22b58c1e29a120799004219be12fde24c1d7c3f))
+* **trakt:** support favorites lists via direct REST call ([#286](https://github.com/rfsbraz/deleterr/issues/286)) ([2a5654f](https://github.com/rfsbraz/deleterr/commit/2a5654fd28dbefba1fe0a77a8875f196e39ea78f))
+
 ## [0.2.23](https://github.com/rfsbraz/deleterr/compare/v0.2.22...v0.2.23) (2026-07-12)
 
 
