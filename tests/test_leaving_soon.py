@@ -24,7 +24,14 @@ def standard_config():
 @pytest.fixture
 def mock_media_server():
     """Create a mock media server."""
-    return MagicMock()
+    server = MagicMock()
+    # set_collection_items now returns (collection, added_items); default to
+    # passing the given collection straight through so existing collection
+    # references (used for visibility/summary calls) stay valid.
+    server.set_collection_items.side_effect = (
+        lambda collection, items, library=None: (collection, items)
+    )
+    return server
 
 
 @pytest.fixture(autouse=True)
@@ -144,7 +151,7 @@ class TestProcessLeavingSoon:
             plex_library, "Leaving Soon", items=[mock_plex_item]
         )
         mock_media_server.set_collection_items.assert_called_once_with(
-            mock_collection, [mock_plex_item]
+            mock_collection, [mock_plex_item], library=plex_library
         )
 
     def test_updates_labels_when_configured(self, media_cleaner, mock_media_server):
@@ -329,7 +336,7 @@ class TestDeathRowPattern:
         assert mock_media_server.find_item.call_count == 3
         # Should update collection with all items
         mock_media_server.set_collection_items.assert_called_once_with(
-            mock_collection, mock_items
+            mock_collection, mock_items, library=plex_library
         )
 
     def test_empty_items_clears_collection(self, media_cleaner_with_server, mock_media_server):
@@ -350,7 +357,7 @@ class TestDeathRowPattern:
 
         # Should update collection with empty list
         mock_media_server.set_collection_items.assert_called_once_with(
-            mock_collection, []
+            mock_collection, [], library=plex_library
         )
 
     def test_both_collection_and_labels(self, media_cleaner_with_server, mock_media_server):
@@ -1488,7 +1495,9 @@ class TestCollectionCreationEdgeCases:
         media_cleaner.process_leaving_soon(library_config, plex_library, [], "movie")
 
         # Should clear the existing collection
-        mock_media_server.set_collection_items.assert_called_once_with(mock_collection, [])
+        mock_media_server.set_collection_items.assert_called_once_with(
+            mock_collection, [], library=plex_library
+        )
 
 
 class TestDeathRowLogging:

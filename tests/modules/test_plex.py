@@ -158,9 +158,10 @@ class TestPlexMediaServerCollections:
         mock_collection.items.return_value = []
         new_items = [MagicMock(), MagicMock()]
 
-        added = plex.set_collection_items(mock_collection, new_items)
+        result_collection, added = plex.set_collection_items(mock_collection, new_items)
 
         assert added == new_items
+        assert result_collection is mock_collection
 
     def test_set_collection_items_falls_back_to_per_item_on_batch_failure(self, plex_server):
         """If the batch add is rejected (e.g. Plex 400), fall back to per-item adds."""
@@ -177,7 +178,7 @@ class TestPlexMediaServerCollections:
 
         mock_collection.addItems.side_effect = add_items_side_effect
 
-        added = plex.set_collection_items(mock_collection, [item_a, item_b])
+        _, added = plex.set_collection_items(mock_collection, [item_a, item_b])
 
         assert added == [item_a, item_b]
         # One failed batch call + one successful call per item
@@ -198,19 +199,60 @@ class TestPlexMediaServerCollections:
 
         mock_collection.addItems.side_effect = add_items_side_effect
 
-        added = plex.set_collection_items(mock_collection, [item_ok, item_bad])
+        _, added = plex.set_collection_items(mock_collection, [item_ok, item_bad])
 
         assert added == [item_ok]
 
-    def test_set_collection_items_returns_empty_when_all_fail(self, plex_server):
-        """When nothing can be added, return an empty list (state must stay honest)."""
+    def test_set_collection_items_returns_empty_when_all_fail_no_library(self, plex_server):
+        """When nothing can be added and no library is given, return an empty list."""
         plex, _ = plex_server
         mock_collection = MagicMock()
         mock_collection.items.return_value = []
         mock_collection.addItems.side_effect = Exception("(400) bad_request")
 
-        added = plex.set_collection_items(mock_collection, [MagicMock(), MagicMock()])
+        result_collection, added = plex.set_collection_items(mock_collection, [MagicMock(), MagicMock()])
 
+        assert added == []
+        assert result_collection is mock_collection
+
+    def test_set_collection_items_recreates_collection_when_all_fail_with_library(self, plex_server):
+        """When every add fails and a library is given, delete and recreate the collection."""
+        plex, _ = plex_server
+        mock_collection = MagicMock()
+        mock_collection.title = "Leaving Soon"
+        mock_collection.items.return_value = []
+        mock_collection.addItems.side_effect = Exception("(400) bad_request")
+        mock_library = MagicMock()
+        mock_new_collection = MagicMock()
+        mock_library.createCollection.return_value = mock_new_collection
+        new_items = [MagicMock(), MagicMock()]
+
+        result_collection, added = plex.set_collection_items(
+            mock_collection, new_items, library=mock_library
+        )
+
+        mock_collection.delete.assert_called_once()
+        mock_library.createCollection.assert_called_once_with(
+            title="Leaving Soon", smart=False, items=new_items
+        )
+        assert result_collection is mock_new_collection
+        assert added == new_items
+
+    def test_set_collection_items_keeps_original_when_recreate_fails(self, plex_server):
+        """If delete-and-recreate itself fails, fall back to the original collection and empty added list."""
+        plex, _ = plex_server
+        mock_collection = MagicMock()
+        mock_collection.title = "Leaving Soon"
+        mock_collection.items.return_value = []
+        mock_collection.addItems.side_effect = Exception("(400) bad_request")
+        mock_collection.delete.side_effect = Exception("network error")
+        mock_library = MagicMock()
+
+        result_collection, added = plex.set_collection_items(
+            mock_collection, [MagicMock()], library=mock_library
+        )
+
+        assert result_collection is mock_collection
         assert added == []
 
 

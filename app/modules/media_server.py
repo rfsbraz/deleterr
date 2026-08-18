@@ -46,12 +46,19 @@ class BaseMediaServer(ABC):
         pass
 
     @abstractmethod
-    def set_collection_items(self, collection: Any, items: list) -> None:
+    def set_collection_items(
+        self, collection: Any, items: list, library: Optional[Any] = None
+    ) -> tuple[Any, list]:
         """Replace collection contents with given items.
 
         Args:
             collection: The collection object.
             items: List of media items to set in the collection.
+            library: The library the collection belongs to. Implementations
+                may use this to recreate a collection that rejects all adds.
+
+        Returns:
+            A tuple of (collection, added_items).
         """
         pass
 

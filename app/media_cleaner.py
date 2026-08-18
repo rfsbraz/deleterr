@@ -1088,9 +1088,13 @@ class MediaCleaner:
 
             if not plex_items:
                 # Collection exists but no items - clear it
-                self.media_server.set_collection_items(collection, [])
+                collection, _ = self.media_server.set_collection_items(
+                    collection, [], library=plex_library
+                )
             else:
-                self.media_server.set_collection_items(collection, plex_items)
+                collection, _ = self.media_server.set_collection_items(
+                    collection, plex_items, library=plex_library
+                )
 
             self.media_server.set_collection_visibility(
                 collection, home=promote_home, shared=promote_shared

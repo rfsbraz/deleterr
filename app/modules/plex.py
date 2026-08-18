@@ -119,15 +119,24 @@ class PlexMediaServer(BaseMediaServer):
                 "The collection will still work but won't show the deletion date."
             )
 
-    def set_collection_items(self, collection: Any, items: list) -> list:
+    def set_collection_items(
+        self, collection: Any, items: list, library: Optional[Any] = None
+    ) -> tuple[Any, list]:
         """Replace collection contents with given items.
 
         Args:
             collection: The Plex collection.
             items: List of Plex media items to set in the collection.
+            library: The Plex library the collection belongs to. If given, a
+                collection that rejects every add (batch and per-item) is
+                deleted and recreated from scratch, which clears whatever
+                stale server-side collection state was causing Plex to
+                reject the add.
 
         Returns:
-            The list of items that were successfully added to the collection.
+            A tuple of (collection, added_items): the collection actually
+            in use (may be a freshly recreated one) and the items that were
+            successfully added to it.
         """
         # Get current items in collection
         try:
@@ -146,7 +155,7 @@ class PlexMediaServer(BaseMediaServer):
                 )
 
         if not items:
-            return []
+            return collection, []
 
         # Try a single batch add first. Some Plex servers reject the batch add-items
         # URI (e.g. a 400 on a long multi-id request), so fall back to adding items
@@ -154,7 +163,7 @@ class PlexMediaServer(BaseMediaServer):
         # it in so the caller only records genuinely-tagged items in state.
         try:
             collection.addItems(items)
-            return list(items)
+            return collection, list(items)
         except Exception as e:
             logger.warning(
                 f"Batch add of {len(items)} items to collection '{collection.title}' failed: {e}. "
@@ -172,12 +181,41 @@ class PlexMediaServer(BaseMediaServer):
                     f"'{collection.title}': {e}."
                 )
 
-        if not added:
+        if added:
+            return collection, added
+
+        if library is None:
             logger.error(
                 f"Failed to add any of {len(items)} items to collection '{collection.title}'. "
                 "The leaving_soon death row cannot progress until items can be tagged in Plex."
             )
-        return added
+            return collection, added
+
+        # Every add attempt failed, batch and per-item alike - this matches the
+        # symptom of a Plex collection stuck in some broken internal state that
+        # rejects all adds with a generic 400. Deleting and recreating it clears
+        # that state (confirmed manually on 2026-08-17: recreated collections
+        # accepted every item on the first batch add).
+        logger.warning(
+            f"Collection '{collection.title}' rejected every item (batch and single-item retries). "
+            "Deleting and recreating it - this usually clears stale Plex-side collection state."
+        )
+        collection_name = collection.title
+        try:
+            collection.delete()
+            new_collection = library.createCollection(
+                title=collection_name, smart=False, items=items
+            )
+            logger.info(
+                f"Recreated collection '{collection_name}' with {len(items)} items after delete."
+            )
+            return new_collection, list(items)
+        except Exception as e:
+            logger.error(
+                f"Failed to delete and recreate collection '{collection_name}': {e}. "
+                "The leaving_soon death row cannot progress until items can be tagged in Plex."
+            )
+            return collection, added
 
     def add_label(self, item: Any, label: str) -> None:
         """Add a label to a Plex media item.
