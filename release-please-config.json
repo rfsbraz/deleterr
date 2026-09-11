@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "packages": {
     ".": {
-      "release-type": "simple",
+      "release-type": "python",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "changelog-path": "CHANGELOG.md",
@@ -19,11 +19,6 @@
         {"type": "refactor", "hidden": true}
       ],
       "extra-files": [
-        {
-          "type": "toml",
-          "path": "pyproject.toml",
-          "jsonpath": "$.project.version"
-        },
         {
           "type": "toml",
           "path": "uv.lock",
