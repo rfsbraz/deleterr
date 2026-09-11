@@ -2,6 +2,7 @@
 
 import argparse
 import atexit
+import importlib.metadata
 import locale
 import os
 import sys
@@ -1242,14 +1243,25 @@ class Deleterr:
         return total_libraries > 0 and self.libraries_failed == total_libraries
 
 
-def get_file_contents(file_path):
+def get_file_contents(file_path: str):
     try:
         with open(file_path, "r") as file:
             return file.read().strip()
     except FileNotFoundError:
-        print(f"File not found: {file_path}")
+        pass
     except IOError as e:
         print(f"Error reading file {file_path}: {e}")
+
+
+def get_version():
+    # The Docker image bakes the git tag into this file at build time
+    if version := get_file_contents("/app/commit_tag.txt"):
+        return version
+    # Other installations fall back to the installed package's own metadata
+    try:
+        return importlib.metadata.version("deleterr")
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"
 
 
 def main():
@@ -1270,7 +1282,7 @@ def main():
         console=True, log_dir="/config/logs", verbose=log_level == "DEBUG"
     )
 
-    logger.info(f"Running version {get_file_contents('/app/commit_tag.txt')}")
+    logger.info(f"Running version {get_version()}")
     logger.info(f"Log level set to {log_level}")
 
     parser = argparse.ArgumentParser(description="Deleterr - Automated media cleanup for Plex")
