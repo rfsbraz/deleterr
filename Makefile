@@ -16,16 +16,16 @@ clean:
 	docker-compose down
 
 test:
-	coverage run -m pytest
-	coverage report
-	coverage xml
+	uv run coverage run -m pytest
+	uv run coverage report
+	uv run coverage xml
 
 unit:
-	coverage run -m pytest -m "not integration and not slow"
-	coverage report
-	coverage xml
+	uv run coverage run -m pytest -m "not integration and not slow"
+	uv run coverage report
+	uv run coverage xml
 
 integration:
-	coverage run -m pytest -m integration
-	coverage report
-	coverage xml
+	uv run coverage run -m pytest -m integration
+	uv run coverage report
+	uv run coverage xml
