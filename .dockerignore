@@ -6,6 +6,7 @@ tests
 docs
 site
 *.md
+!README.md
 logs
 .env
 .coverage
