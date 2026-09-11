@@ -19,11 +19,15 @@ WORKDIR /app
 
 # Install dependencies first so this layer is cached across app-code changes
 COPY pyproject.toml uv.lock /app/
-RUN uv sync --locked --no-dev
+RUN uv sync --locked --no-dev --no-install-project
 
 # Copy the current directory contents into the container at /app
 COPY ./app /app/app
 COPY ./scripts /app/scripts
+COPY README.md /app/
+
+# Now that the source is present, install deleterr itself
+RUN uv sync --locked --no-dev
 
 RUN \
   echo ${BRANCH} > /app/branch.txt && \
@@ -38,5 +42,5 @@ RUN \
 COPY ./config/ /config
 VOLUME /config
 
-# Run deleterr.py when the container launches
-CMD ["python", "-m", "app.deleterr"]
+# Run deleterr when the container launches
+CMD ["deleterr"]
