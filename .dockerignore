@@ -6,7 +6,6 @@ tests
 docs
 site
 *.md
-!requirements.txt
 logs
 .env
 .coverage
