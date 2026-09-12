@@ -42,7 +42,8 @@ Feature requests are welcome! Please:
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
 - Docker (optional, for containerized development)
 
 ### Local Development
@@ -53,24 +54,20 @@ Feature requests are welcome! Please:
    cd deleterr
    ```
 
-2. Create a virtual environment:
+2. Install dependencies:
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   uv sync
    ```
+   This creates a `.venv` and installs the app plus dev dependencies (pytest, coverage, ...).
+   Run commands through it with `uv run <command>`, or activate it directly with
+   `source .venv/bin/activate`.
 
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   pip install -r requirements-dev.txt
-   ```
-
-4. Copy the example configuration:
+3. Copy the example configuration:
    ```bash
    cp config/settings.yaml.example config/settings.yaml
    ```
 
-5. Run tests:
+4. Run tests:
    ```bash
    make test       # All tests with coverage
    make unit       # Unit tests only (excludes integration and slow)
