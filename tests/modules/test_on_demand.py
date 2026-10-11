@@ -347,3 +347,25 @@ class TestRun:
 
         assert cleaner._process_disk.call_count == 2
         cleaner._build_disk_targets.assert_called_once_with(1000, "/x")
+
+
+class TestUnresolvedPlexHistory:
+    def test_library_skipped_when_plex_history_unresolvable(self, cleaner):
+        """--free-up must skip a library whose Plex plays can't be mapped (#317)."""
+        from app.modules.plex_watch_provider import PlexWatchHistoryError
+
+        sonarr = MagicMock()
+        sonarr.get_series.return_value = []
+        cleaner.radarr = {}
+        cleaner.sonarr = {"S": sonarr}
+        cleaner.config.settings["libraries"] = [{"name": "Shows", "sonarr": "S"}]
+        cleaner.media_cleaner.get_ordered_candidates.side_effect = PlexWatchHistoryError("x")
+
+        disk = {"path": "/data", "free_space": 0, "target": 1000,
+                "deficit": 1000, "libraries": [], "instance": sonarr}
+        with patch("app.on_demand.logger") as mock_logger:
+            cleaner._gather_candidates([disk], target_bytes=1000)
+
+        assert disk["libraries"] == []
+        assert cleaner.libraries_failed == 1
+        assert "Failed to gather candidates" in mock_logger.error.call_args[0][0]

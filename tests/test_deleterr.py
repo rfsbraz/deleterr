@@ -181,3 +181,21 @@ class TestInstanceLock:
         finally:
             app.deleterr.LOCK_FILE = original_lock_file
             app.deleterr._lock_file_handle = None
+
+
+@patch("app.deleterr.DSonarr")
+@patch("app.modules.radarr.DRadarr")
+def test_process_sonarr_unresolvable_plex_history_skips_library(radarr_mock, sonarr_mock, deleterr):
+    """Unmappable Plex episode plays must skip the library, not delete (#317)."""
+    from app.modules.plex_watch_provider import PlexWatchHistoryError
+
+    deleterr.sonarr = {"Sonarr1": MagicMock(get_series=MagicMock(return_value=[]))}
+    deleterr.config.settings = {"libraries": [{"name": "TV", "sonarr": "Sonarr1"}]}
+    deleterr.media_cleaner.process_library = MagicMock(side_effect=PlexWatchHistoryError("x"))
+    deleterr.run_result = MagicMock()
+    failed_before = deleterr.libraries_failed
+
+    deleterr.process_sonarr()
+
+    assert deleterr.libraries_failed == failed_before + 1
+    deleterr.run_result.add_deleted.assert_not_called()

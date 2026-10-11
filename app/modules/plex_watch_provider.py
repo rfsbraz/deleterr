@@ -6,6 +6,36 @@ from typing import Dict, Optional
 from plexapi.server import PlexServer
 
 from app import logger
+from app.modules.tautulli import TautulliApiError
+
+_METADATA_KEY_PREFIX = "/library/metadata/"
+
+
+class PlexWatchHistoryError(TautulliApiError):
+    """Raised when Plex watch history can't be tied back to library items.
+
+    Treating those plays as missing would make watched shows look never
+    watched (fail open), so the library must be skipped instead. Subclasses
+    TautulliApiError so the existing per-library watch-provider error handling
+    (scheduled runs and --free-up) skips the library.
+    """
+
+
+def _show_rating_key(item) -> Optional[str]:
+    """Return the show rating key for an episode history entry.
+
+    Plex's history endpoint omits grandparentRatingKey for episodes, but
+    grandparentKey ('/library/metadata/<ratingKey>') is present (#317).
+    """
+    rating_key = getattr(item, "grandparentRatingKey", None)
+    if isinstance(rating_key, int) or (isinstance(rating_key, str) and rating_key.isdigit()):
+        return str(rating_key)
+    grandparent_key = getattr(item, "grandparentKey", None)
+    if isinstance(grandparent_key, str) and grandparent_key.startswith(_METADATA_KEY_PREFIX):
+        candidate = grandparent_key[len(_METADATA_KEY_PREFIX):].strip("/")
+        if candidate.isdigit():
+            return candidate
+    return None
 
 
 class PlexWatchProvider:
@@ -40,6 +70,7 @@ class PlexWatchProvider:
             return {}
 
         last_activity = {}
+        unresolved_shows = set()
         for item in history:
             viewed_at = item.viewedAt
             if not viewed_at:
@@ -66,19 +97,32 @@ class PlexWatchProvider:
             if guid:
                 self._update_if_newer(last_activity, guid, activity_entry)
 
-            # Key by rating key (grandparentRatingKey for episodes, ratingKey for movies)
+            # Key by rating key (the show's for episodes, ratingKey for movies)
             if is_episode:
-                grandparent_key = getattr(item, "grandparentRatingKey", None)
-                if grandparent_key:
-                    self._update_if_newer(
-                        last_activity, str(grandparent_key), activity_entry
-                    )
+                show_guid = getattr(item, "grandparentGuid", None)
+                if isinstance(show_guid, str) and show_guid:
+                    self._update_if_newer(last_activity, show_guid, activity_entry)
+                show_key = _show_rating_key(item)
+                if show_key:
+                    self._update_if_newer(last_activity, show_key, activity_entry)
+                elif not (isinstance(show_guid, str) and show_guid):
+                    unresolved_shows.add(title or "<unknown show>")
             else:
                 rating_key = getattr(item, "ratingKey", None)
                 if rating_key:
                     self._update_if_newer(
                         last_activity, str(rating_key), activity_entry
                     )
+
+        if unresolved_shows:
+            names = ", ".join(sorted(str(n) for n in unresolved_shows)[:5])
+            raise PlexWatchHistoryError(
+                f"Plex watch history for section {section} has episode plays that "
+                f"can't be matched to a show ({names}"
+                f"{', ...' if len(unresolved_shows) > 5 else ''}). Treating those "
+                f"shows as unwatched could delete watched content, so this library "
+                f"is skipped."
+            )
 
         logger.debug("Processed %d unique items from Plex history", len(last_activity))
         return last_activity
