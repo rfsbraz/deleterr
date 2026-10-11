@@ -97,6 +97,8 @@ exclude:
 
 ### Studios
 
+Exact studio name match (case-insensitive):
+
 ```yaml
 exclude:
   studios:
