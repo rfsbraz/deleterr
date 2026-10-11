@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from app.modules.plex_watch_provider import PlexWatchProvider
@@ -276,3 +276,44 @@ class TestEpisodeHistoryShowIdentity:
 
         assert watched is not None
         assert watched["last_watched"] == datetime.fromtimestamp(1759500000)
+
+
+class TestPlexProviderShowHistoryOnDemand:
+    """--free-up (get_ordered_candidates) must see Plex episode plays (#317)."""
+
+    def _cleaner(self, history):
+        from app.modules.plex_watch_provider import PlexWatchProvider
+
+        from app.media_cleaner import MediaCleaner
+
+        with patch("app.modules.plex_watch_provider.PlexServer") as server_cls, \
+                patch("app.media_cleaner.PlexServer"):
+            server_cls.return_value.history.return_value = history
+            cleaner = MediaCleaner(MagicMock(settings={"plex": {"url": "http://plex", "token": "t"}}))
+            cleaner.watch_provider = PlexWatchProvider("http://plex", "token")
+        return cleaner
+
+    def test_recently_watched_show_is_not_a_candidate(self):
+        recent = str(int((datetime.now() - timedelta(days=8)).timestamp()))
+        cleaner = self._cleaner([_episode_history(viewedAt=recent)])
+
+        show = MagicMock(
+            guid="plex://show/abc", guids=[], ratingKey=100,
+            title="Modern Family", year=2009, collections=[],
+            addedAt=datetime(2015, 1, 1),
+        )
+        plex_library = MagicMock(key=2, totalSize=1)
+        plex_library.all.return_value = [show]
+        cleaner.get_plex_library = MagicMock(return_value=plex_library)
+        sonarr_show = {
+            "title": "Modern Family", "year": 2009, "alternateTitles": [],
+            "tvdbId": 95011, "seriesType": "standard", "path": "/tv/Modern Family",
+            "statistics": {"episodeFileCount": 250, "sizeOnDisk": 1},
+        }
+        library = {"name": "TV", "sonarr": "Sonarr", "last_watched_threshold": 365}
+
+        candidates = cleaner.get_ordered_candidates(
+            library, MagicMock(), "show", all_data=[sonarr_show]
+        )
+
+        assert candidates == []
