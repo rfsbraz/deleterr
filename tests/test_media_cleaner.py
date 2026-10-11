@@ -2939,4 +2939,3 @@ class TestPlexLibraryIndexFilenameMatching:
         # Search for non-existent file
         result = index.find_by_filename("Nonexistent.Movie.2020.mkv")
         assert result is None
-
