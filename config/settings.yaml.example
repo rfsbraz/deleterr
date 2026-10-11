@@ -102,7 +102,7 @@ libraries:
       order: asc
     exclude:
       titles: ["Forrest Gump"]
-      tags: ["children", "favorite"]
+      plex_labels: ["children", "favorite"]
       genres: ["horror", "thriller"]
       collections: ["Marvel Cinematic Universe"]
       actors: ["Tom Cruise", "Brad Pitt"]
@@ -146,7 +146,7 @@ libraries:
       order: desc
     exclude:
       titles: []
-      tags: []
+      plex_labels: []
       genres: []
       collections: []
       actors: []
@@ -177,7 +177,7 @@ libraries:
       order: desc
     exclude:
       titles: ["Dragon Ball", "Dragon Ball Z", "Dragon Ball GT"]
-      tags: []
+      plex_labels: []
       genres: []
       collections: []
       actors: []
