@@ -556,6 +556,7 @@ class MediaCleaner:
             trakt_items = self.get_trakt_items("movie", library)
             mdblist_items = self.get_mdblist_items("movie", library)
             activity = self.get_movie_activity(library, plex_library)
+            self.guard_empty_watch_activity(library, activity, plex_library.totalSize)
             media_data = media_instance.get_movies()
             instance_kwargs = {"radarr_instance": media_instance}
         else:
@@ -565,6 +566,7 @@ class MediaCleaner:
             trakt_items = self.get_trakt_items("show", library)
             mdblist_items = self.get_mdblist_items("show", library)
             activity = self.get_show_activity(library, plex_library)
+            self.guard_empty_watch_activity(library, activity, plex_library.totalSize)
             instance_kwargs = {"sonarr_instance": media_instance}
 
         return list(

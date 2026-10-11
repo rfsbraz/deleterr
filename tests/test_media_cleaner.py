@@ -3032,3 +3032,21 @@ class TestGuardEmptyWatchActivity:
         }
         media_cleaner.guard_empty_watch_activity(library, {}, 500)
         mock_logger.warning.assert_called_once()
+
+    @pytest.mark.parametrize("media_type", ["movie", "show"])
+    def test_on_demand_candidates_raise_on_empty_activity(self, media_cleaner, media_type):
+        """On-demand cleanup (--free-up) must apply the same guard."""
+        from app.media_cleaner import WatchDataError
+
+        library = {"name": "Library", "watch_status": "unwatched"}
+        plex_library = MagicMock(totalSize=500)
+        media_cleaner.get_plex_library = MagicMock(return_value=plex_library)
+        media_cleaner.get_trakt_items = MagicMock(return_value={})
+        media_cleaner.get_mdblist_items = MagicMock(return_value={})
+        media_cleaner.get_movie_activity = MagicMock(return_value={})
+        media_cleaner.get_show_activity = MagicMock(return_value={})
+        media_cleaner.process_library_rules = MagicMock(return_value=iter([{"title": "x"}]))
+
+        with pytest.raises(WatchDataError):
+            media_cleaner.get_ordered_candidates(library, MagicMock(), media_type, all_data=[])
+        media_cleaner.process_library_rules.assert_not_called()
