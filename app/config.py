@@ -557,12 +557,30 @@ class Config:
             self.validate_watch_status(library)
             self.validate_sort_configuration(library)
             self.validate_settings_for_instance(library)
+            self.validate_plex_label_exclusions(library)
             self.validate_justwatch_exclusions(library)
             self.validate_radarr_exclusions(library)
             self.validate_sonarr_exclusions(library)
             self.validate_seerr_exclusions(library)
             self.validate_leaving_soon(library)
 
+        return True
+
+    def validate_plex_label_exclusions(self, library):
+        """Warn about `exclude.tags`, which is not a supported key.
+
+        Plex labels are excluded with `exclude.plex_labels`; Radarr/Sonarr tags
+        live under `exclude.radarr.tags` / `exclude.sonarr.tags`. A top-level
+        `exclude.tags` is silently ignored, so items users meant to protect
+        would not be protected.
+        """
+        exclude = library.get("exclude") or {}
+        if "tags" in exclude:
+            logger.warning(
+                f"Library '{library.get('name')}' uses 'exclude.tags', which is not supported "
+                "and will be ignored. Use 'exclude.plex_labels' for Plex labels, or "
+                "'exclude.radarr.tags' / 'exclude.sonarr.tags' for Radarr/Sonarr tags."
+            )
         return True
 
     def validate_justwatch_exclusions(self, library):
