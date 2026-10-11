@@ -3,9 +3,9 @@ pydantic>=2.13.5
 pyarr==5.2.0
 PyYAML==6.0.3
 requests==2.34.2
-tautulli==4.8.1.2180
+tautulli==4.8.2.2180
 trakt.py==4.4.0
 pytest-mock==3.16.0
-simple-justwatch-python-api==0.13
+simple-justwatch-python-api==0.18.2
 APScheduler>=3.11.3
 Jinja2>=3.1.6
