@@ -18,6 +18,7 @@ from app.media_cleaner import ConfigurationError, MediaCleaner, WatchDataError, 
 from app.modules.mdblist import MdblistError
 from app.modules.trakt import TraktError
 from app.modules.notifications import NotificationManager, RunResult, DeletedItem, LibraryStats
+from app.modules.tautulli import TautulliApiError
 from app.state import StateManager
 from app.utils import print_readable_freed_space
 
@@ -302,9 +303,13 @@ class Deleterr:
         # Try TVDB ID first (most reliable for shows)
         if guids.get("tvdb_id"):
             try:
-                series = sonarr_instance.get_series(guids["tvdb_id"])
-                if series:
+                series = sonarr_instance.get_series_by_tvdb(guids["tvdb_id"])
+                # Sonarr returns a list when looking up by TVDB ID, but be
+                # defensive in case a single dict is returned
+                if isinstance(series, dict):
                     return series
+                if series:
+                    return series[0]
             except Exception as e:
                 logger.debug(f"Sonarr lookup by TVDB ID {guids.get('tvdb_id')} failed: {e}")
 
@@ -524,7 +529,11 @@ class Deleterr:
                         )
                         self.media_cleaner._update_seerr_status(library, media_item, "movie")
                     else:
-                        self.media_cleaner.delete_series(media_instance, media_item)
+                        if not self.media_cleaner.delete_series(media_instance, media_item):
+                            # Deletion was skipped (e.g. an episode file is in use).
+                            # Keep the item in the leaving_soon state so it is
+                            # retried on the next run.
+                            continue
                         self.media_cleaner._update_seerr_status(library, media_item, "tv")
                 except Exception as e:
                     logger.error(
@@ -732,11 +741,14 @@ class Deleterr:
     def _handle_library_failure(self, library_name, error):
         """Log a per-library failure and count it, without aborting the run.
 
-        TraktError/MdblistError mean exclusions could not be verified, so the
-        library is skipped entirely (fail safe). ConfigurationError keeps its
-        own message.
+        TraktError/MdblistError mean exclusions could not be verified, and
+        WatchDataError/TautulliApiError mean watch history is empty or invalid,
+        so the library is skipped entirely (fail safe). ConfigurationError keeps
+        its own message.
         """
-        if isinstance(error, WatchDataError):
+        if isinstance(error, (WatchDataError, TautulliApiError)):
+            # Watch data is missing or unusable; nothing in this library was
+            # touched (activity is fetched before any deletion decision).
             logger.error(f"Skipping library '{library_name}': {error}")
         elif isinstance(error, (TraktError, MdblistError)):
             logger.error(
@@ -808,7 +820,7 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except (ConfigurationError, TraktError, MdblistError, WatchDataError) as e:
+                except (ConfigurationError, TautulliApiError, TraktError, MdblistError, WatchDataError) as e:
                     self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "movie", self.config.settings.get("dry_run", True))
@@ -877,7 +889,7 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except (ConfigurationError, TraktError, MdblistError, WatchDataError) as e:
+                except (ConfigurationError, TautulliApiError, TraktError, MdblistError, WatchDataError) as e:
                     self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "show", self.config.settings.get("dry_run", True))
@@ -978,14 +990,28 @@ class Deleterr:
             preserve_plex_items=foreign_plex_items,
         )
 
-        # Record tagged timestamps for duration enforcement
+        # Re-read what actually made it onto the death row in Plex. The collection /
+        # label add can fail (e.g. Plex rejects a batch add with 400), and a failed
+        # add must NOT be recorded as tagged - otherwise state claims an item is on
+        # death row while Plex shows it empty, the duration clock is reset every run,
+        # and nothing is ever deleted. Plex is the source of truth here.
+        current_death_row = self._get_death_row_items(library, plex_library)
+        actually_tagged_keys = {item.ratingKey for item in current_death_row}
+
+        # Record tagged timestamps for duration enforcement (only for items that
+        # genuinely landed on death row in Plex).
         tagged_items = {}
+        failed_to_tag = 0
         if preview:
             now_iso = datetime.now().isoformat()
             for i, item in enumerate(preview):
                 plex_item = resolved_plex_items[i] if i < len(resolved_plex_items) else None
-                if plex_item:
+                if plex_item is None:
+                    continue
+                if plex_item.ratingKey in actually_tagged_keys:
                     tagged_items[str(plex_item.ratingKey)] = now_iso
+                else:
+                    failed_to_tag += 1
 
             if tagged_items:
                 self.state_manager.set_tagged_dates(library_name, tagged_items)
@@ -994,22 +1020,37 @@ class Deleterr:
                     len(tagged_items),
                     library_name,
                 )
+            if failed_to_tag:
+                logger.warning(
+                    "%d item(s) for library '%s' could not be tagged into the leaving_soon "
+                    "collection/labels in Plex and were NOT recorded as tagged - they will be "
+                    "retried next run (see the Plex API warnings above)",
+                    failed_to_tag,
+                    library_name,
+                )
 
-        # Clean up state entries for items no longer in collection
-        # (handles items removed manually from the collection)
-        current_death_row = self._get_death_row_items(library, plex_library)
-        active_keys = {item.ratingKey for item in current_death_row}
-        # Also include the items we just tagged
-        for plex_item in resolved_plex_items:
-            if plex_item:
-                active_keys.add(plex_item.ratingKey)
+        # Clean up stale state entries (items removed from the collection/labels).
+        # active_keys = what is actually tagged in Plex now + items that were on death
+        # row before this entry ran (siblings sharing the same Plex library name).
+        active_keys = set(actually_tagged_keys)
         # Preserve state for items that were on death row before this library entry
         # processed them. This prevents a library entry from wiping state that belongs
         # to another library entry sharing the same Plex library name.
         if death_row_plex_items:
             for item in death_row_plex_items:
                 active_keys.add(item.ratingKey)
-        self.state_manager.cleanup_library(library_name, active_keys)
+        # Never clean up with an empty active set: state is keyed by Plex library name,
+        # so an entry that tagged nothing this run (e.g. the daily half of a split
+        # "TV Shows" library) would otherwise wipe a sibling entry's timestamps and
+        # reset its duration clock every run.
+        if active_keys:
+            self.state_manager.cleanup_library(library_name, active_keys)
+        else:
+            logger.debug(
+                "Skipping leaving_soon state cleanup for library '%s' - nothing is tagged "
+                "this run (avoids wiping a sibling entry's shared state)",
+                library_name,
+            )
 
         # Determine which items to notify about
         if not self.notifications.is_leaving_soon_enabled():
@@ -1091,15 +1132,23 @@ class Deleterr:
         seerr_url = self.config.settings.get("seerr", {}).get("url")
 
         try:
-            self.notifications.send_leaving_soon(
+            success = self.notifications.send_leaving_soon(
                 items,
                 plex_url=plex_url,
                 seerr_url=seerr_url,
                 deletion_date=deletion_date,
                 saved_items=saved_items,
             )
+            if not success and (items or saved_items):
+                logger.error(
+                    f"Leaving soon notification failed for library '{library_name}': "
+                    "users were NOT notified about upcoming deletions"
+                )
         except Exception as e:
-            logger.error(f"Failed to send leaving_soon notification: {e}")
+            logger.error(
+                f"Failed to send leaving_soon notification for library '{library_name}': {e} "
+                "- users were NOT notified about upcoming deletions"
+            )
 
     def _log_preview(self, preview_items, media_type):
         """
@@ -1266,6 +1315,29 @@ def main():
         action="store_true",
         help="Force single run mode (overrides scheduler config)",
     )
+    parser.add_argument(
+        "--free-up",
+        dest="free_up",
+        default=None,
+        metavar="SIZE",
+        help=(
+            "On-demand emergency cleanup: delete across ALL libraries until every "
+            "disk has SIZE free, then stop (e.g. '1TB'). Forces a single immediate "
+            "run and bypasses the leaving_soon grace period."
+        ),
+    )
+    parser.add_argument(
+        "--free-up-path",
+        dest="free_up_path",
+        default=None,
+        metavar="PATH",
+        help="Restrict --free-up to a single mount/root folder (e.g. '/data/media')",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="With --free-up, preview what would be deleted without deleting anything",
+    )
 
     args, unknown = parser.parse_known_args()
 
@@ -1284,6 +1356,37 @@ def main():
         print(providers)
         logger.info("# of Trakt Providers: " + str(len(providers)))
 
+        return
+
+    # On-demand emergency cleanup (--free-up): single immediate run across all
+    # libraries until each disk hits the free-space target, then stop.
+    if args.free_up:
+        from app.on_demand import OnDemandCleaner
+        from app.utils import parse_size_to_bytes
+
+        try:
+            target_bytes = parse_size_to_bytes(args.free_up)
+        except (ValueError, IndexError):
+            logger.error(
+                "Invalid --free-up size '%s'. Use a value like '1TB', '500GB' or '750MB' "
+                "(uppercase unit).",
+                args.free_up,
+            )
+            sys.exit(1)
+
+        if args.dry_run:
+            config.settings["dry_run"] = True
+
+        # This is an explicit emergency action. If the scheduler daemon holds the
+        # instance lock, proceed anyway rather than blocking - the user asked for
+        # space now. We don't hold the lock ourselves (single short-lived run).
+        if not acquire_instance_lock():
+            logger.warning(
+                "Another deleterr instance is running, but --free-up is an emergency "
+                "action - proceeding anyway."
+            )
+
+        OnDemandCleaner(config).run(target_bytes, free_up_path=args.free_up_path)
         return
 
     # Determine run mode

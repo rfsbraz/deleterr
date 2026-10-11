@@ -61,6 +61,17 @@ exclude:
       - "https://trakt.tv/users/yourusername/watchlist"
 ```
 
+### User Favorites
+
+A user's favorites (the profile must be public):
+
+```yaml
+exclude:
+  trakt:
+    lists:
+      - "https://trakt.tv/users/yourusername/favorites"
+```
+
 ### Custom User Lists
 
 Any public user list:
@@ -87,7 +98,7 @@ exclude:
 
 ## Known Limitations
 
-- **Favorites lists** (`https://trakt.tv/users/.../favorites`) are not supported by the underlying Trakt library. Use custom lists as an alternative.
+- **Favorites lists** require the user's profile to be public (deleterr authenticates with the client id only, no OAuth).
 - **Periodic lists** (e.g., `watched/weekly`, `collected/monthly`) are not currently supported.
 
 ## Full Example

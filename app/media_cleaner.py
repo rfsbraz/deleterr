@@ -528,6 +528,52 @@ class MediaCleaner:
                == library.get("series_type", DEFAULT_SONARR_SERIES_TYPE)
         ]
 
+    def get_ordered_candidates(self, library, media_instance, media_type, all_data=None):
+        """
+        Return media items that currently match this library's deletion rules,
+        in the order the library's ``sort`` config produces.
+
+        Reuses :meth:`process_library_rules` unchanged, so exclusions, genres,
+        Trakt/mdblist lists, ``last_watched_threshold`` and ``added_at_threshold``
+        are all honored. Neither ``max_actions_per_run`` nor the per-library disk
+        gate is applied - the caller (on-demand cleanup) decides how many to consume.
+
+        Args:
+            library: Library configuration dict
+            media_instance: Radarr or Sonarr instance
+            media_type: 'movie' or 'show'
+            all_data: Unfiltered Sonarr series list (shows only). Fetched from the
+                instance when omitted.
+
+        Returns:
+            List of media dicts in the library's sort order. Each item carries
+            ``path`` and its size (``sizeOnDisk`` for movies, ``statistics.sizeOnDisk``
+            for shows), which on-demand cleanup uses for disk mapping and accounting.
+        """
+        plex_library = self.get_plex_library(library)
+
+        if media_type == "movie":
+            trakt_items = self.get_trakt_items("movie", library)
+            mdblist_items = self.get_mdblist_items("movie", library)
+            activity = self.get_movie_activity(library, plex_library)
+            media_data = media_instance.get_movies()
+            instance_kwargs = {"radarr_instance": media_instance}
+        else:
+            if all_data is None:
+                all_data = media_instance.get_series()
+            media_data = self.filter_shows(library, all_data)
+            trakt_items = self.get_trakt_items("show", library)
+            mdblist_items = self.get_mdblist_items("show", library)
+            activity = self.get_show_activity(library, plex_library)
+            instance_kwargs = {"sonarr_instance": media_instance}
+
+        return list(
+            self.process_library_rules(
+                library, plex_library, media_data, activity, trakt_items,
+                mdblist_items=mdblist_items, **instance_kwargs
+            )
+        )
+
     def process_library(self, library, sonarr_instance, unfiltered_all_show_data):
         """
         Process a Sonarr library.
@@ -657,7 +703,7 @@ class MediaCleaner:
         disk_size = sonarr_show.get("statistics", {}).get("sizeOnDisk", 0)
         total_episodes = sonarr_show.get("statistics", {}).get("episodeFileCount", 0)
 
-        is_dry_run = self.config.settings.get("dry_run")
+        is_dry_run = self.config.settings.get("dry_run", True)
 
         logger.log_deletion(
             title=sonarr_show["title"],
@@ -684,7 +730,8 @@ class MediaCleaner:
             sonarr_instance,
             sonarr_show,
     ):
-        self.delete_series(sonarr_instance, sonarr_show)
+        if not self.delete_series(sonarr_instance, sonarr_show):
+            return
 
         # Update Seerr status after successful deletion
         self._update_seerr_status(library, sonarr_show, "tv")
@@ -805,7 +852,7 @@ class MediaCleaner:
     ):
         disk_size = radarr_movie.get("sizeOnDisk", 0)
 
-        is_dry_run = self.config.settings.get("dry_run")
+        is_dry_run = self.config.settings.get("dry_run", True)
 
         logger.log_deletion(
             title=radarr_movie["title"],
@@ -825,7 +872,15 @@ class MediaCleaner:
 
         return disk_size
 
-    def delete_series(self, sonarr, sonarr_show):
+    def delete_series(self, sonarr, sonarr_show) -> bool:
+        """
+        Delete a series and its episode files from Sonarr.
+
+        Returns:
+            bool: True if the series was deleted, False if deletion was skipped
+                because an episode file could not be deleted (callers must keep
+                the item pending so it is retried on the next run).
+        """
         # PyArr doesn't support deleting the series files, so we need to do it manually
         episodes = sonarr.get_episode(sonarr_show["id"], series=True)
 
@@ -861,12 +916,14 @@ class MediaCleaner:
                 break
 
         # delete the series
-        if not skip_deleting_show:
-            sonarr.del_series(sonarr_show["id"], delete_files=True)
-        else:
+        if skip_deleting_show:
             logger.warning(
                 f"Skipping deletion of '{sonarr_show['title']}' - will be deleted on the next run"
             )
+            return False
+
+        sonarr.del_series(sonarr_show["id"], delete_files=True)
+        return True
 
     def delete_movie_if_allowed(
             self,
@@ -1077,9 +1134,13 @@ class MediaCleaner:
 
             if not plex_items:
                 # Collection exists but no items - clear it
-                self.media_server.set_collection_items(collection, [])
+                collection, _ = self.media_server.set_collection_items(
+                    collection, [], library=plex_library
+                )
             else:
-                self.media_server.set_collection_items(collection, plex_items)
+                collection, _ = self.media_server.set_collection_items(
+                    collection, plex_items, library=plex_library
+                )
 
             self.media_server.set_collection_visibility(
                 collection, home=promote_home, shared=promote_shared
@@ -1525,11 +1586,16 @@ class MediaCleaner:
         return True
 
     def check_trakt_movies(self, media_data, trakt_movies):
-        if media_data.get("tvdb_id", media_data.get("tmdbId")) in trakt_movies:
-            logger.debug(
-                f"{media_data['title']} found in trakt watched list {trakt_movies[media_data.get('tvdb_id', media_data.get('tmdbId'))]['list']}, skipping"
-            )
-            return False
+        if not trakt_movies:
+            return True
+
+        # Check by tmdbId (movies) or tvdbId (shows)
+        for media_id in (media_data.get("tmdbId"), media_data.get("tvdbId")):
+            if media_id and media_id in trakt_movies:
+                logger.debug(
+                    f"{media_data['title']} found in trakt watched list {trakt_movies[media_id]['list']}, skipping"
+                )
+                return False
 
         return True
 

@@ -147,6 +147,100 @@ def test_process_sonarr(radarr_mock, sonarr_mock, deleterr):
     )
 
 
+@pytest.mark.parametrize("media", ["radarr", "sonarr"])
+def test_tautulli_api_error_skips_library_and_logs(media, deleterr):
+    """An invalid Tautulli response must be logged and skip the library (fail safe)."""
+    from app.modules.tautulli import TautulliApiError
+
+    error = TautulliApiError("Tautulli returned an invalid history response")
+    if media == "radarr":
+        deleterr.radarr = {"Radarr1": MagicMock()}
+        deleterr.sonarr = {}
+        deleterr.config.settings = {"libraries": [{"name": "Movies", "radarr": "Radarr1"}]}
+        deleterr.media_cleaner.process_library_movies = MagicMock(side_effect=error)
+    else:
+        deleterr.sonarr = {"Sonarr1": MagicMock(get_series=MagicMock(return_value=[]))}
+        deleterr.radarr = {}
+        deleterr.config.settings = {"libraries": [{"name": "TV", "sonarr": "Sonarr1"}]}
+        deleterr.media_cleaner.process_library = MagicMock(side_effect=error)
+    deleterr.run_result = MagicMock()
+    failed_before = deleterr.libraries_failed
+    processed_before = deleterr.libraries_processed
+
+    with patch("app.deleterr.logger") as mock_logger:
+        getattr(deleterr, f"process_{media}")()
+
+    assert deleterr.libraries_failed == failed_before + 1
+    assert deleterr.libraries_processed == processed_before
+    deleterr.run_result.add_deleted.assert_not_called()
+    logged = " ".join(str(c.args[0]) for c in mock_logger.error.call_args_list)
+    assert "Skipping library" in logged
+    assert "invalid history response" in logged
+
+
+class TestLookupSonarrShow:
+    """Tests for Deleterr._lookup_sonarr_show."""
+
+    def test_tvdb_lookup_returns_first_series_from_list(self, deleterr):
+        """TVDB lookup returns a list; the first series dict is returned."""
+        deleterr.media_server.get_guids = MagicMock(
+            return_value={"tvdb_id": 12345, "imdb_id": "tt0000001"}
+        )
+        series = {"id": 1, "title": "Test Show", "tvdbId": 12345}
+        sonarr_instance = MagicMock(
+            get_series_by_tvdb=MagicMock(return_value=[series])
+        )
+
+        result = deleterr._lookup_sonarr_show(MagicMock(title="Test Show"), sonarr_instance)
+
+        assert result == series
+        sonarr_instance.get_series_by_tvdb.assert_called_once_with(12345)
+        sonarr_instance.get_series.assert_not_called()
+
+    def test_tvdb_lookup_handles_single_dict_response(self, deleterr):
+        """A single dict response from the TVDB lookup is returned as-is."""
+        deleterr.media_server.get_guids = MagicMock(return_value={"tvdb_id": 12345})
+        series = {"id": 1, "title": "Test Show", "tvdbId": 12345}
+        sonarr_instance = MagicMock(
+            get_series_by_tvdb=MagicMock(return_value=series)
+        )
+
+        result = deleterr._lookup_sonarr_show(MagicMock(title="Test Show"), sonarr_instance)
+
+        assert result == series
+
+    def test_tvdb_lookup_empty_falls_back_to_imdb(self, deleterr):
+        """An empty TVDB result falls through to the IMDB scan."""
+        deleterr.media_server.get_guids = MagicMock(
+            return_value={"tvdb_id": 12345, "imdb_id": "tt0000001"}
+        )
+        series = {"id": 2, "title": "Test Show", "imdbId": "tt0000001"}
+        sonarr_instance = MagicMock(
+            get_series_by_tvdb=MagicMock(return_value=[]),
+            get_series=MagicMock(return_value=[{"id": 9, "imdbId": "tt9999999"}, series]),
+        )
+
+        result = deleterr._lookup_sonarr_show(MagicMock(title="Test Show"), sonarr_instance)
+
+        assert result == series
+        sonarr_instance.get_series_by_tvdb.assert_called_once_with(12345)
+        sonarr_instance.get_series.assert_called_once_with()
+
+    def test_returns_none_when_not_found(self, deleterr):
+        """None is returned when neither TVDB nor IMDB lookups match."""
+        deleterr.media_server.get_guids = MagicMock(
+            return_value={"tvdb_id": 12345, "imdb_id": "tt0000001"}
+        )
+        sonarr_instance = MagicMock(
+            get_series_by_tvdb=MagicMock(return_value=[]),
+            get_series=MagicMock(return_value=[]),
+        )
+
+        result = deleterr._lookup_sonarr_show(MagicMock(title="Test Show"), sonarr_instance)
+
+        assert result is None
+
+
 class TestInstanceLock:
     """Tests for single-instance lock functionality."""
 

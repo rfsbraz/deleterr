@@ -24,7 +24,14 @@ def standard_config():
 @pytest.fixture
 def mock_media_server():
     """Create a mock media server."""
-    return MagicMock()
+    server = MagicMock()
+    # set_collection_items now returns (collection, added_items); default to
+    # passing the given collection straight through so existing collection
+    # references (used for visibility/summary calls) stay valid.
+    server.set_collection_items.side_effect = (
+        lambda collection, items, library=None: (collection, items)
+    )
+    return server
 
 
 @pytest.fixture(autouse=True)
@@ -144,7 +151,7 @@ class TestProcessLeavingSoon:
             plex_library, "Leaving Soon", items=[mock_plex_item]
         )
         mock_media_server.set_collection_items.assert_called_once_with(
-            mock_collection, [mock_plex_item]
+            mock_collection, [mock_plex_item], library=plex_library
         )
 
     def test_updates_labels_when_configured(self, media_cleaner, mock_media_server):
@@ -329,7 +336,7 @@ class TestDeathRowPattern:
         assert mock_media_server.find_item.call_count == 3
         # Should update collection with all items
         mock_media_server.set_collection_items.assert_called_once_with(
-            mock_collection, mock_items
+            mock_collection, mock_items, library=plex_library
         )
 
     def test_empty_items_clears_collection(self, media_cleaner_with_server, mock_media_server):
@@ -350,7 +357,7 @@ class TestDeathRowPattern:
 
         # Should update collection with empty list
         mock_media_server.set_collection_items.assert_called_once_with(
-            mock_collection, []
+            mock_collection, [], library=plex_library
         )
 
     def test_both_collection_and_labels(self, media_cleaner_with_server, mock_media_server):
@@ -927,6 +934,86 @@ class TestLeavingSoonNotifications:
         assert items[0].title == "Show 1"
         assert items[0].media_type == "show"
 
+    def test_send_leaving_soon_notification_failure_logs_error(
+        self, deleterr_with_notifications, mock_notification_manager, caplog
+    ):
+        """Test that a failed leaving_soon send logs that users were not notified."""
+        import logging
+
+        mock_notification_manager.send_leaving_soon.return_value = False
+
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        preview = [
+            {"title": "Movie 1", "year": 2020, "tmdbId": 550, "sizeOnDisk": 1000000000},
+        ]
+
+        deleterr_with_notifications.media_server.get_library.return_value = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            deleterr_with_notifications._process_library_leaving_soon(library, preview, "movie")
+
+        assert any(
+            record.levelno >= logging.WARNING and "NOT notified" in record.message
+            for record in caplog.records
+        ), f"Expected failure log about users not notified, got: {[r.message for r in caplog.records]}"
+
+    def test_send_leaving_soon_notification_success_no_failure_log(
+        self, deleterr_with_notifications, mock_notification_manager, caplog
+    ):
+        """Test that a successful leaving_soon send does not log a failure."""
+        import logging
+
+        mock_notification_manager.send_leaving_soon.return_value = True
+
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        preview = [
+            {"title": "Movie 1", "year": 2020, "tmdbId": 550, "sizeOnDisk": 1000000000},
+        ]
+
+        deleterr_with_notifications.media_server.get_library.return_value = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            deleterr_with_notifications._process_library_leaving_soon(library, preview, "movie")
+
+        assert not any(
+            "NOT notified" in record.message for record in caplog.records
+        ), f"Unexpected failure log, got: {[r.message for r in caplog.records]}"
+
+    def test_send_leaving_soon_notification_exception_logs_error(
+        self, deleterr_with_notifications, mock_notification_manager, caplog
+    ):
+        """Test that an exception during leaving_soon send logs that users were not notified."""
+        import logging
+
+        mock_notification_manager.send_leaving_soon.side_effect = Exception("boom")
+
+        library = {
+            "name": "Movies",
+            "radarr": "Radarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+        preview = [
+            {"title": "Movie 1", "year": 2020, "tmdbId": 550, "sizeOnDisk": 1000000000},
+        ]
+
+        deleterr_with_notifications.media_server.get_library.return_value = MagicMock()
+
+        with caplog.at_level(logging.ERROR):
+            deleterr_with_notifications._process_library_leaving_soon(library, preview, "movie")
+
+        assert any(
+            record.levelno >= logging.ERROR and "NOT notified" in record.message
+            for record in caplog.records
+        ), f"Expected exception log about users not notified, got: {[r.message for r in caplog.records]}"
+
 
 class TestLeavingSoonPreviewDoesNotDuplicate:
     """Tests ensuring leaving_soon preview items don't appear in 'would be deleted' list.
@@ -1408,7 +1495,9 @@ class TestCollectionCreationEdgeCases:
         media_cleaner.process_leaving_soon(library_config, plex_library, [], "movie")
 
         # Should clear the existing collection
-        mock_media_server.set_collection_items.assert_called_once_with(mock_collection, [])
+        mock_media_server.set_collection_items.assert_called_once_with(
+            mock_collection, [], library=plex_library
+        )
 
 
 class TestDeathRowLogging:
@@ -1696,7 +1785,7 @@ class TestDeathRowDeletionErrorHandling:
         sonarr_instance = deleterr_instance.sonarr["Sonarr"]
         # First call raises, second succeeds
         deleterr_instance.media_cleaner.delete_series.side_effect = [
-            Exception("Sonarr API timeout"), None
+            Exception("Sonarr API timeout"), True
         ]
 
         deleterr_instance.media_server.get_library.return_value = MagicMock()
@@ -1727,6 +1816,46 @@ class TestDeathRowDeletionErrorHandling:
         # Only Show B should be in deleted (Show A failed)
         assert len(deleted) == 1
         assert deleted[0]["title"] == "Show B"
+
+    def test_show_skipped_deletion_keeps_state_for_retry(self, deleterr_instance):
+        """A show whose deletion was skipped (delete_series returns False) is not
+        counted as deleted and its leaving_soon state is kept so it is retried."""
+        library = {
+            "name": "TV Shows",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 5,
+        }
+
+        plex_item = MagicMock(ratingKey=2001)
+        sonarr_show = {
+            "id": 201, "title": "Stuck Show", "tvdbId": 81189,
+            "statistics": {"sizeOnDisk": 5000, "episodeFileCount": 10},
+        }
+
+        sonarr_instance = deleterr_instance.sonarr["Sonarr"]
+        # delete_series signals a skipped deletion (e.g. episode file in use)
+        deleterr_instance.media_cleaner.delete_series.return_value = False
+
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[plex_item])
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[sonarr_show])
+        deleterr_instance.media_server.find_item.return_value = plex_item
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            saved_space, deleted, preview, _saved, _prior, _foreign = deleterr_instance._process_death_row(
+                library, sonarr_instance, "show"
+            )
+
+        deleterr_instance.media_cleaner.delete_series.assert_called_once_with(
+            sonarr_instance, sonarr_show
+        )
+        # The show was not deleted, so it must not be counted as deleted
+        assert len(deleted) == 0
+        # Seerr must not be told the show was deleted
+        deleterr_instance.media_cleaner._update_seerr_status.assert_not_called()
+        # State must be kept so the show is retried on the next run
+        deleterr_instance.state_manager.remove_items.assert_not_called()
 
 
 class TestSharedCollectionPreservation:

@@ -436,6 +436,37 @@ def test_process_show_not_dry_run(mock_delete_show_if_allowed, standard_config):
     assert result == 100
 
 
+@patch.object(MediaCleaner, "delete_show_if_allowed")
+def test_process_show_missing_dry_run_defaults_to_dry_run(
+    mock_delete_show_if_allowed, standard_config
+):
+    # Arrange
+    library = {}
+    sonarr_instance = MagicMock()
+    sonarr_show = {
+        "title": "Test Show",
+        "statistics": {"sizeOnDisk": 100, "episodeFileCount": 10},
+    }
+    actions_performed = 0
+    max_actions_per_run = 1
+
+    media_cleaner = MediaCleaner(standard_config)
+    media_cleaner.config.settings = {}
+
+    # Act
+    result = media_cleaner.process_show(
+        library,
+        sonarr_instance,
+        sonarr_show,
+        actions_performed,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_delete_show_if_allowed.assert_not_called()
+    assert result == 100
+
+
 def test_check_exclusions(mocker, standard_config):
     # Arrange
     library = {"name": "Test Library", "exclude": {}}
@@ -951,6 +982,34 @@ def test_process_movie_dry_run(mock_delete_movie_if_allowed, standard_config):
     assert result == radarr_movie["sizeOnDisk"]
 
 
+@patch("app.media_cleaner.MediaCleaner.delete_movie_if_allowed")
+def test_process_movie_missing_dry_run_defaults_to_dry_run(
+    mock_delete_movie_if_allowed, standard_config
+):
+    # Arrange
+    library = {"name": "Test Library"}
+    radarr_instance = MagicMock()
+    radarr_movie = {"title": "Test Movie", "sizeOnDisk": 100}
+    actions_performed = 0
+    max_actions_per_run = 1
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+    media_cleaner_instance.config.settings = {}
+
+    # Act
+    result = media_cleaner_instance.process_movie(
+        library,
+        radarr_instance,
+        radarr_movie,
+        actions_performed,
+        max_actions_per_run,
+    )
+
+    # Assert
+    mock_delete_movie_if_allowed.assert_not_called()
+    assert result == radarr_movie["sizeOnDisk"]
+
+
 def test_delete_series_server_error(standard_config):
     # Arrange
     mock_sonarr = MagicMock()
@@ -969,7 +1028,7 @@ def test_delete_series_server_error(standard_config):
     media_cleaner_instance = MediaCleaner(standard_config)
 
     # Act
-    media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
+    result = media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
 
     # Assert
     mock_sonarr.get_episode.assert_called_once_with(sonarr_show["id"], series=True)
@@ -978,6 +1037,7 @@ def test_delete_series_server_error(standard_config):
     )
     assert mock_sonarr.del_episode_file.call_count == 2
     mock_sonarr.del_series.assert_not_called()
+    assert result is False
 
 
 def test_delete_series_resource_not_found(standard_config):
@@ -998,7 +1058,7 @@ def test_delete_series_resource_not_found(standard_config):
     media_cleaner_instance = MediaCleaner(standard_config)
 
     # Act
-    media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
+    result = media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
 
     # Assert
     mock_sonarr.get_episode.assert_called_once_with(sonarr_show["id"], series=True)
@@ -1007,6 +1067,7 @@ def test_delete_series_resource_not_found(standard_config):
     )
     assert mock_sonarr.del_episode_file.call_count == 2
     mock_sonarr.del_series.assert_called_once_with(sonarr_show["id"], delete_files=True)
+    assert result is True
 
 
 def test_delete_series_no_errors(standard_config):
@@ -1023,7 +1084,7 @@ def test_delete_series_no_errors(standard_config):
     media_cleaner_instance = MediaCleaner(standard_config)
 
     # Act
-    media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
+    result = media_cleaner_instance.delete_series(mock_sonarr, sonarr_show)
 
     # Assert
     mock_sonarr.get_episode.assert_called_once_with(sonarr_show["id"], series=True)
@@ -1032,6 +1093,28 @@ def test_delete_series_no_errors(standard_config):
     )
     assert mock_sonarr.del_episode_file.call_count == 2
     mock_sonarr.del_series.assert_called_once_with(sonarr_show["id"], delete_files=True)
+    assert result is True
+
+
+def test_delete_show_if_allowed_skips_seerr_update_when_deletion_skipped(standard_config):
+    # Arrange
+    library = {"name": "Test Library"}
+    mock_sonarr = MagicMock()
+    sonarr_show = {"id": 1, "title": "Test Show"}
+
+    media_cleaner_instance = MediaCleaner(standard_config)
+
+    with patch.object(
+        MediaCleaner, "delete_series", return_value=False
+    ) as mock_delete_series, patch.object(
+        MediaCleaner, "_update_seerr_status"
+    ) as mock_update_seerr:
+        # Act
+        media_cleaner_instance.delete_show_if_allowed(library, mock_sonarr, sonarr_show)
+
+    # Assert
+    mock_delete_series.assert_called_once_with(mock_sonarr, sonarr_show)
+    mock_update_seerr.assert_not_called()
 
 
 def test_delete_movie_if_allowed(standard_config):
@@ -1649,9 +1732,16 @@ def test_check_collections(
 @pytest.mark.parametrize(
     "media_data, trakt_movies, expected",
     [
-        ({"title": "movie1", "tvdb_id": "1"}, {"1": {"list": "watched"}}, False),
-        ({"title": "movie2", "tmdbId": "2"}, {"2": {"list": "watched"}}, False),
-        ({"title": "movie3", "tvdb_id": "3"}, {"4": {"list": "watched"}}, True),
+        # Movie found in trakt list by tmdbId → excluded
+        ({"title": "movie1", "tmdbId": 123}, {123: {"list": "https://trakt.tv/users/user/lists/list"}}, False),
+        # Show found in trakt list by tvdbId → excluded
+        ({"title": "show1", "tvdbId": 456}, {456: {"list": "https://trakt.tv/users/user/lists/list"}}, False),
+        # Show with both ids matches the trakt list keyed by tvdbId → excluded
+        ({"title": "show2", "tmdbId": 789, "tvdbId": 456}, {456: {"list": "url"}}, False),
+        # Item not found in trakt list → actionable
+        ({"title": "movie2", "tmdbId": 789}, {123: {"list": "url"}}, True),
+        # Empty trakt dict → actionable
+        ({"title": "movie3", "tmdbId": 999}, {}, True),
     ],
 )
 def test_check_trakt_movies(media_data, trakt_movies, expected, media_cleaner):

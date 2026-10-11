@@ -9,6 +9,10 @@ from app import logger
 HISTORY_PAGE_SIZE = 300
 
 
+class TautulliApiError(Exception):
+    """Raised when Tautulli returns an invalid or unexpected API response."""
+
+
 def filter_by_most_recent(data, key, sort_key):
     # Create an empty dictionary to hold the highest stopped value for each id
     max_sort_key = {}
@@ -92,6 +96,13 @@ class Tautulli:
                 length=HISTORY_PAGE_SIZE,
                 include_activity=1,
             )
+            if not isinstance(history, dict) or "data" not in history:
+                raise TautulliApiError(
+                    f"Tautulli returned an invalid history response for section "
+                    f"{section} (offset {start}): expected a dict with a 'data' "
+                    f"key, got {type(history).__name__}. Check that Tautulli is "
+                    f"reachable and healthy before retrying."
+                )
             if not history["data"]:
                 break
 

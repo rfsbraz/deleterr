@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.24](https://github.com/rfsbraz/deleterr/compare/v0.2.23...v0.2.24) (2026-08-18)
+
+
+### Bug Fixes
+
+* **plex:** recreate leaving_soon collection when it rejects every add ([a22b58c](https://github.com/rfsbraz/deleterr/commit/a22b58c1e29a120799004219be12fde24c1d7c3f))
+* **trakt:** support favorites lists via direct REST call ([#286](https://github.com/rfsbraz/deleterr/issues/286)) ([2a5654f](https://github.com/rfsbraz/deleterr/commit/2a5654fd28dbefba1fe0a77a8875f196e39ea78f))
+
+## [0.2.23](https://github.com/rfsbraz/deleterr/compare/v0.2.22...v0.2.23) (2026-07-12)
+
+
+### Features
+
+* **on-demand:** add --free-up emergency cleanup mode ([#304](https://github.com/rfsbraz/deleterr/issues/304)) ([a6e2d59](https://github.com/rfsbraz/deleterr/commit/a6e2d594a50a19412df9b2707d3cc2141a88a176)), closes [#299](https://github.com/rfsbraz/deleterr/issues/299)
+
+## [0.2.22](https://github.com/rfsbraz/deleterr/compare/v0.2.21...v0.2.22) (2026-07-10)
+
+
+### Bug Fixes
+
+* **leaving_soon:** only record death-row state for items actually tagged in Plex ([#302](https://github.com/rfsbraz/deleterr/issues/302)) ([a7a0ea4](https://github.com/rfsbraz/deleterr/commit/a7a0ea497e5386a7bb2072aeac4c6f9123c478c8)), closes [#300](https://github.com/rfsbraz/deleterr/issues/300) [#301](https://github.com/rfsbraz/deleterr/issues/301)
+
+## [0.2.21](https://github.com/rfsbraz/deleterr/compare/v0.2.20...v0.2.21) (2026-06-14)
+
+
+### Bug Fixes
+
+* **leaving-soon:** look up Sonarr series by TVDB ID correctly ([#279](https://github.com/rfsbraz/deleterr/issues/279)) ([10005ea](https://github.com/rfsbraz/deleterr/commit/10005ea496fb768138aea8c99eda175ac3f76dcd))
+
+## [0.2.20](https://github.com/rfsbraz/deleterr/compare/v0.2.19...v0.2.20) (2026-06-13)
+
+
+### Bug Fixes
+
+* **config:** validate quality_profiles exclusions without requiring tags ([#276](https://github.com/rfsbraz/deleterr/issues/276)) ([ebf5304](https://github.com/rfsbraz/deleterr/commit/ebf530427735ef0a317e95907aa716947a31490a))
+* **exclusions:** match Sonarr shows against Trakt lists by tvdbId ([#274](https://github.com/rfsbraz/deleterr/issues/274)) ([412e1aa](https://github.com/rfsbraz/deleterr/commit/412e1aafa837492d2dd1bbaf3e64c13ba6169a6a))
+* **leaving-soon:** retry series whose deletion was skipped instead of clearing state ([#278](https://github.com/rfsbraz/deleterr/issues/278)) ([e46a047](https://github.com/rfsbraz/deleterr/commit/e46a04734c3cad190f7fb314a9c8881d46e51f13))
+* **media_cleaner:** treat missing dry_run setting as dry run ([#275](https://github.com/rfsbraz/deleterr/issues/275)) ([fcaa09b](https://github.com/rfsbraz/deleterr/commit/fcaa09b0c90ee860d28e1ac90d3eafdb3ae82c20))
+* **notifications:** add timeout to SMTP connections ([#277](https://github.com/rfsbraz/deleterr/issues/277)) ([eec14b4](https://github.com/rfsbraz/deleterr/commit/eec14b4417263015c254334b60ed594e9be1230a))
+* **notifications:** surface send failures in logs ([#282](https://github.com/rfsbraz/deleterr/issues/282)) ([b0b6cd8](https://github.com/rfsbraz/deleterr/commit/b0b6cd8bb42caeb999dee8b179445758f37eb4bc))
+* **tautulli:** raise a clear error on invalid history responses ([#280](https://github.com/rfsbraz/deleterr/issues/280)) ([0619f87](https://github.com/rfsbraz/deleterr/commit/0619f87d0248414c09827f6ef7de6850f2333080))
+
 ## [0.2.19](https://github.com/rfsbraz/deleterr/compare/v0.2.18...v0.2.19) (2026-06-01)
 
 

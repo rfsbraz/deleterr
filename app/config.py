@@ -724,12 +724,14 @@ class Config:
 
         # Warn if quality profiles do not exist in radarr
         if "quality_profiles" in radar_exclusions:
-            profiles = radarr_instance.get_quality_profiles()
-            for profile in radar_exclusions["quality_profiles"]:
-                if profile not in [p["name"] for p in profiles]:
-                    logger.warning(
-                        f"Radarr profile '{profile}' does not exist in instance '{connection['name']}'"
-                    )
+            for connection in radarr_settings:
+                radarr_instance = DRadarr(connection["name"], connection["url"], connection["api_key"])
+                profiles = radarr_instance.get_quality_profiles()
+                for profile in radar_exclusions["quality_profiles"]:
+                    if profile not in [p["name"] for p in profiles]:
+                        logger.warning(
+                            f"Radarr profile '{profile}' does not exist in instance '{connection['name']}'"
+                        )
 
         return True
 

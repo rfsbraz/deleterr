@@ -15,6 +15,9 @@ from app.modules.notifications.models import DeletedItem, RunResult
 # Default template path
 DEFAULT_TEMPLATE_PATH = Path(__file__).parent.parent.parent.parent / "templates" / "leaving_soon.html"
 
+# Timeout for SMTP connections so an unresponsive server doesn't hang the run
+SMTP_TIMEOUT_SECONDS = 30
+
 
 class EmailProvider(BaseNotificationProvider):
     """Email notification provider with SMTP support and HTML templates."""
@@ -121,10 +124,12 @@ class EmailProvider(BaseNotificationProvider):
 
         if use_ssl:
             # Implicit SSL (typically port 465)
-            smtp = smtplib.SMTP_SSL(smtp_server, smtp_port, context=context)
+            smtp = smtplib.SMTP_SSL(
+                smtp_server, smtp_port, context=context, timeout=SMTP_TIMEOUT_SECONDS
+            )
         else:
             # Plain or STARTTLS (typically port 587 or 25)
-            smtp = smtplib.SMTP(smtp_server, smtp_port)
+            smtp = smtplib.SMTP(smtp_server, smtp_port, timeout=SMTP_TIMEOUT_SECONDS)
             if use_tls:
                 smtp.starttls(context=context)
 
