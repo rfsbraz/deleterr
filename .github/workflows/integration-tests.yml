@@ -23,6 +23,11 @@ jobs:
     timeout-minutes: 30
     # Skip on release-please PRs (code was already tested in the original PR)
     if: ${{ !startsWith(github.head_ref || '', 'release-please--') }}
+    env:
+      # Same secrets as docker-image.yml. Empty on fork PRs (and on Dependabot
+      # PRs if they aren't set as Dependabot secrets); pulls are then anonymous.
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
     steps:
       - name: Checkout repository
@@ -45,10 +50,37 @@ jobs:
           cd tests/integration/seed_data/tautulli
           python create_db.py
 
+      # Authenticated pulls avoid Docker Hub's anonymous rate limit
+      # ("toomanyrequests", e.g. scheduled run 38227113447).
+      - name: Log in to Docker Hub
+        if: env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Pre-pull Docker Compose images
+        run: |
+          cd tests/integration
+          for attempt in 1 2 3; do
+            if docker compose -f docker-compose.integration.yml pull --ignore-buildable \
+              && docker compose -f docker-compose.integration.yml build --pull; then
+              echo "Images ready (attempt $attempt)"
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              delay=$((attempt * 30))
+              echo "::warning::Image pull failed (attempt $attempt/3), retrying in ${delay}s"
+              sleep "$delay"
+            fi
+          done
+          echo "::error::Image pull failed after 3 attempts"
+          exit 1
+
       - name: Start Docker Compose services
         run: |
           cd tests/integration
-          docker compose -f docker-compose.integration.yml up -d --build
+          docker compose -f docker-compose.integration.yml up -d
 
       - name: Fix volume permissions for linuxserver containers
         run: |
