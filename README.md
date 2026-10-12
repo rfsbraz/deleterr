@@ -5,8 +5,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker Pulls](https://img.shields.io/docker/pulls/rfsbraz/deleterr)](https://hub.docker.com/r/rfsbraz/deleterr)
 [![GitHub Release](https://img.shields.io/github/v/release/rfsbraz/deleterr)](https://github.com/rfsbraz/deleterr/releases)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=rfsbraz_deleterr&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=rfsbraz_deleterr)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=rfsbraz_deleterr&metric=coverage)](https://sonarcloud.io/summary/new_code?id=rfsbraz_deleterr)
 
 **Intelligent media library cleanup for Plex.**
 
