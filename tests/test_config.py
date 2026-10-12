@@ -678,3 +678,42 @@ class TestTransientRetryBehavior:
             assert config.test_api_connection(connection) is False
 
         assert config._last_failure_transient is True
+
+
+class TestPlexLabelExclusionValidation:
+    radarr_config = [
+        {"name": "test", "url": "http://localhost:7878", "api_key": "API_KEY"}
+    ]
+
+    def _library(self, exclude):
+        return {
+            "name": "Movies",
+            "action_mode": "delete",
+            "radarr": "test",
+            "exclude": exclude,
+        }
+
+    def test_warns_on_top_level_exclude_tags(self):
+        validator = Config(
+            {"libraries": [self._library({"tags": ["keep"]})], "radarr": self.radarr_config}
+        )
+        with patch("app.config.logger") as mock_logger:
+            assert validator.validate_plex_label_exclusions(validator.settings["libraries"][0])
+        mock_logger.warning.assert_called_once()
+        assert "plex_labels" in mock_logger.warning.call_args[0][0]
+
+    @pytest.mark.parametrize(
+        "exclude",
+        [
+            {"plex_labels": ["keep"]},
+            {"radarr": {"tags": ["keep"]}},
+            {},
+        ],
+    )
+    def test_no_warning_for_supported_keys(self, exclude):
+        validator = Config(
+            {"libraries": [self._library(exclude)], "radarr": self.radarr_config}
+        )
+        with patch("app.config.logger") as mock_logger:
+            assert validator.validate_plex_label_exclusions(validator.settings["libraries"][0])
+        mock_logger.warning.assert_not_called()
