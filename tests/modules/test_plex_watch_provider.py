@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from app.modules.plex_watch_provider import PlexWatchProvider
@@ -186,3 +186,134 @@ class TestHasUserWatched:
         """Returns False when both rating_key and grandparent_rating_key are None."""
         result = provider.has_user_watched("1", None, None, "testuser")
         assert result is False
+
+
+def _episode_history(**attrs):
+    """Build a real plexapi EpisodeHistory as returned by PlexServer.history().
+
+    Plex's history endpoint omits grandparentRatingKey and guid for episodes;
+    only grandparentKey (/library/metadata/<id>) identifies the show (#317).
+    """
+    from xml.etree import ElementTree as ET
+    from plexapi.video import EpisodeHistory
+
+    base = {
+        "historyKey": "/status/sessions/history/1",
+        "key": "/library/metadata/200",
+        "parentKey": "/library/metadata/150",
+        "grandparentKey": "/library/metadata/100",
+        "title": "Pilot",
+        "grandparentTitle": "Modern Family",
+        "type": "episode",
+        "viewedAt": "1759500000",
+        "accountID": "1",
+        "librarySectionID": "2",
+    }
+    base.update(attrs)
+    element = ET.Element("Video", {k: v for k, v in base.items() if v is not None})
+    return EpisodeHistory(MagicMock(), element, initpath="/status/sessions/history/all")
+
+
+class TestEpisodeHistoryShowIdentity:
+    """Episode plays must map back to their show (#317)."""
+
+    def test_fixture_matches_plex_history_shape(self):
+        entry = _episode_history()
+        assert entry.grandparentRatingKey is None
+        assert entry.guid is None
+
+    def test_show_key_derived_from_grandparent_key(self, provider, mock_plex_server):
+        mock_plex_server.history.return_value = [_episode_history()]
+
+        result = provider.get_activity("2")
+
+        assert "100" in result
+        assert result["100"]["title"] == "Modern Family"
+        assert result["100"]["last_watched"] == datetime.fromtimestamp(1759500000)
+
+    def test_grandparent_guid_used_when_present(self, provider, mock_plex_server):
+        mock_plex_server.history.return_value = [
+            _episode_history(grandparentGuid="plex://show/abc")
+        ]
+
+        result = provider.get_activity("2")
+
+        assert "plex://show/abc" in result
+        assert "100" in result
+
+    def test_most_recent_play_per_show(self, provider, mock_plex_server):
+        mock_plex_server.history.return_value = [
+            _episode_history(viewedAt="1700000000"),
+            _episode_history(key="/library/metadata/201", viewedAt="1759500000"),
+        ]
+
+        result = provider.get_activity("2")
+
+        assert result["100"]["last_watched"] == datetime.fromtimestamp(1759500000)
+
+    def test_unresolvable_show_fails_safe(self, provider, mock_plex_server):
+        """Plays that can't be tied to a show must not make shows look unwatched."""
+        from app.modules.plex_watch_provider import PlexWatchHistoryError
+        from app.modules.tautulli import TautulliApiError
+
+        mock_plex_server.history.return_value = [
+            _episode_history(),
+            _episode_history(grandparentKey=None, viewedAt="1759600000"),
+        ]
+
+        with pytest.raises(PlexWatchHistoryError, match="Modern Family"):
+            provider.get_activity("2")
+        # Existing per-library handlers (scheduled run and --free-up) catch it
+        assert issubclass(PlexWatchHistoryError, TautulliApiError)
+
+    def test_recently_watched_show_matches_plex_show(self, provider, mock_plex_server):
+        from app.media_cleaner import find_watched_data
+
+        mock_plex_server.history.return_value = [_episode_history()]
+        show = MagicMock(guid="plex://show/abc", ratingKey=100, title="Modern Family", year=2009)
+
+        watched = find_watched_data(show, provider.get_activity("2"))
+
+        assert watched is not None
+        assert watched["last_watched"] == datetime.fromtimestamp(1759500000)
+
+
+class TestPlexProviderShowHistoryOnDemand:
+    """--free-up (get_ordered_candidates) must see Plex episode plays (#317)."""
+
+    def _cleaner(self, history):
+        from app.modules.plex_watch_provider import PlexWatchProvider
+
+        from app.media_cleaner import MediaCleaner
+
+        with patch("app.modules.plex_watch_provider.PlexServer") as server_cls, \
+                patch("app.media_cleaner.PlexServer"):
+            server_cls.return_value.history.return_value = history
+            cleaner = MediaCleaner(MagicMock(settings={"plex": {"url": "http://plex", "token": "t"}}))
+            cleaner.watch_provider = PlexWatchProvider("http://plex", "token")
+        return cleaner
+
+    def test_recently_watched_show_is_not_a_candidate(self):
+        recent = str(int((datetime.now() - timedelta(days=8)).timestamp()))
+        cleaner = self._cleaner([_episode_history(viewedAt=recent)])
+
+        show = MagicMock(
+            guid="plex://show/abc", guids=[], ratingKey=100,
+            title="Modern Family", year=2009, collections=[],
+            addedAt=datetime(2015, 1, 1),
+        )
+        plex_library = MagicMock(key=2, totalSize=1)
+        plex_library.all.return_value = [show]
+        cleaner.get_plex_library = MagicMock(return_value=plex_library)
+        sonarr_show = {
+            "title": "Modern Family", "year": 2009, "alternateTitles": [],
+            "tvdbId": 95011, "seriesType": "standard", "path": "/tv/Modern Family",
+            "statistics": {"episodeFileCount": 250, "sizeOnDisk": 1},
+        }
+        library = {"name": "TV", "sonarr": "Sonarr", "last_watched_threshold": 365}
+
+        candidates = cleaner.get_ordered_candidates(
+            library, MagicMock(), "show", all_data=[sonarr_show]
+        )
+
+        assert candidates == []
