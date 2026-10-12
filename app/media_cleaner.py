@@ -378,12 +378,21 @@ class PlexLibraryIndex:
         return self._plex_guid_item_pair
 
 
+# Sentinel: Plex collection membership could not be loaded (#321)
+COLLECTIONS_UNAVAILABLE = object()
+
+
 class MediaCleaner:
     def __init__(self, config, media_server=None):
         self.config = config
         self.media_server = media_server
 
         self.watched_collections = set()
+        # Collection membership for the library being processed (#321):
+        # None = not loaded (fall back to item.collections),
+        # COLLECTIONS_UNAVAILABLE = fetch failed (fail safe), else
+        # {ratingKey: {collection titles}}.
+        self._collection_membership = None
         self._justwatch_instances = {}  # Cache for JustWatch instances per country
 
         # Setup connections
@@ -1377,24 +1386,30 @@ class MediaCleaner:
             f"{len(plex_index.by_filename)} filename entries"
         )
 
+        self._collection_membership = None
         if apply_last_watch_threshold_to_collections:
+            self._collection_membership = self.load_collection_membership(plex_library)
+
+        if (
+                apply_last_watch_threshold_to_collections
+                and self._collection_membership is not COLLECTIONS_UNAVAILABLE
+        ):
             logger.debug("Gathering collection watched status")
             for guid, watched_data in activity_data.items():
                 plex_media_item = self.get_plex_item(plex_guid_item_pair, guid=guid, index=plex_index)
                 if plex_media_item is None:
                     continue
                 last_watched = (datetime.now() - watched_data["last_watched"]).days
+                item_collections = self.get_item_collections(plex_media_item)
                 if (
-                        plex_media_item.collections
+                        item_collections
                         and last_watched_threshold is not None
                         and last_watched < last_watched_threshold
                 ):
                     logger.debug(
-                        f"{watched_data['title']} watched {last_watched} days ago, adding collection {plex_media_item.collections} to watched collections"
+                        f"{watched_data['title']} watched {last_watched} days ago, adding collection {item_collections} to watched collections"
                     )
-                    self.watched_collections = self.watched_collections | {
-                        c.tag for c in plex_media_item.collections
-                    }
+                    self.watched_collections = self.watched_collections | item_collections
 
         unmatched = 0
         for media_data in sort_media(all_data, library_config.get("sort", {}), activity_data, plex_guid_item_pair):
@@ -1522,6 +1537,37 @@ class MediaCleaner:
 
         return True
 
+    def load_collection_membership(self, plex_library):
+        """Map each item's ratingKey to the titles of its Plex collections.
+
+        Library listings return partial items whose ``collections`` can be
+        missing or truncated, so membership comes from the library's
+        collections instead: one request for the collections plus one per
+        collection, rather than reloading every item. If it can't be fetched,
+        returns COLLECTIONS_UNAVAILABLE so no item is deleted (fail safe).
+        """
+        membership = {}
+        try:
+            for collection in plex_library.collections():
+                for child in collection.items():
+                    membership.setdefault(str(child.ratingKey), set()).add(collection.title)
+        except Exception as e:
+            logger.warning(
+                f"Could not load Plex collections for library "
+                f"'{getattr(plex_library, 'title', plex_library)}': {e}. "
+                f"apply_last_watch_threshold_to_collections can't be verified, "
+                f"so no items will be deleted from this library this run."
+            )
+            return COLLECTIONS_UNAVAILABLE
+        logger.debug(f"Loaded membership for {len(membership)} items in Plex collections")
+        return membership
+
+    def get_item_collections(self, plex_media_item):
+        """Collection titles for an item, from loaded membership when available."""
+        if isinstance(self._collection_membership, dict):
+            return set(self._collection_membership.get(str(plex_media_item.ratingKey), ()))
+        return {c.tag for c in plex_media_item.collections}
+
     def check_collections(
             self,
             apply_last_watch_threshold_to_collections,
@@ -1529,8 +1575,13 @@ class MediaCleaner:
             plex_media_item,
     ):
         if apply_last_watch_threshold_to_collections:
+            if self._collection_membership is COLLECTIONS_UNAVAILABLE:
+                logger.debug(
+                    f"{media_data['title']} skipped: Plex collections unavailable"
+                )
+                return False
             if already_watched := self.watched_collections.intersection(
-                    {c.tag for c in plex_media_item.collections}
+                    self.get_item_collections(plex_media_item)
             ):
                 logger.debug(
                     f"{media_data['title']} has watched collections ({already_watched}), skipping"
