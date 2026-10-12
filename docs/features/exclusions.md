@@ -11,6 +11,9 @@ Exclusions protect media from deletion. If any exclusion rule matches an item, t
 | **Sonarr** | `status`, `tags`, `quality_profiles`, `paths`, `monitored` |
 | **Integrations** | [`trakt`](../integrations/trakt.md), [`mdblist`](../integrations/mdblist.md), [`justwatch`](../integrations/justwatch.md), [`seerr`](../integrations/overseerr.md) |
 
+!!! note "Full Plex metadata"
+    Plex library listings only include some tags per item (for example, the first two genres). When tag-based exclusions (`genres`, `collections`, `plex_labels`, `actors`, `directors`, `writers`, `producers`) are configured and nothing matched on the listing, Deleterr loads the item's full metadata from Plex before deciding. If that fails, the item is skipped rather than deleted.
+
 All exclusions are configured under the `exclude` key inside a library block:
 
 ```yaml

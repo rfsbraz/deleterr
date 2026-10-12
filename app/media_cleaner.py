@@ -1575,6 +1575,32 @@ class MediaCleaner:
 
         return True
 
+    def check_plex_tag_exclusions_on_full_item(self, media_data, plex_media_item, exclude):
+        """Re-run Plex tag exclusions on the item's full metadata.
+
+        Only reloads when a tag-based exclusion is configured and the item is
+        still partial; reload() updates the shared Plex object in place, so
+        each item is fetched at most once per run. If the reload fails the
+        exclusions can't be verified, so the item is skipped (fail safe).
+        """
+        if not any(exclude.get(key) for key in PLEX_TAG_EXCLUSION_KEYS):
+            return True
+        is_partial = getattr(plex_media_item, "isPartialObject", None)
+        if not callable(is_partial) or is_partial() is not True:
+            return True
+        try:
+            plex_media_item.reload()
+        except Exception as e:
+            logger.warning(
+                f"Could not load full Plex metadata for {media_data['title']}, "
+                f"skipping because exclusions can't be verified: {e}"
+            )
+            return False
+        return all(
+            check(media_data, plex_media_item, exclude)
+            for check in PLEX_TAG_EXCLUSION_CHECKS
+        )
+
     def check_exclusions(self, library, media_data, plex_media_item, radarr_instance=None, sonarr_instance=None, plex_library_key=None):
         exclude = library.get("exclude", {})
         exclusion_checks = [
@@ -1594,6 +1620,14 @@ class MediaCleaner:
 
         if not all(
             check(media_data, plex_media_item, exclude) for check in exclusion_checks
+        ):
+            return False
+
+        # Library listings return partial Plex items (e.g. only the first two
+        # genres), so a tag exclusion can miss. If nothing matched on the
+        # partial item, re-check tag exclusions against full metadata (#317).
+        if not self.check_plex_tag_exclusions_on_full_item(
+            media_data, plex_media_item, exclude
         ):
             return False
 
@@ -1618,6 +1652,12 @@ class MediaCleaner:
             return False
 
         return True
+
+
+# Exclusion keys matched against Plex tag lists, which partial items truncate
+PLEX_TAG_EXCLUSION_KEYS = (
+    "genres", "collections", "plex_labels", "producers", "directors", "writers", "actors",
+)
 
 
 def check_excluded_radarr_fields(media_data, plex_media_item, exclude, radarr_instance):
@@ -1830,6 +1870,17 @@ def check_excluded_actors(media_data, plex_media_item, exclude):
             )
             return False
     return True
+
+
+PLEX_TAG_EXCLUSION_CHECKS = (
+    lambda m, pmi, e: check_excluded_genres(m, pmi, e),
+    lambda m, pmi, e: check_excluded_collections(m, pmi, e),
+    lambda m, pmi, e: check_excluded_labels(m, pmi, e),
+    lambda m, pmi, e: check_excluded_producers(m, pmi, e),
+    lambda m, pmi, e: check_excluded_directors(m, pmi, e),
+    lambda m, pmi, e: check_excluded_writers(m, pmi, e),
+    lambda m, pmi, e: check_excluded_actors(m, pmi, e),
+)
 
 
 def check_excluded_justwatch(media_data, plex_media_item, exclude, justwatch_instance):
