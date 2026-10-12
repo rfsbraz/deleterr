@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.25](https://github.com/rfsbraz/deleterr/compare/v0.2.24...v0.2.25) (2026-10-12)
+
+
+### Bug Fixes
+
+* **collections:** use full Plex collection membership for watch threshold ([#323](https://github.com/rfsbraz/deleterr/issues/323)) ([b9c1e28](https://github.com/rfsbraz/deleterr/commit/b9c1e289c20aad2f75eef2bb121090f0df5760cc)), closes [#321](https://github.com/rfsbraz/deleterr/issues/321)
+* **config:** use plex_labels instead of unsupported exclude.tags ([#316](https://github.com/rfsbraz/deleterr/issues/316)) ([451f1df](https://github.com/rfsbraz/deleterr/commit/451f1dfe8233121da00c6b1a6d40e6c7a8434de8))
+* **exclusions:** check Plex tag exclusions against full item metadata ([#319](https://github.com/rfsbraz/deleterr/issues/319)) ([51a79ae](https://github.com/rfsbraz/deleterr/commit/51a79aebb3b86463e76810deed5024e17b497f13))
+* **exclusions:** match exclude.studios case-insensitively ([#322](https://github.com/rfsbraz/deleterr/issues/322)) ([85187d6](https://github.com/rfsbraz/deleterr/commit/85187d6b796527415f52497bc18e07a0254aeb61)), closes [#320](https://github.com/rfsbraz/deleterr/issues/320)
+* **plex:** map episode watch history to shows via grandparentKey ([#318](https://github.com/rfsbraz/deleterr/issues/318)) ([c2c6072](https://github.com/rfsbraz/deleterr/commit/c2c607264f9ceeb5123b850bf1d49c5ee8553cef))
+
 ## [0.2.24](https://github.com/rfsbraz/deleterr/compare/v0.2.23...v0.2.24) (2026-08-18)
 
 
