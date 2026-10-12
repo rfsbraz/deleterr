@@ -1822,9 +1822,8 @@ def check_excluded_release_years(media_data, plex_media_item, exclude):
 
 
 def check_excluded_studios(media_data, plex_media_item, exclude):
-    if plex_media_item.studio and plex_media_item.studio.lower() in exclude.get(
-            "studios", []
-    ):
+    excluded_studios = {s.lower() for s in exclude.get("studios", []) if s}
+    if plex_media_item.studio and plex_media_item.studio.lower() in excluded_studios:
         logger.debug(
             f"{media_data['title']} has excluded studio {plex_media_item.studio}, skipping"
         )
