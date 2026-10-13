@@ -1,0 +1,35 @@
+[project]
+name = "deleterr"
+version = "0.2.25"
+description = "Intelligent media library cleanup for Plex, with user-friendly Leaving Soon notifications"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "PlexAPI==4.15.16",
+    "pydantic>=2.14.0",
+    "pyarr==5.2.0",
+    "PyYAML==6.0.3",
+    "requests==2.34.2",
+    "tautulli==4.8.2.2180",
+    "trakt.py==4.4.0",
+    "simple-justwatch-python-api==0.13",
+    "APScheduler>=3.11.3",
+    "Jinja2>=3.1.6",
+]
+
+[dependency-groups]
+dev = [
+    "coverage",
+    "pytest",
+    "pytest-mock==3.16.0",
+    "pytest-timeout",
+]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.7",
+    "mkdocs-minify-plugin>=0.8.0",
+]
+
+[tool.uv]
+package = false

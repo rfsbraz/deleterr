@@ -21,14 +21,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
         with:
-          python-version: '3.11'
+          python-version: '3.12'
+          enable-cache: true
 
       - name: Install dependencies
         run: |
-          pip install pydantic
-          pip install -r requirements-docs.txt
+          uv sync --locked --no-default-groups --group docs
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Generate docs from schema
         run: python -m scripts.generate_docs
