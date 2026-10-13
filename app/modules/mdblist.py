@@ -6,6 +6,15 @@ import requests
 from app import logger
 
 
+class MdblistError(Exception):
+    """Raised when a configured Mdblist list cannot be fetched.
+
+    Treating a fetch failure as an empty list would silently disable the
+    exclusion and allow deletion of items the user wanted protected, so
+    callers must handle this error and fail safe instead.
+    """
+
+
 class Mdblist:
     def __init__(self, api_key, ssl_verify=True):
         self.api_key = api_key
@@ -26,8 +35,10 @@ class Mdblist:
     def _fetch_list_items(self, list_url, media_type, max_items_per_list):
         list_path = extract_list_path(list_url)
         if not list_path:
-            logger.error(f"Could not extract list path from URL: {list_url}")
-            return []
+            # A misparsed URL must not silently disable the exclusion
+            raise MdblistError(
+                f"Could not extract list path from Mdblist URL: {list_url}"
+            )
 
         # API returns {"movies": [...], "shows": [...]}
         response_key = "movies" if media_type == "movie" else "shows"
@@ -67,9 +78,17 @@ class Mdblist:
                 if not has_more:
                     break
 
+        except MdblistError:
+            raise
         except Exception as e:
             logger.error(f"Failed to fetch Mdblist items from {list_url}")
             logger.debug(f"Error: {e}")
+            # Never return a partial page set as if it were the full list -
+            # the caller would treat it as complete and delete unprotected items
+            raise MdblistError(
+                f"Failed to fetch Mdblist list '{list_url}': "
+                f"{type(e).__name__}: {e}"
+            ) from e
 
         return all_items[:max_items_per_list]
 

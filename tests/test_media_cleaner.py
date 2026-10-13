@@ -1942,6 +1942,53 @@ class TestCheckExcludedJustWatch:
 
         assert result is True  # Not excluded
 
+    def test_available_on_api_error_fails_safe(self, mocker):
+        """When the JustWatch API errors, the item must be excluded from deletion."""
+        from app.media_cleaner import check_excluded_justwatch
+        from app.modules.justwatch import JustWatchError
+
+        mock_logger = mocker.patch("app.media_cleaner.logger")
+        media_data = {"title": "Test Movie", "tmdbId": 123, "year": 2022}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Movie"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"available_on": ["netflix"]}}
+
+        mock_justwatch = MagicMock()
+        mock_justwatch.available_on.side_effect = JustWatchError("API timeout")
+
+        result = check_excluded_justwatch(
+            media_data, plex_media_item, exclude, mock_justwatch
+        )
+
+        # Fail safe: the check could not be performed, so skip the item
+        assert result is False
+        mock_logger.warning.assert_called_once()
+        assert "Test Movie" in mock_logger.warning.call_args[0][0]
+
+    def test_not_available_on_api_error_fails_safe(self, mocker):
+        """When the JustWatch API errors, not_available_on must also fail safe."""
+        from app.media_cleaner import check_excluded_justwatch
+        from app.modules.justwatch import JustWatchError
+
+        mock_logger = mocker.patch("app.media_cleaner.logger")
+        media_data = {"title": "Test Movie", "tmdbId": 123, "year": 2022}
+        plex_media_item = MagicMock()
+        plex_media_item.title = "Test Movie"
+        plex_media_item.year = 2022
+        exclude = {"justwatch": {"not_available_on": ["netflix"]}}
+
+        mock_justwatch = MagicMock()
+        mock_justwatch.is_not_available_on.side_effect = JustWatchError("API down")
+
+        result = check_excluded_justwatch(
+            media_data, plex_media_item, exclude, mock_justwatch
+        )
+
+        # Fail safe: the check could not be performed, so skip the item
+        assert result is False
+        mock_logger.warning.assert_called_once()
+
     def test_detects_movie_type_from_tmdb_id(self, mocker):
         """Should detect movie type from tmdbId in media_data."""
         from app.media_cleaner import check_excluded_justwatch
@@ -2939,3 +2986,67 @@ class TestPlexLibraryIndexFilenameMatching:
         # Search for non-existent file
         result = index.find_by_filename("Nonexistent.Movie.2020.mkv")
         assert result is None
+
+
+class TestGuardEmptyWatchActivity:
+    """Empty watch activity must not turn a library into deletion candidates (#287)."""
+
+    def test_raises_for_unwatched_rule_with_empty_activity(self, media_cleaner):
+        from app.media_cleaner import WatchDataError
+
+        library = {"name": "Movies", "watch_status": "unwatched"}
+        with pytest.raises(WatchDataError):
+            media_cleaner.guard_empty_watch_activity(library, {}, 500)
+
+    def test_raises_for_last_watched_threshold_with_empty_activity(self, media_cleaner):
+        from app.media_cleaner import WatchDataError
+
+        library = {"name": "Movies", "last_watched_threshold": 90}
+        with pytest.raises(WatchDataError):
+            media_cleaner.guard_empty_watch_activity(library, {}, 500)
+
+    def test_passes_with_activity(self, media_cleaner):
+        library = {"name": "Movies", "watch_status": "unwatched"}
+        media_cleaner.guard_empty_watch_activity(library, {"guid": {}}, 500)
+
+    def test_passes_for_empty_library(self, media_cleaner):
+        library = {"name": "Movies", "watch_status": "unwatched"}
+        media_cleaner.guard_empty_watch_activity(library, {}, 0)
+
+    def test_passes_without_watch_rules(self, media_cleaner):
+        # No watch-based rules: empty activity is irrelevant to decisions
+        library = {"name": "Movies", "added_at_threshold": 180}
+        media_cleaner.guard_empty_watch_activity(library, {}, 500)
+
+    def test_passes_for_watched_rule(self, media_cleaner):
+        # watch_status: watched fails safe on empty data (nothing matches)
+        library = {"name": "Movies", "watch_status": "watched"}
+        media_cleaner.guard_empty_watch_activity(library, {}, 500)
+
+    def test_opt_out_allows_empty_history(self, media_cleaner, mocker):
+        mock_logger = mocker.patch("app.media_cleaner.logger")
+        library = {
+            "name": "Movies",
+            "watch_status": "unwatched",
+            "allow_empty_watch_history": True,
+        }
+        media_cleaner.guard_empty_watch_activity(library, {}, 500)
+        mock_logger.warning.assert_called_once()
+
+    @pytest.mark.parametrize("media_type", ["movie", "show"])
+    def test_on_demand_candidates_raise_on_empty_activity(self, media_cleaner, media_type):
+        """On-demand cleanup (--free-up) must apply the same guard."""
+        from app.media_cleaner import WatchDataError
+
+        library = {"name": "Library", "watch_status": "unwatched"}
+        plex_library = MagicMock(totalSize=500)
+        media_cleaner.get_plex_library = MagicMock(return_value=plex_library)
+        media_cleaner.get_trakt_items = MagicMock(return_value={})
+        media_cleaner.get_mdblist_items = MagicMock(return_value={})
+        media_cleaner.get_movie_activity = MagicMock(return_value={})
+        media_cleaner.get_show_activity = MagicMock(return_value={})
+        media_cleaner.process_library_rules = MagicMock(return_value=iter([{"title": "x"}]))
+
+        with pytest.raises(WatchDataError):
+            media_cleaner.get_ordered_candidates(library, MagicMock(), media_type, all_data=[])
+        media_cleaner.process_library_rules.assert_not_called()

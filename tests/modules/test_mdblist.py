@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from app.modules.mdblist import Mdblist, _process_mdblist_item_list, extract_list_path
+from app.modules.mdblist import MdblistError, Mdblist, _process_mdblist_item_list, extract_list_path
 
 
 @pytest.mark.parametrize(
@@ -176,38 +176,35 @@ def test_process_mdblist_item_list_show_missing_tvdbid():
 
 
 @patch("app.modules.mdblist.requests.get")
-def test_fetch_list_items_error_handling(mock_get):
-    """Test that network errors are handled gracefully."""
+def test_fetch_list_items_error_raises(mock_get):
+    """A network error must not look like an empty exclusion list."""
     mdblist = Mdblist("test_api_key")
 
     mock_get.side_effect = requests.exceptions.ConnectionError("Connection failed")
 
-    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", "movie", 1000)
-
-    assert result == []
+    with pytest.raises(MdblistError):
+        mdblist._fetch_list_items("https://mdblist.com/lists/user/list", "movie", 1000)
 
 
 @patch("app.modules.mdblist.requests.get")
-def test_fetch_list_items_http_error(mock_get):
-    """Test that HTTP errors (e.g., rate limiting) are handled gracefully."""
+def test_fetch_list_items_http_error_raises(mock_get):
+    """HTTP errors (e.g. rate limiting) must fail safe, not fail open."""
     mdblist = Mdblist("test_api_key")
 
     response = MagicMock()
     response.raise_for_status.side_effect = requests.exceptions.HTTPError("429 Too Many Requests")
     mock_get.return_value = response
 
-    result = mdblist._fetch_list_items("https://mdblist.com/lists/user/list", "movie", 1000)
+    with pytest.raises(MdblistError):
+        mdblist._fetch_list_items("https://mdblist.com/lists/user/list", "movie", 1000)
 
-    assert result == []
 
-
-def test_fetch_list_items_invalid_url():
-    """Test that invalid URLs return empty list."""
+def test_fetch_list_items_invalid_url_raises():
+    """A misparsed URL is a config problem, not an empty list."""
     mdblist = Mdblist("test_api_key")
 
-    result = mdblist._fetch_list_items("https://example.com/not-mdblist", "movie", 1000)
-
-    assert result == []
+    with pytest.raises(MdblistError):
+        mdblist._fetch_list_items("https://example.com/not-mdblist", "movie", 1000)
 
 
 @patch("app.modules.mdblist.requests.get")

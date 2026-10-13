@@ -1,8 +1,9 @@
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
-from app.modules.justwatch import JustWatch
+from app.modules.justwatch import JustWatch, JustWatchError
 
 
 @pytest.mark.unit
@@ -40,11 +41,43 @@ class TestJustWatch:
         mock_search.side_effect = Exception("API Error")
         justwatch_instance = JustWatch("US", "en")
 
-        # Act
-        result = justwatch_instance._search("test_title")
+        # Act / Assert - errors must not look like "title not found"
+        with pytest.raises(JustWatchError):
+            justwatch_instance._search("test_title")
 
-        # Assert - should return empty list on error
-        assert result == []
+    @patch("app.modules.justwatch._search_justwatch")
+    def test_search_timeout_raises(self, mock_search):
+        # Arrange
+        mock_search.side_effect = httpx.TimeoutException("timed out")
+        justwatch_instance = JustWatch("US", "en")
+
+        # Act / Assert
+        with pytest.raises(JustWatchError):
+            justwatch_instance._search("test_title")
+
+    @patch("app.modules.justwatch._search_justwatch")
+    def test_search_rate_limit_raises(self, mock_search):
+        # Arrange
+        request = httpx.Request("POST", "https://apis.justwatch.com/graphql")
+        response = httpx.Response(429, request=request)
+        mock_search.side_effect = httpx.HTTPStatusError(
+            "429", request=request, response=response
+        )
+        justwatch_instance = JustWatch("US", "en")
+
+        # Act / Assert
+        with pytest.raises(JustWatchError):
+            justwatch_instance._search("test_title")
+
+    @patch("app.modules.justwatch._search_justwatch")
+    def test_search_by_title_and_year_propagates_errors(self, mock_search):
+        # Arrange
+        mock_search.side_effect = httpx.ConnectError("no network")
+        justwatch_instance = JustWatch("US", "en")
+
+        # Act / Assert - callers must be able to tell error from not-found
+        with pytest.raises(JustWatchError):
+            justwatch_instance.search_by_title_and_year("title1", 2001, "movie")
 
     @patch("app.modules.justwatch._search_justwatch")
     def test_clear_cache(self, mock_search):

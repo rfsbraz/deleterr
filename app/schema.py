@@ -572,6 +572,10 @@ class LibraryConfig(BaseModel):
         description="Days since added to Plex. Media added within this period is protected",
         json_schema_extra={"example": 180},
     )
+    allow_empty_watch_history: bool = Field(
+        default=False,
+        description="Allow watch-based rules to run when the library has zero watch history. Off by default: empty history makes everything look unwatched, so the library is skipped to avoid mass deletion",
+    )
     apply_last_watch_threshold_to_collections: bool = Field(
         default=False,
         description="Apply last watched threshold to all items in the same collection",

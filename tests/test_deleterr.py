@@ -42,6 +42,87 @@ def test_process_radarr(radarr_mock, sonarr_mock, deleterr):
 
 @patch("app.deleterr.DSonarr")
 @patch("app.modules.radarr.DRadarr")
+def test_process_radarr_trakt_failure_skips_library(radarr_mock, sonarr_mock, deleterr):
+    """A Trakt outage must skip the library (no deletions) instead of crashing."""
+    from app.modules.trakt import TraktError
+
+    # Arrange
+    deleterr.radarr = {"Radarr1": MagicMock()}
+    deleterr.config.settings = {
+        "libraries": [{"radarr": "Radarr1"}],
+    }
+    deleterr.media_cleaner.process_library_movies = MagicMock(
+        side_effect=TraktError("Failed to fetch Trakt list 'watchlist' for movies")
+    )
+    deleterr.run_result = MagicMock()
+    failed_before = deleterr.libraries_failed
+    processed_before = deleterr.libraries_processed
+
+    # Act - must not raise
+    deleterr.process_radarr()
+
+    # Assert - library counted as failed, nothing deleted
+    assert deleterr.libraries_failed == failed_before + 1
+    assert deleterr.libraries_processed == processed_before
+    deleterr.run_result.add_deleted.assert_not_called()
+
+
+@patch("app.deleterr.DSonarr")
+@patch("app.modules.radarr.DRadarr")
+def test_process_radarr_mdblist_failure_skips_library(radarr_mock, sonarr_mock, deleterr):
+    """An mdblist outage must skip the library (no deletions) instead of failing open."""
+    from app.modules.mdblist import MdblistError
+
+    # Arrange
+    deleterr.radarr = {"Radarr1": MagicMock()}
+    deleterr.config.settings = {
+        "libraries": [{"radarr": "Radarr1"}],
+    }
+    deleterr.media_cleaner.process_library_movies = MagicMock(
+        side_effect=MdblistError("Failed to fetch Mdblist list 'protected'")
+    )
+    deleterr.run_result = MagicMock()
+    failed_before = deleterr.libraries_failed
+    processed_before = deleterr.libraries_processed
+
+    # Act - must not raise
+    deleterr.process_radarr()
+
+    # Assert - library counted as failed, nothing deleted
+    assert deleterr.libraries_failed == failed_before + 1
+    assert deleterr.libraries_processed == processed_before
+    deleterr.run_result.add_deleted.assert_not_called()
+
+
+@patch("app.deleterr.DSonarr")
+@patch("app.modules.radarr.DRadarr")
+def test_process_radarr_empty_watch_data_skips_library(radarr_mock, sonarr_mock, deleterr):
+    """Unusable watch data must skip the library (no deletions) instead of crashing."""
+    from app.media_cleaner import WatchDataError
+
+    # Arrange
+    deleterr.radarr = {"Radarr1": MagicMock()}
+    deleterr.config.settings = {
+        "libraries": [{"radarr": "Radarr1"}],
+    }
+    deleterr.media_cleaner.process_library_movies = MagicMock(
+        side_effect=WatchDataError("No watch history returned for library 'Movies'")
+    )
+    deleterr.run_result = MagicMock()
+    failed_before = deleterr.libraries_failed
+    processed_before = deleterr.libraries_processed
+
+    # Act - must not raise
+    deleterr.process_radarr()
+
+    # Assert - library counted as failed, nothing deleted
+    assert deleterr.libraries_failed == failed_before + 1
+    assert deleterr.libraries_processed == processed_before
+    deleterr.run_result.add_deleted.assert_not_called()
+
+
+@patch("app.deleterr.DSonarr")
+@patch("app.modules.radarr.DRadarr")
 def test_process_sonarr(radarr_mock, sonarr_mock, deleterr):
     # Arrange
     deleterr.sonarr = {
@@ -64,6 +145,37 @@ def test_process_sonarr(radarr_mock, sonarr_mock, deleterr):
         deleterr.sonarr["Sonarr1"],
         [{"title": "Test Show"}],
     )
+
+
+@pytest.mark.parametrize("media", ["radarr", "sonarr"])
+def test_tautulli_api_error_skips_library_and_logs(media, deleterr):
+    """An invalid Tautulli response must be logged and skip the library (fail safe)."""
+    from app.modules.tautulli import TautulliApiError
+
+    error = TautulliApiError("Tautulli returned an invalid history response")
+    if media == "radarr":
+        deleterr.radarr = {"Radarr1": MagicMock()}
+        deleterr.sonarr = {}
+        deleterr.config.settings = {"libraries": [{"name": "Movies", "radarr": "Radarr1"}]}
+        deleterr.media_cleaner.process_library_movies = MagicMock(side_effect=error)
+    else:
+        deleterr.sonarr = {"Sonarr1": MagicMock(get_series=MagicMock(return_value=[]))}
+        deleterr.radarr = {}
+        deleterr.config.settings = {"libraries": [{"name": "TV", "sonarr": "Sonarr1"}]}
+        deleterr.media_cleaner.process_library = MagicMock(side_effect=error)
+    deleterr.run_result = MagicMock()
+    failed_before = deleterr.libraries_failed
+    processed_before = deleterr.libraries_processed
+
+    with patch("app.deleterr.logger") as mock_logger:
+        getattr(deleterr, f"process_{media}")()
+
+    assert deleterr.libraries_failed == failed_before + 1
+    assert deleterr.libraries_processed == processed_before
+    deleterr.run_result.add_deleted.assert_not_called()
+    logged = " ".join(str(c.args[0]) for c in mock_logger.error.call_args_list)
+    assert "Skipping library" in logged
+    assert "invalid history response" in logged
 
 
 class TestLookupSonarrShow:

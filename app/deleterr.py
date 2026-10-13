@@ -14,7 +14,9 @@ from app.modules.plex import PlexMediaServer
 
 from app import logger
 from app.config import hang_on_error, load_config
-from app.media_cleaner import ConfigurationError, MediaCleaner, parse_leaving_soon_duration
+from app.media_cleaner import ConfigurationError, MediaCleaner, WatchDataError, parse_leaving_soon_duration
+from app.modules.mdblist import MdblistError
+from app.modules.trakt import TraktError
 from app.modules.notifications import NotificationManager, RunResult, DeletedItem, LibraryStats
 from app.modules.tautulli import TautulliApiError
 from app.state import StateManager
@@ -736,6 +738,28 @@ class Deleterr:
             or (guids.get("imdb_id") and guids["imdb_id"] in universe_ids["imdb"])
         )
 
+    def _handle_library_failure(self, library_name, error):
+        """Log a per-library failure and count it, without aborting the run.
+
+        TraktError/MdblistError mean exclusions could not be verified, and
+        WatchDataError/TautulliApiError mean watch history is empty or invalid,
+        so the library is skipped entirely (fail safe). ConfigurationError keeps
+        its own message.
+        """
+        if isinstance(error, (WatchDataError, TautulliApiError)):
+            # Watch data is missing or unusable; nothing in this library was
+            # touched (activity is fetched before any deletion decision).
+            logger.error(f"Skipping library '{library_name}': {error}")
+        elif isinstance(error, (TraktError, MdblistError)):
+            logger.error(
+                f"Skipping library '{library_name}': {error}. "
+                "Exclusions could not be verified, so no items were "
+                "deleted from this library this run."
+            )
+        else:
+            logger.error(str(error))
+        self.libraries_failed += 1
+
     def process_radarr(self):
         for name, radarr in self.radarr.items():
             logger.info(f"Processing radarr instance: '{name}'")
@@ -796,9 +820,8 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except (ConfigurationError, TautulliApiError) as e:
-                    logger.error(str(e))
-                    self.libraries_failed += 1
+                except (ConfigurationError, TautulliApiError, TraktError, MdblistError, WatchDataError) as e:
+                    self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "movie", self.config.settings.get("dry_run", True))
 
@@ -866,9 +889,8 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except (ConfigurationError, TautulliApiError) as e:
-                    logger.error(str(e))
-                    self.libraries_failed += 1
+                except (ConfigurationError, TautulliApiError, TraktError, MdblistError, WatchDataError) as e:
+                    self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "show", self.config.settings.get("dry_run", True))
 
