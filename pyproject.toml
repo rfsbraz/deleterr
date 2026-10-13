@@ -1,6 +1,6 @@
 [project]
 name = "deleterr"
-version = "0.2.24"
+version = "0.2.25"
 description = "Intelligent media library cleanup for Plex, with user-friendly Leaving Soon notifications"
 readme = "README.md"
 license = "MIT"
