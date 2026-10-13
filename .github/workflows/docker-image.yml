@@ -111,7 +111,29 @@ jobs:
           # Test 2: Verify --help works (basic CLI functionality)
           docker run --rm ${{ env.IMAGE_NAME }}:smoke-test python -m app.deleterr --help || true
 
+          # Test 3: plexapi loads the 240s timeout from PLEXAPI_CONFIG_PATH
+          docker run --rm ${{ env.IMAGE_NAME }}:smoke-test python -c "
+          import os, plexapi
+          assert os.path.isfile(os.environ['PLEXAPI_CONFIG_PATH']), 'plexapi config missing'
+          assert plexapi.TIMEOUT == 240, plexapi.TIMEOUT
+          print('plexapi timeout:', plexapi.TIMEOUT)
+          "
+
+          # Test 4: uv is not shipped in the final image
+          docker run --rm ${{ env.IMAGE_NAME }}:smoke-test sh -c '! command -v uv'
+
+          # Test 5: a missing /config/logs folder does not crash logging
+          docker run --rm -v "$(mktemp -d):/config" ${{ env.IMAGE_NAME }}:smoke-test python -c "
+          from app.logger import setup_file_logger
+          setup_file_logger('/config/logs')
+          print('log dir created')
+          "
+
           echo "✅ Smoke test passed - container starts correctly"
+
+      - name: Report image size
+        run: |
+          docker image ls ${{ env.IMAGE_NAME }}:smoke-test --format 'Image size: {{.Size}}'
 
       - name: Build and push Docker image
         if: github.event_name != 'pull_request'
