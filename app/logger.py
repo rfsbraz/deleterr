@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import sys
 from logging import handlers
 
@@ -12,6 +13,50 @@ logging.basicConfig()
 
 # Deleterr logger
 logger = logging.getLogger("deleterr")
+
+
+# Secrets that show up as query params in request URLs, e.g. in requests/urllib3
+# exception messages: Sonarr/Radarr apiKey, Tautulli apikey, Plex X-Plex-Token.
+SECRET_QUERY_PARAM = re.compile(
+    r"(?i)((?:[?&]|&amp;)(?:api[_-]?key|x-plex-token)=)[^&\s'\"<>)\]]+"
+)
+# Same keys in dict or JSON form, e.g. "params={'apikey': '...'}".
+SECRET_MAPPING_VALUE = re.compile(
+    r"(?i)(['\"](?:api[_-]?key|x-plex-token)['\"]\s*:\s*['\"])[^'\"]+"
+)
+REDACTED = "[REDACTED]"
+
+
+def redact(text):
+    """Replace secret query param values in text with [REDACTED]."""
+    if not text:
+        return text
+    text = SECRET_QUERY_PARAM.sub(r"\1" + REDACTED, text)
+    return SECRET_MAPPING_VALUE.sub(r"\1" + REDACTED, text)
+
+
+class RedactingFormatter(logging.Formatter):
+    """Formatter that redacts secrets from the whole formatted line.
+
+    Working on the final string covers the message, its args, exception
+    messages and tracebacks, for our logger and for third-party loggers.
+    """
+
+    def format(self, record):
+        return redact(super().format(record))
+
+
+def redact_root_handlers():
+    """Make handlers on the root logger redact too.
+
+    Libraries such as tautulli, urllib3, plexapi and arrapi log through
+    logging.getLogger(<lib>) and reach the root handler set up by basicConfig.
+    """
+    for handler in logging.getLogger().handlers:
+        if not isinstance(handler.formatter, RedactingFormatter):
+            fmt = handler.formatter._fmt if handler.formatter else logging.BASIC_FORMAT
+            datefmt = handler.formatter.datefmt if handler.formatter else None
+            handler.setFormatter(RedactingFormatter(fmt, datefmt))
 
 
 class LogLevelFilter(logging.Filter):
@@ -38,6 +83,7 @@ def init_logger(console=False, log_dir=False, verbose=False):
 
     remove_old_handlers()
     configure_logger(verbose)
+    redact_root_handlers()
 
     if log_dir:
         setup_file_logger(log_dir)
@@ -68,7 +114,7 @@ def configure_logger(verbose):
 
 def setup_file_logger(log_dir):
     # Setup file logger
-    file_formatter = logging.Formatter(
+    file_formatter = RedactingFormatter(
         "%(asctime)s - %(levelname)-7s :: %(filename)s :: %(name)s : %(message)s",
         "%Y-%m-%d %H:%M:%S",
     )
@@ -86,7 +132,7 @@ def setup_file_logger(log_dir):
 
 def setup_console_logger():
     # Setup console logger
-    console_formatter = logging.Formatter(
+    console_formatter = RedactingFormatter(
         "%(asctime)s - %(levelname)s :: %(filename)s :: %(name)s : %(message)s",
         "%Y-%m-%d %H:%M:%S",
     )

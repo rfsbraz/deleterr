@@ -6,6 +6,8 @@ LABEL maintainer="rfsbraz"
 ARG BRANCH
 ARG COMMIT
 ARG COMMIT_TAG
+# The image workflow passes VERSION; COMMIT_TAG is kept for local builds.
+ARG VERSION
 ARG BUILD_DATE
 
 ENV TZ=UTC
@@ -22,7 +24,7 @@ COPY requirements.txt /app
 RUN \
   echo ${BRANCH} > /app/branch.txt && \
   echo ${COMMIT} > /app/version.txt && \
-  echo ${COMMIT_TAG} > /app/commit_tag.txt
+  echo ${COMMIT_TAG:-${VERSION}} > /app/commit_tag.txt
 
 RUN \
   mkdir /config && \

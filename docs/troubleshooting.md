@@ -58,6 +58,18 @@ Common issues and solutions for Deleterr.
    curl -H "X-Api-Key: YOUR_KEY" http://radarr:7878/api/v3/system/status
    ```
 
+### Services Not Ready After a Reboot
+
+**Symptoms**: Logs show `Dependent services not reachable yet ... Retrying in ...`
+
+At startup Deleterr checks Plex/Tautulli, Radarr, Sonarr, Seerr and Trakt. Connection errors (refused, DNS, timeout) and HTTP 502/503/504 from a reverse proxy count as temporary. Deleterr retries them with backoff (5s, doubling, capped at 5 minutes) for up to 30 minutes.
+
+If the services are still down after 30 minutes, Deleterr exits with status 1. With `restart: unless-stopped` Docker starts it again and the checks start over. With `restart: no` it stays stopped.
+
+Config errors such as HTTP 401/403, a missing URL scheme or an SSL error are not retried. Deleterr logs the error and stays idle until you fix the config and restart it.
+
+API keys in logged URLs (`apiKey`, `apikey`, `api_key`, `X-Plex-Token`) are replaced with `[REDACTED]`.
+
 ## Library Issues
 
 ### Library Not Found
