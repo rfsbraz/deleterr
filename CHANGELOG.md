@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.26](https://github.com/rfsbraz/deleterr/compare/v0.2.25...v0.2.26) (2026-10-13)
+
+
+### Bug Fixes
+
+* **docker:** create missing log dir, ship plexapi config and drop uv from image ([#334](https://github.com/rfsbraz/deleterr/issues/334)) ([0cc0150](https://github.com/rfsbraz/deleterr/commit/0cc015060342b3787eb010fa1a1c689ac4d389f2))
+* **safety:** skip libraries with empty watch history instead of treating all items as unwatched ([#298](https://github.com/rfsbraz/deleterr/issues/298)) ([efcf84b](https://github.com/rfsbraz/deleterr/commit/efcf84bfc516cb77e458aa426b4b7e76de6c05ff))
+* **startup:** keep retrying unreachable services and exit for restart ([#330](https://github.com/rfsbraz/deleterr/issues/330)) ([fe931af](https://github.com/rfsbraz/deleterr/commit/fe931af6c6625446a722f54ae0ec27a962a23fe7))
+
 ## [0.2.25](https://github.com/rfsbraz/deleterr/compare/v0.2.24...v0.2.25) (2026-10-12)
 
 
