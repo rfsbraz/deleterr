@@ -112,8 +112,8 @@ class TestTransientClassification:
     def test_connection_errors_are_transient(self, err):
         assert is_transient_exception(err) is True
 
-    @pytest.mark.parametrize("status", [502, 503, 504])
-    def test_proxy_gateway_errors_are_transient(self, status):
+    @pytest.mark.parametrize("status", [500, 502, 503, 504])
+    def test_server_errors_are_transient(self, status):
         assert is_transient_exception(self._http_error(status)) is True
 
     @pytest.mark.parametrize("status", [400, 401, 403, 404])
@@ -126,6 +126,15 @@ class TestTransientClassification:
                 raise ConnectionRefusedError(111, "Connection refused")
             except ConnectionRefusedError as inner:
                 raise RuntimeError("tautulli call failed") from inner
+        except RuntimeError as outer:
+            assert is_transient_exception(outer) is True
+
+    def test_message_match_anywhere_in_cause_chain(self):
+        try:
+            try:
+                raise Exception("temporary failure in name resolution")
+            except Exception as inner:
+                raise RuntimeError("request failed") from inner
         except RuntimeError as outer:
             assert is_transient_exception(outer) is True
 
@@ -177,6 +186,33 @@ class TestTransientClassification:
                 {"name": "Sonarr", "url": "http://sonarr:8989", "api_key": "k"}
             ) is False
         assert config._last_failure_transient is False
+
+
+class TestDirectArrChecks:
+    conn = {"name": "x", "url": "http://arr:7878", "api_key": "k"}
+
+    @pytest.mark.parametrize("err", [
+        requests.exceptions.SSLError("certificate verify failed"),
+        requests.exceptions.InvalidSchema("No connection adapters were found for 'ftp://arr'"),
+    ])
+    def test_radarr_and_sonarr_config_errors_are_permanent(self, err):
+        from app.config import test_radarr_connection
+        config = _config()
+        with patch("app.config.requests.get", side_effect=err):
+            assert test_radarr_connection(self.conn, config=config) is False
+            assert config.test_api_connection(self.conn) is False
+        assert config._last_failure_transient is False
+
+    def test_requests_have_a_timeout(self):
+        from app.config import test_radarr_connection
+        config = _config()
+        response = requests.Response()
+        response.status_code = 200
+        with patch("app.config.requests.get", return_value=response) as get:
+            test_radarr_connection(self.conn, config=config)
+            config.test_api_connection(self.conn)
+        for call in get.call_args_list:
+            assert call.kwargs.get("timeout")
 
 
 class TestSeerrValidation:

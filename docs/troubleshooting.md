@@ -62,7 +62,7 @@ Common issues and solutions for Deleterr.
 
 **Symptoms**: Logs show `Dependent services not reachable yet ... Retrying in ...`
 
-At startup Deleterr checks Plex/Tautulli, Radarr, Sonarr, Seerr and Trakt. Connection errors (refused, DNS, timeout) and HTTP 502/503/504 from a reverse proxy count as temporary. Deleterr retries them with backoff (5s, doubling, capped at 5 minutes) for up to 30 minutes.
+At startup Deleterr checks Plex/Tautulli, Radarr, Sonarr, Seerr and Trakt. Connection errors (refused, DNS, timeout) and HTTP 5xx responses (for example 502/503/504 from a reverse proxy) count as temporary. Deleterr retries them with backoff (5s, doubling, capped at 5 minutes) for up to 30 minutes.
 
 If the services are still down after 30 minutes, Deleterr exits with status 1. With `restart: unless-stopped` Docker starts it again and the checks start over. With `restart: no` it stays stopped.
 

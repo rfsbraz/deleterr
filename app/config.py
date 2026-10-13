@@ -60,8 +60,13 @@ TRANSIENT_ERROR_KEYWORDS = (
     "bad gateway", "service unavailable", "gateway timeout",
 )
 
-# Reverse proxies answer with these while the backend is still starting.
-TRANSIENT_HTTP_STATUSES = (502, 503, 504)
+# 5xx responses are retried: reverse proxies answer 502/503/504 while the
+# backend is still starting, and the *arr apps can answer 500 during startup.
+TRANSIENT_HTTP_STATUS_MIN = 500
+
+# Per-request timeout for the direct Radarr/Sonarr checks, so a host that drops
+# packets cannot block validation past the retry deadline.
+VALIDATION_REQUEST_TIMEOUT_SECONDS = 30
 
 # Config problems that look like connection errors but will never heal by waiting.
 PERMANENT_REQUEST_ERRORS = (
@@ -82,9 +87,10 @@ def is_transient_error_message(err_msg):
 
 def is_transient_exception(err):
     """True if err (or anything in its cause chain) is a connection problem that
-    may go away on its own: refused, DNS failure, timeout or a 502/503/504."""
+    may go away on its own: refused, DNS failure, timeout or an HTTP 5xx."""
     seen = set()
     current = err
+    message_match = False
     while current is not None and id(current) not in seen:
         seen.add(id(current))
         if isinstance(current, PERMANENT_REQUEST_ERRORS):
@@ -92,7 +98,7 @@ def is_transient_exception(err):
         if isinstance(current, requests.exceptions.HTTPError):
             response = current.response
             if response is not None:
-                return response.status_code in TRANSIENT_HTTP_STATUSES
+                return response.status_code >= TRANSIENT_HTTP_STATUS_MIN
         if isinstance(current, (
             requests.exceptions.ConnectionError,
             requests.exceptions.Timeout,
@@ -101,8 +107,9 @@ def is_transient_exception(err):
             socket.gaierror,
         )):
             return True
+        message_match = message_match or is_transient_error_message(str(current))
         current = current.__cause__ or current.__context__
-    return is_transient_error_message(str(err))
+    return message_match
 
 
 def exit_for_restart(msg):
@@ -145,6 +152,7 @@ def test_radarr_connection(connection, config=None):
             f"{url}/api",
             params={"apiKey": connection["api_key"]},
             headers={"Content-Type": "application/json"},
+            timeout=VALIDATION_REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         return True
@@ -153,7 +161,7 @@ def test_radarr_connection(connection, config=None):
             f"Cannot reach Radarr '{name}' at {url}: {err}. "
             "Verify the URL is correct and Radarr is running."
         )
-        if config is not None:
+        if config is not None and is_transient_exception(err):
             config._last_failure_transient = True
         return False
     except requests.exceptions.Timeout as err:
@@ -188,7 +196,7 @@ def test_radarr_connection(connection, config=None):
         return False
     except requests.exceptions.RequestException as err:
         logger.error(f"Failed to connect to Radarr '{name}' at {url}: {err}")
-        if config is not None and is_transient_error_message(str(err)):
+        if config is not None and is_transient_exception(err):
             config._last_failure_transient = True
         return False
 
@@ -475,6 +483,7 @@ class Config:
                 f"{url}/api",
                 params={"apiKey": connection["api_key"]},
                 headers={"Content-Type": "application/json"},
+                timeout=VALIDATION_REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
             return True
@@ -483,7 +492,8 @@ class Config:
                 f"Cannot reach Sonarr instance '{name}' at {url}: {err}. "
                 "Verify the URL is correct and Sonarr is running."
             )
-            self._last_failure_transient = True
+            if is_transient_exception(err):
+                self._last_failure_transient = True
             return False
         except requests.exceptions.Timeout as err:
             logger.error(
@@ -515,7 +525,7 @@ class Config:
             return False
         except requests.exceptions.RequestException as err:
             logger.error(f"Failed to connect to Sonarr '{name}' at {url}: {err}")
-            if is_transient_error_message(str(err)):
+            if is_transient_exception(err):
                 self._last_failure_transient = True
             return False
 
