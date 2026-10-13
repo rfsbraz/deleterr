@@ -2,6 +2,7 @@
 
 import os
 import signal
+import socket
 import sys
 import time
 
@@ -53,7 +54,27 @@ def hang_on_error(msg):
 # Transient connection errors are retried during validation so deleterr can
 # self-heal when dependencies (Tautulli/Radarr/Sonarr/Plex/Seerr/Trakt) come up
 # slightly after the deleterr container during stack boot.
-TRANSIENT_ERROR_KEYWORDS = ("connection", "timeout", "timed out", "refused", "unreachable")
+TRANSIENT_ERROR_KEYWORDS = (
+    "connection", "timeout", "timed out", "refused", "unreachable",
+    "failed to resolve", "name or service not known", "temporary failure in name resolution",
+    "bad gateway", "service unavailable", "gateway timeout",
+)
+
+# 5xx responses are retried: reverse proxies answer 502/503/504 while the
+# backend is still starting, and the *arr apps can answer 500 during startup.
+TRANSIENT_HTTP_STATUS_MIN = 500
+
+# Per-request timeout for the direct Radarr/Sonarr checks, so a host that drops
+# packets cannot block validation past the retry deadline.
+VALIDATION_REQUEST_TIMEOUT_SECONDS = 30
+
+# Config problems that look like connection errors but will never heal by waiting.
+PERMANENT_REQUEST_ERRORS = (
+    requests.exceptions.SSLError,
+    requests.exceptions.MissingSchema,
+    requests.exceptions.InvalidSchema,
+    requests.exceptions.InvalidURL,
+)
 
 
 def is_transient_error_message(err_msg):
@@ -62,6 +83,42 @@ def is_transient_error_message(err_msg):
         return False
     err_lower = err_msg.lower()
     return any(keyword in err_lower for keyword in TRANSIENT_ERROR_KEYWORDS)
+
+
+def is_transient_exception(err):
+    """True if err (or anything in its cause chain) is a connection problem that
+    may go away on its own: refused, DNS failure, timeout or an HTTP 5xx."""
+    seen = set()
+    current = err
+    message_match = False
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, PERMANENT_REQUEST_ERRORS):
+            return False
+        if isinstance(current, requests.exceptions.HTTPError):
+            response = current.response
+            if response is not None:
+                return response.status_code >= TRANSIENT_HTTP_STATUS_MIN
+        if isinstance(current, (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            ConnectionError,
+            TimeoutError,
+            socket.gaierror,
+        )):
+            return True
+        message_match = message_match or is_transient_error_message(str(current))
+        current = current.__cause__ or current.__context__
+    return message_match
+
+
+def exit_for_restart(msg):
+    """Log and exit non-zero so the container restart policy starts us again."""
+    logger.error(msg)
+    logger.error(
+        "Exiting with status 1 so the container restart policy can start deleterr again."
+    )
+    sys.exit(1)
 
 
 def load_config(config_file):
@@ -95,6 +152,7 @@ def test_radarr_connection(connection, config=None):
             f"{url}/api",
             params={"apiKey": connection["api_key"]},
             headers={"Content-Type": "application/json"},
+            timeout=VALIDATION_REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         return True
@@ -103,7 +161,7 @@ def test_radarr_connection(connection, config=None):
             f"Cannot reach Radarr '{name}' at {url}: {err}. "
             "Verify the URL is correct and Radarr is running."
         )
-        if config is not None:
+        if config is not None and is_transient_exception(err):
             config._last_failure_transient = True
         return False
     except requests.exceptions.Timeout as err:
@@ -138,18 +196,19 @@ def test_radarr_connection(connection, config=None):
         return False
     except requests.exceptions.RequestException as err:
         logger.error(f"Failed to connect to Radarr '{name}' at {url}: {err}")
-        if config is not None and is_transient_error_message(str(err)):
+        if config is not None and is_transient_exception(err):
             config._last_failure_transient = True
         return False
 
 
 class Config:
-    # Retry policy for transient connection errors during validation. Allows
-    # deleterr to self-heal when dependent services come up shortly after it
-    # during stack boot, rather than hanging idle until manual restart.
-    VALIDATION_MAX_ATTEMPTS = 5
+    # Retry policy for transient connection errors during validation. After a
+    # host reboot the dependencies can take several minutes to come up, so keep
+    # retrying with capped backoff for a long window. If they are still down
+    # after that, exit non-zero and let the restart policy try again (#329).
     VALIDATION_BASE_DELAY_SECONDS = 5
-    VALIDATION_MAX_DELAY_SECONDS = 60
+    VALIDATION_MAX_DELAY_SECONDS = 300
+    VALIDATION_MAX_WAIT_SECONDS = 30 * 60
 
     def __init__(self, config_file):
         self.settings = config_file
@@ -158,7 +217,10 @@ class Config:
     def validate(self):
         self._normalize_seerr_config()
 
-        for attempt in range(1, self.VALIDATION_MAX_ATTEMPTS + 1):
+        started = time.monotonic()
+        attempt = 0
+        while True:
+            attempt += 1
             self._last_failure_transient = False
             if self.validate_config():
                 if self.settings.get("dry_run"):
@@ -170,25 +232,29 @@ class Config:
                 # Retrying will not help, so hang immediately.
                 self.log_and_exit("Invalid configuration, exiting.")
 
-            if attempt >= self.VALIDATION_MAX_ATTEMPTS:
+            elapsed = time.monotonic() - started
+            remaining = self.VALIDATION_MAX_WAIT_SECONDS - elapsed
+            if remaining <= 0:
                 break
 
             delay = min(
                 self.VALIDATION_BASE_DELAY_SECONDS * (2 ** (attempt - 1)),
                 self.VALIDATION_MAX_DELAY_SECONDS,
+                remaining,
             )
             logger.warning(
-                "Transient connection error during validation "
-                "(attempt %d/%d). Retrying in %ds...",
+                "Dependent services not reachable yet (attempt %d, waited %ds of %ds). "
+                "Retrying in %ds...",
                 attempt,
-                self.VALIDATION_MAX_ATTEMPTS,
+                elapsed,
+                self.VALIDATION_MAX_WAIT_SECONDS,
                 delay,
             )
             time.sleep(delay)
 
-        self.log_and_exit(
-            f"Could not establish connections to dependent services after "
-            f"{self.VALIDATION_MAX_ATTEMPTS} attempts. "
+        exit_for_restart(
+            f"Could not reach dependent services after {attempt} attempts over "
+            f"{self.VALIDATION_MAX_WAIT_SECONDS // 60} minutes. "
             "Verify Tautulli/Plex/Radarr/Sonarr/Seerr/Trakt are running and reachable."
         )
 
@@ -275,7 +341,7 @@ class Config:
                     f"Trakt authentication failed: {err}. "
                     "Verify your client_id and client_secret are correct."
                 )
-            elif "timeout" in error_msg or "connection" in error_msg:
+            elif is_transient_exception(err):
                 logger.error(
                     f"Cannot reach Trakt API: {err}. "
                     "Check your internet connection and firewall settings."
@@ -350,10 +416,9 @@ class Config:
                 logger.error(
                     f"Failed to connect to Seerr at {seerr_config.get('url')}, check your configuration."
                 )
-                # test_connection() returns False on any failure (including
-                # connection refused) — assume transient so a booting Seerr
-                # gets retried rather than hung on.
-                self._last_failure_transient = True
+                # Retry only connection problems and 5xx. Auth errors are permanent.
+                if seerr.last_error_transient:
+                    self._last_failure_transient = True
                 return False
             return True
         except Exception as err:
@@ -364,7 +429,7 @@ class Config:
                     f"Seerr authentication failed at {url}: {err}. "
                     "Verify your API key is correct."
                 )
-            elif "timeout" in error_msg or "connection" in error_msg:
+            elif is_transient_exception(err):
                 logger.error(
                     f"Cannot reach Seerr at {url}: {err}. "
                     "Check the URL and ensure Seerr is running."
@@ -418,6 +483,7 @@ class Config:
                 f"{url}/api",
                 params={"apiKey": connection["api_key"]},
                 headers={"Content-Type": "application/json"},
+                timeout=VALIDATION_REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
             return True
@@ -426,7 +492,8 @@ class Config:
                 f"Cannot reach Sonarr instance '{name}' at {url}: {err}. "
                 "Verify the URL is correct and Sonarr is running."
             )
-            self._last_failure_transient = True
+            if is_transient_exception(err):
+                self._last_failure_transient = True
             return False
         except requests.exceptions.Timeout as err:
             logger.error(
@@ -436,7 +503,7 @@ class Config:
             self._last_failure_transient = True
             return False
         except requests.exceptions.HTTPError as err:
-            status_code = err.response.status_code if err.response else "unknown"
+            status_code = err.response.status_code if err.response is not None else "unknown"
             if status_code == 401:
                 logger.error(
                     f"Sonarr '{name}' authentication failed (HTTP 401): Invalid API key. "
@@ -446,7 +513,7 @@ class Config:
                 logger.error(
                     f"Sonarr '{name}' access denied (HTTP 403): API key may lack permissions."
                 )
-            elif status_code >= 500:
+            elif isinstance(status_code, int) and status_code >= 500:
                 logger.error(
                     f"Sonarr '{name}' server error (HTTP {status_code}): {err}. "
                     "Check Sonarr logs for details."
@@ -458,7 +525,7 @@ class Config:
             return False
         except requests.exceptions.RequestException as err:
             logger.error(f"Failed to connect to Sonarr '{name}' at {url}: {err}")
-            if is_transient_error_message(str(err)):
+            if is_transient_exception(err):
                 self._last_failure_transient = True
             return False
 
@@ -497,7 +564,7 @@ class Config:
                     f"Plex authentication failed at {url}: {err}. "
                     "Verify your Plex token is correct."
                 )
-            elif "timeout" in error_msg or "connection" in error_msg:
+            elif is_transient_exception(err):
                 logger.error(
                     f"Cannot reach Plex at {url}: {err}. "
                     "Check the URL and ensure Plex is running."
@@ -528,7 +595,7 @@ class Config:
                     f"Tautulli authentication failed at {url}: {err}. "
                     "Verify your API key is correct (Settings -> Web Interface -> API Key)."
                 )
-            elif "timeout" in error_msg or "connection" in error_msg:
+            elif is_transient_exception(err):
                 logger.error(
                     f"Cannot reach Tautulli at {url}: {err}. "
                     "Check the URL and ensure Tautulli is running."

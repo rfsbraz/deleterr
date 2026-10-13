@@ -39,6 +39,8 @@ class Seerr:
         self._requests_cache = {}  # {tmdb_id: request_data}
         self._media_cache = {}  # {tmdb_id: media_data}
         self._users_cache = {}  # {user_id: user_data}
+        # True when the last failed request was a connection problem or 5xx.
+        self.last_error_transient = False
 
     def _make_request(self, method, endpoint, **kwargs):
         """
@@ -62,6 +64,7 @@ class Seerr:
         }
 
         url = f"{self.url}/api/v1{endpoint}"
+        self.last_error_transient = False
 
         try:
             response = requests.request(
@@ -77,21 +80,25 @@ class Seerr:
         except requests.exceptions.ConnectionError as e:
             logger.warning(f"Cannot reach Seerr at {self.url}: Connection refused or host unreachable")
             logger.debug(f"Connection error details: {e}")
+            self.last_error_transient = not isinstance(e, requests.exceptions.SSLError)
             return None
         except requests.exceptions.Timeout as e:
             logger.warning(f"Seerr request to {endpoint} timed out after 30s")
             logger.debug(f"Timeout details: {e}")
+            self.last_error_transient = True
             return None
         except requests.exceptions.HTTPError as e:
-            status_code = e.response.status_code if e.response else "unknown"
+            # requests.Response is falsy for error statuses, so compare with None.
+            status_code = e.response.status_code if e.response is not None else "unknown"
             if status_code == 401:
                 logger.warning(f"Seerr API authentication failed (HTTP 401): Check your API key")
             elif status_code == 403:
                 logger.warning(f"Seerr API access denied (HTTP 403): API key may lack permissions")
             elif status_code == 404:
                 logger.debug(f"Seerr resource not found (HTTP 404): {endpoint}")
-            elif status_code >= 500:
+            elif isinstance(status_code, int) and status_code >= 500:
                 logger.warning(f"Seerr server error (HTTP {status_code}) on {endpoint}")
+                self.last_error_transient = True
             else:
                 logger.warning(f"Seerr API error (HTTP {status_code}) on {endpoint}: {e}")
             return None

@@ -583,19 +583,23 @@ class TestTransientRetryBehavior:
         assert attempts["n"] == 1
         mock_sleep.assert_not_called()
 
-    def test_exhausted_transient_retries_eventually_hangs(self):
+    def test_exhausted_transient_retries_exit_nonzero(self):
         config = self._build_config()
         config.VALIDATION_BASE_DELAY_SECONDS = 0
         config.VALIDATION_MAX_DELAY_SECONDS = 0
+        config.VALIDATION_MAX_WAIT_SECONDS = 0
 
         def fake_validate_config():
             config._last_failure_transient = True
             return False
 
         with patch.object(Config, "validate_config", side_effect=fake_validate_config), \
-             patch("app.config.time.sleep"):
-            with pytest.raises(SystemExit):
+             patch("app.config.time.sleep"), \
+             patch("app.config.hang_on_error") as hang:
+            with pytest.raises(SystemExit) as exc:
                 config.validate()
+        assert exc.value.code == 1
+        hang.assert_not_called()
 
     def test_tautulli_connection_refused_marks_transient(self):
         config = self._build_config()

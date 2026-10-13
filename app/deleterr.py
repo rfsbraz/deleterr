@@ -1270,7 +1270,7 @@ def main():
         console=True, log_dir="/config/logs", verbose=log_level == "DEBUG"
     )
 
-    logger.info(f"Running version {get_file_contents('/app/commit_tag.txt')}")
+    logger.info(f"Running version {get_file_contents('/app/commit_tag.txt') or 'unknown'}")
     logger.info(f"Log level set to {log_level}")
 
     parser = argparse.ArgumentParser(description="Deleterr - Automated media cleanup for Plex")
