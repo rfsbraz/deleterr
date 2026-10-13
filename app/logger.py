@@ -119,7 +119,8 @@ def setup_file_logger(log_dir):
         "%Y-%m-%d %H:%M:%S",
     )
 
-    # Main logger
+    # Main logger. The mounted /config may not have a logs/ folder yet.
+    os.makedirs(log_dir, exist_ok=True)
     filename = os.path.join(log_dir, FILENAME)
     file_handler = handlers.RotatingFileHandler(
         filename, maxBytes=MAX_SIZE, backupCount=MAX_FILES, encoding="utf-8"
