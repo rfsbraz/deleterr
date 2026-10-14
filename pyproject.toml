@@ -40,3 +40,15 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.uv]
+# Security overrides for transitive pins that block patched versions.
+# tautulli -> objectrest pins httpx==0.23.* (so httpcore 0.16, h11 0.14) and
+# oauthlib==3.2.1; tautulli pins python-dotenv==1.0.* but never imports it.
+# Remove these once tautulli/objectrest relax their pins.
+override-dependencies = [
+    "httpx>=0.28.1",          # GHSA-vqfr-h8mv-ghfj via h11 >= 0.16.0
+    "h11>=0.16.0",            # GHSA-vqfr-h8mv-ghfj
+    "oauthlib>=4.0.0",        # GHSA-3pgj-pg6c-r5p7, GHSA-hj66-6f7g-4r5v, GHSA-xpv3-w29h-x7cv
+    "python-dotenv>=1.2.2",   # GHSA-mf9w-mj56-hr94
+]
