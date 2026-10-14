@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Pinned uv, only mounted at build time. Dependabot bumps the tag and digest.
-FROM ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
 
 # Use an official Python runtime as a parent image
 FROM python:3.12-alpine
