@@ -32,11 +32,22 @@ Feature requests are welcome! Please:
 
 ### Pull Requests
 
-1. **Fork the repository** and create your branch from `main`
-2. **Follow existing code style** - the project uses consistent patterns
-3. **Add tests** if applicable
-4. **Update documentation** for any changed functionality
-5. **Ensure tests pass** before submitting
+1. **Open an issue first** to agree on the approach (typo and docs fixes can skip this)
+2. **Fork the repository** and create your branch from `main`
+3. **Follow existing code style** - the project uses consistent patterns
+4. **Add tests** if applicable
+5. **Update documentation** for any changed functionality
+6. **Ensure tests pass** before submitting
+
+### Low-effort and automated PRs
+
+Deleterr is maintained in my spare time, and every PR takes real time to review. I'm happy to get contributions from people who use Deleterr and want to make it better.
+
+I will close, without review, PRs that look like contribution farming: accounts opening many PRs across unrelated projects, or changes made mainly to collect contributions rather than to fix something you ran into. This applies even when the change itself is correct.
+
+AI-assisted PRs are fine if you've read and understood the change and can answer questions about it. Please say so in the PR.
+
+The easiest way to get a PR merged is to start with an issue, agree on the approach there, and then open the PR.
 
 ## Development Setup
 
