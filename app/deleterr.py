@@ -75,6 +75,29 @@ def release_instance_lock():
         _lock_file_handle = None
 
 
+def format_remaining_duration(remaining):
+    """
+    Format a remaining timedelta for logs.
+
+    Sub-hour remainders used to be rendered as "0h" (``remaining.seconds // 3600``),
+    which made a leave period that still had minutes left look already expired in
+    the run log. Show minutes whenever the remainder is below an hour.
+    """
+    total_minutes = int(remaining.total_seconds() // 60)
+    if total_minutes < 0:
+        total_minutes = 0
+    days, rest = divmod(total_minutes, 24 * 60)
+    hours, minutes = divmod(rest, 60)
+
+    if days > 0:
+        return f"{days}d {hours}h"
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    if minutes > 0:
+        return f"{minutes}m"
+    return "less than a minute"
+
+
 class Deleterr:
     def __init__(self, config):
         self.config = config
@@ -225,15 +248,9 @@ class Deleterr:
             if now >= expires_at:
                 eligible.append(item)
             else:
-                remaining = expires_at - now
-                days = remaining.days
-                hours = remaining.seconds // 3600
-                if days > 0:
-                    time_remaining = f"{days}d {hours}h"
-                else:
-                    time_remaining = f"{hours}h"
+                time_remaining = format_remaining_duration(expires_at - now)
                 logger.info(
-                    "Item '%s' in leaving_soon for library '%s' — %s remaining before deletion",
+                    "Item '%s' in leaving_soon for library '%s' — %s remaining, skipped",
                     getattr(item, "title", "Unknown"),
                     library_name,
                     time_remaining,
