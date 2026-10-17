@@ -144,3 +144,24 @@ def test_collections_not_fetched_when_feature_disabled(media_cleaner):
 
     plex_library.collections.assert_not_called()
     assert _titles(candidates) == ["Spirited Away"]
+
+
+def test_watched_collections_do_not_leak_between_libraries(media_cleaner):
+    """A collection watched in one library must not protect items in another (#324)."""
+    plex_library, radarr = _setup(media_cleaner)
+    activity = media_cleaner.watch_provider.get_activity(1)
+    list(media_cleaner.process_library_rules(
+        LIBRARY, plex_library, radarr.get_movies(), activity, {}, radarr_instance=radarr,
+    ))
+
+    # The second library has a collection with the same name, but nothing in it was watched
+    other_item = _plex_item(3, "Ponyo")
+    other_library = MagicMock(key=2, totalSize=1)
+    other_library.all.return_value = [other_item]
+    other_library.collections.return_value = [_collection("Studio Ghibli", [other_item])]
+
+    candidates = list(media_cleaner.process_library_rules(
+        LIBRARY, other_library, [_radarr_movie("Ponyo")], activity, {}, radarr_instance=radarr,
+    ))
+
+    assert _titles(candidates) == ["Ponyo"]
