@@ -1,22 +1,17 @@
-## Summary
+## What and why
 
-<!-- Brief description of the changes -->
+<!-- What does this change, and what problem did you hit? -->
 
-## Type of Change
+Closes #<!-- Please agree on the approach in an issue first. Typo and docs fixes can skip this. -->
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Breaking change
-- [ ] Documentation update
-- [ ] Refactoring
-- [ ] CI/CD or build changes
+## Your setup
 
-## Testing Done
+<!-- Do you run Deleterr? Media server, *arrs, Docker or bare metal. -->
 
-<!-- Describe what testing you did -->
+## How you tested it
 
-## Checklist
+<!-- Tests added, and a dry run log snippet from your own setup if you can (personal details removed). -->
 
-- [ ] Tests pass (`make unit`)
-- [ ] New tests added for new functionality (if applicable)
-- [ ] Documentation updated (if applicable)
+## AI use
+
+<!-- Fine to use, just say so and confirm you understand every line. -->
