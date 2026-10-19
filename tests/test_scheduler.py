@@ -8,6 +8,12 @@ from apscheduler.triggers.cron import CronTrigger
 from app.scheduler import DeleterrScheduler, SCHEDULE_PRESETS
 
 
+@pytest.fixture(autouse=True)
+def _last_run_file(tmp_path, monkeypatch):
+    """Keep scheduler tests from writing the real /config last run file."""
+    monkeypatch.setattr("app.scheduler.LAST_RUN_FILE", str(tmp_path / ".deleterr_last_run.json"))
+
+
 class TestSchedulePresets:
     """Tests for schedule preset definitions."""
 

@@ -6,8 +6,11 @@ Provides an optional native scheduling solution as an alternative to external
 schedulers like Ofelia or system cron.
 """
 
+import json
+import os
 import signal
 import sys
+import tempfile
 from datetime import datetime
 
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -16,6 +19,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app import logger
 from app.config import hang_on_error
 
+LAST_RUN_FILE = "/config/.deleterr_last_run.json"
 
 # Schedule presets mapping to cron expressions
 SCHEDULE_PRESETS = {
@@ -43,6 +47,7 @@ class DeleterrScheduler:
         self.config = config
         self.scheduler_config = config.settings.get("scheduler", {})
         self.scheduler = BlockingScheduler()
+        self.last_run_file = LAST_RUN_FILE
         self._setup_signal_handlers()
 
     def _setup_signal_handlers(self):
@@ -114,16 +119,45 @@ class DeleterrScheduler:
                     "All libraries failed due to configuration errors. "
                     "Please check your settings.yaml and fix the errors above."
                 )
+                self._record_last_run("failed", "All libraries failed due to configuration errors")
                 return False
             if self.config.settings.get("dry_run"):
                 logger.info("[DRY-RUN] Scheduled run completed successfully (no changes were made)")
             else:
                 logger.info("Scheduled run completed successfully")
+            self._record_last_run("success")
             return True
         except Exception as e:
+            error = logger.redact(f"{type(e).__name__}: {e}")
             logger.error(f"Scheduled run failed: {e}")
+            self._record_last_run("failed", error)
+            self._notify_failure(error)
             # Don't re-raise - we want the scheduler to continue for transient errors
             return True  # Not a config error, allow retries
+
+    def _notify_failure(self, error):
+        """Send a failed-run notification. Never raises."""
+        from app.modules.notifications import NotificationManager
+
+        try:
+            NotificationManager(self.config).send_run_failure(
+                error, is_dry_run=bool(self.config.settings.get("dry_run", True))
+            )
+        except Exception as e:
+            logger.error(f"Failed to send run failure notification: {e}")
+
+    def _record_last_run(self, status, error=None):
+        """Atomically write the last run status for healthchecks. Never raises."""
+        data = {"status": status, "timestamp": datetime.now().isoformat(), "error": error}
+        try:
+            fd, tmp_path = tempfile.mkstemp(
+                dir=os.path.dirname(self.last_run_file), prefix=".deleterr_last_run_", suffix=".tmp"
+            )
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp_path, self.last_run_file)
+        except OSError as e:
+            logger.warning(f"Failed to write last run status to '{self.last_run_file}': {e}")
 
     def start(self):
         """

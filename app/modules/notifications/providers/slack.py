@@ -155,6 +155,8 @@ class SlackProvider(BaseNotificationProvider):
             text = f"Would delete {item_summary}, freeing *{freed_size}*"
         else:
             text = f"Deleted {item_summary}, freed *{freed_size}*"
+        if result.error:
+            text = self.build_summary(result)
 
         return {
             "type": "section",

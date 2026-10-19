@@ -150,6 +150,8 @@ scheduler:
   run_on_startup: true  # Also run when container starts
 ```
 
+After every scheduled run, the scheduler writes `/config/.deleterr_last_run.json` with the `status` (`success` or `failed`), a `timestamp` and the `error`, if any. Crashed runs also send a failure notification to your configured providers.
+
 ### Ofelia (External Scheduler)
 
 If using Ofelia, common scheduling patterns:

@@ -113,8 +113,8 @@ class DiscordProvider(BaseNotificationProvider):
         title = self.build_title(result)
         description = self.build_summary(result)
 
-        # Leaving soon notifications skip the deletion stats
-        if result.is_leaving_soon:
+        # Leaving soon and failed-run notifications skip the deletion stats
+        if result.is_leaving_soon or result.error:
             return {
                 "title": title,
                 "description": description,

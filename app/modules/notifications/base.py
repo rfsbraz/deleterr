@@ -63,12 +63,16 @@ class BaseNotificationProvider(ABC):
         if result.is_leaving_soon:
             return "Leaving Soon"
         prefix = "[DRY-RUN] " if result.is_dry_run else ""
+        if result.error:
+            return f"{prefix}Deleterr Run Failed"
         return f"{prefix}Deleterr Run Complete"
 
     def build_summary(self, result: RunResult) -> str:
         """Build the summary text."""
         if result.is_leaving_soon:
             return "The following content is scheduled for removal"
+        if result.error:
+            return f"Run failed: {result.error}"
         deleted_count = len(result.deleted_items)
         freed_size = self.format_size(result.total_freed_bytes)
 

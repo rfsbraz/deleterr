@@ -230,6 +230,10 @@ notifications:
 | `include_preview` | `true` | Include preview of items in notification |
 | `min_deletions_to_notify` | `1` | Minimum deletions to trigger notification |
 
+### Failed Runs
+
+When a scheduled run crashes (for example Plex is unreachable or a token has expired), Deleterr sends a "Deleterr Run Failed" notification with the error to every configured provider. These are sent even when `notify_on_dry_run` or `min_deletions_to_notify` would skip a normal run summary. Webhooks receive `"type": "deleterr_run_failed"` and an `error` field (`null` on successful runs).
+
 ## Leaving Soon Templates
 
 The default leaving soon template includes:

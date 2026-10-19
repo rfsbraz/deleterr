@@ -82,6 +82,7 @@ class RunResult:
     library_stats: list[LibraryStats] = field(default_factory=list)
     deletion_date: Optional[datetime] = None
     deletion_date_str: Optional[str] = None
+    error: Optional[str] = None  # Set when the run crashed
 
     def add_deleted(self, item: DeletedItem) -> None:
         """Add a deleted item to the results."""

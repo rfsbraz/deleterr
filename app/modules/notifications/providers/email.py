@@ -41,7 +41,9 @@ class EmailProvider(BaseNotificationProvider):
 
         try:
             subject = self.config.get("subject", "Deleterr Run Complete")
-            if result.is_dry_run:
+            if result.error:
+                subject = self.build_title(result)
+            elif result.is_dry_run:
                 subject = f"[DRY-RUN] {subject}"
 
             html_content = self._build_run_summary_html(result)

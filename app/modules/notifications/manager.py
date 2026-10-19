@@ -141,6 +141,27 @@ class NotificationManager:
         if not self.should_notify(result):
             return False
 
+        return self._send_to_providers(result)
+
+    def send_run_failure(self, error: str, is_dry_run: bool) -> bool:
+        """
+        Notify all configured providers that a run crashed.
+
+        Failures are always sent, regardless of the dry run and minimum
+        deletion filters, since a crashed run has nothing else to report.
+
+        Returns:
+            True if at least one provider succeeded, False otherwise.
+        """
+        if not self.is_enabled():
+            return False
+
+        now = datetime.now()
+        result = RunResult(is_dry_run=is_dry_run, error=error, start_time=now, end_time=now)
+        return self._send_to_providers(result)
+
+    def _send_to_providers(self, result: RunResult) -> bool:
+        """Send a result to every provider, returning True if any succeeded."""
         success_count = 0
         for provider in self.providers:
             try:
