@@ -191,3 +191,88 @@ class TestSchedulerIntegration:
             for expr in expressions:
                 trigger = scheduler._parse_schedule(expr)
                 assert isinstance(trigger, CronTrigger)
+
+
+class TestScheduledRunFailure:
+    """A crashed scheduled run must notify and record a failed status (#293)."""
+
+    HOOK_URL = "http://hook.test/deleterr"
+
+    @pytest.fixture
+    def scheduler(self, tmp_path):
+        config = Mock()
+        config.settings = {
+            "dry_run": False,
+            "plex": {"url": "http://plex.test:32400", "token": "plex-token"},
+            "scheduler": {"enabled": True, "schedule": "weekly"},
+            "notifications": {"webhook": {"url": self.HOOK_URL}},
+        }
+        with patch("app.scheduler.BlockingScheduler"):
+            s = DeleterrScheduler(config)
+        s.last_run_file = str(tmp_path / ".deleterr_last_run.json")
+        return s
+
+    def _last_run(self, scheduler):
+        import json
+
+        with open(scheduler.last_run_file, encoding="utf-8") as f:
+            return json.load(f)
+
+    def _sent_payloads(self, mock_request):
+        return [c.kwargs["json"] for c in mock_request.call_args_list]
+
+    @patch("app.modules.notifications.providers.webhook.requests.request")
+    def test_crash_in_deleterr_init_notifies_and_records_failure(self, mock_request, scheduler):
+        with patch(
+            "app.deleterr.PlexMediaServer",
+            side_effect=Exception("401 Unauthorized for http://plex.test/?X-Plex-Token=plex-token"),
+        ):
+            scheduler._run_deleterr()
+
+        payloads = self._sent_payloads(mock_request)
+        assert len(payloads) == 1
+        assert payloads[0]["type"] == "deleterr_run_failed"
+        assert "401 Unauthorized" in payloads[0]["error"]
+        assert "plex-token" not in payloads[0]["error"]
+
+        last_run = self._last_run(scheduler)
+        assert last_run["status"] == "failed"
+        assert "401 Unauthorized" in last_run["error"]
+        assert "plex-token" not in last_run["error"]
+        assert last_run["timestamp"]
+
+    @patch("app.modules.notifications.providers.webhook.requests.request")
+    def test_crash_during_run_notifies_and_records_failure(self, mock_request, scheduler):
+        with patch("app.deleterr.PlexMediaServer"), \
+             patch("app.deleterr.MediaCleaner"), \
+             patch("app.deleterr.StateManager"), \
+             patch("app.deleterr.NotificationManager"), \
+             patch("app.deleterr.Deleterr.process_radarr", side_effect=RuntimeError("Radarr went away")):
+            scheduler._run_deleterr()
+
+        payloads = self._sent_payloads(mock_request)
+        assert len(payloads) == 1
+        assert payloads[0]["type"] == "deleterr_run_failed"
+        assert "Radarr went away" in payloads[0]["error"]
+
+        last_run = self._last_run(scheduler)
+        assert last_run["status"] == "failed"
+        assert "Radarr went away" in last_run["error"]
+
+    @patch("app.modules.notifications.providers.webhook.requests.request")
+    def test_successful_run_records_success_without_failure_notification(self, mock_request, scheduler):
+        with patch("app.deleterr.Deleterr") as mock_deleterr:
+            mock_deleterr.return_value.has_fatal_errors.return_value = False
+            scheduler._run_deleterr()
+
+        mock_request.assert_not_called()
+        last_run = self._last_run(scheduler)
+        assert last_run["status"] == "success"
+        assert last_run["error"] is None
+
+    def test_failing_notification_does_not_break_the_scheduler(self, scheduler):
+        with patch("app.deleterr.Deleterr", side_effect=Exception("boom")), \
+             patch("app.modules.notifications.NotificationManager.send_run_failure", side_effect=Exception("smtp down")):
+            assert scheduler._run_deleterr() is True
+
+        assert self._last_run(scheduler)["status"] == "failed"

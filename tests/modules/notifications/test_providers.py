@@ -873,3 +873,51 @@ class TestEmailProvider:
         result = provider.test_connection()
 
         assert result is False
+
+
+class TestRunFailureRendering:
+    """Every provider renders a failed run as a failure, not as an empty success (#293)."""
+
+    def _failed(self, is_dry_run=False):
+        return RunResult(is_dry_run=is_dry_run, error="Plex unreachable")
+
+    def test_base_title_and_summary(self):
+        provider = WebhookProvider({"url": "http://x"})
+        assert provider.build_title(self._failed()) == "Deleterr Run Failed"
+        assert provider.build_title(self._failed(is_dry_run=True)) == "[DRY-RUN] Deleterr Run Failed"
+        assert provider.build_summary(self._failed()) == "Run failed: Plex unreachable"
+
+    def test_webhook_payload(self):
+        payload = WebhookProvider({"url": "http://x"})._build_payload(self._failed())
+        assert payload["type"] == "deleterr_run_failed"
+        assert payload["error"] == "Plex unreachable"
+
+    def test_discord_payload(self):
+        payload = DiscordProvider({"webhook_url": "http://x"})._build_payload(self._failed(), "Deleterr", None)
+        embed = payload["embeds"][0]
+        assert embed["title"] == "Deleterr Run Failed"
+        assert "Plex unreachable" in embed["description"]
+
+    def test_slack_payload(self):
+        payload = SlackProvider({"webhook_url": "http://x"})._build_payload(self._failed(), None, "Deleterr", ":wastebasket:")
+        text = str(payload["blocks"])
+        assert "Deleterr Run Failed" in text
+        assert "Plex unreachable" in text
+        assert "Deleted 0 items" not in text
+
+    def test_telegram_message(self):
+        message = TelegramProvider({"bot_token": "1:A", "chat_id": "2"})._build_message(self._failed())
+        assert "Run Failed" in message
+        assert "Plex unreachable" in message
+
+    def test_email_subject(self):
+        provider = EmailProvider({
+            "smtp_server": "smtp.example.com",
+            "from_address": "test@example.com",
+            "to_addresses": ["user@example.com"],
+        })
+        with patch.object(provider, "_send_email", return_value=True) as mock_send:
+            provider.send(self._failed())
+        subject, html, text = mock_send.call_args[0]
+        assert subject == "Deleterr Run Failed"
+        assert "Plex unreachable" in text
