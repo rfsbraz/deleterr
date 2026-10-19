@@ -276,6 +276,44 @@ class TestScheduledRunFailure:
         assert last_run["status"] == "success"
         assert last_run["error"] is None
 
+    @patch("app.modules.notifications.providers.webhook.requests.request")
+    def test_all_libraries_failing_on_config_notifies_and_records_failure(self, mock_request, scheduler):
+        from app.media_cleaner import ConfigurationError
+
+        scheduler.config.settings["radarr"] = [{"name": "Radarr", "url": "http://radarr.test", "api_key": "k"}]
+        scheduler.config.settings["libraries"] = [
+            {"name": "Movies", "radarr": "Radarr"},
+            {"name": "Kids Movies", "radarr": "Radarr"},
+        ]
+        errors = {
+            "Movies": ConfigurationError("Radarr rejected http://radarr.test/api?apikey=radarr-secret"),
+            "Kids Movies": ConfigurationError("Unknown sort field 'size_on_disk'"),
+        }
+        cleaner = MagicMock()
+        cleaner.process_library_movies.side_effect = lambda library, instance: (_ for _ in ()).throw(
+            errors[library["name"]]
+        )
+
+        with patch("app.deleterr.PlexMediaServer"), \
+             patch("app.deleterr.MediaCleaner", return_value=cleaner), \
+             patch("app.deleterr.StateManager"), \
+             patch("app.deleterr.NotificationManager"), \
+             patch("app.deleterr.DRadarr"):
+            assert scheduler._run_deleterr() is False
+
+        payloads = self._sent_payloads(mock_request)
+        assert len(payloads) == 1
+        assert payloads[0]["type"] == "deleterr_run_failed"
+        error = payloads[0]["error"]
+        assert "All libraries failed" in error
+        assert "Movies: Radarr rejected" in error
+        assert "Kids Movies: Unknown sort field 'size_on_disk'" in error
+        assert "radarr-secret" not in error
+
+        last_run = self._last_run(scheduler)
+        assert last_run["status"] == "failed"
+        assert last_run["error"] == error
+
     def test_failing_notification_does_not_break_the_scheduler(self, scheduler):
         with patch("app.deleterr.Deleterr", side_effect=Exception("boom")), \
              patch("app.modules.notifications.NotificationManager.send_run_failure", side_effect=Exception("smtp down")):
