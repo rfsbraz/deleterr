@@ -119,7 +119,13 @@ class DeleterrScheduler:
                     "All libraries failed due to configuration errors. "
                     "Please check your settings.yaml and fix the errors above."
                 )
-                self._record_last_run("failed", "All libraries failed due to configuration errors")
+                # Redact each message on its own so a secret at the end of one
+                # cannot swallow the separator before the next library
+                error = "All libraries failed: " + "; ".join(
+                    f"{name}: {logger.redact(message)}" for name, message in deleterr.library_failures
+                )
+                self._record_last_run("failed", error)
+                self._notify_failure(error)
                 return False
             if self.config.settings.get("dry_run"):
                 logger.info("[DRY-RUN] Scheduled run completed successfully (no changes were made)")

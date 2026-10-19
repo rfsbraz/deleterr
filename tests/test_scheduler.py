@@ -309,6 +309,7 @@ class TestScheduledRunFailure:
         assert "Movies: Radarr rejected" in error
         assert "Kids Movies: Unknown sort field 'size_on_disk'" in error
         assert "radarr-secret" not in error
+        assert "[REDACTED]; Kids Movies" in error
 
         last_run = self._last_run(scheduler)
         assert last_run["status"] == "failed"
