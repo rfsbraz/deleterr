@@ -70,8 +70,9 @@ class WebhookProvider(BaseNotificationProvider):
     def _build_payload(self, result: RunResult) -> dict:
         """Build the webhook payload."""
         payload = {
-            "type": "deleterr_run_complete",
+            "type": "deleterr_run_failed" if result.error else "deleterr_run_complete",
             "is_dry_run": result.is_dry_run,
+            "error": result.error,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "summary": {
                 "deleted_count": len(result.deleted_items),

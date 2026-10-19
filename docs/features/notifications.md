@@ -230,6 +230,12 @@ notifications:
 | `include_preview` | `true` | Include preview of items in notification |
 | `min_deletions_to_notify` | `1` | Minimum deletions to trigger notification |
 
+### Failed Runs
+
+When a scheduled run crashes (for example Plex is unreachable or a token has expired), or every library fails on configuration errors, Deleterr sends a "Deleterr Run Failed" notification with the error to every configured provider. For configuration failures the error lists each library and its message, for example `All libraries failed: Movies: <error>; TV Shows: <error>`. These are sent even when `notify_on_dry_run` or `min_deletions_to_notify` would skip a normal run summary. Webhooks receive `"type": "deleterr_run_failed"` and an `error` field (`null` on successful runs).
+
+If only some libraries fail, the run carries on with the others and is treated as a normal run: no failure notification is sent, the usual run summary rules apply, the last run status is `success`, and the failed libraries only show up in the logs.
+
 ## Leaving Soon Templates
 
 The default leaving soon template includes:

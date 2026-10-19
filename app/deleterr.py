@@ -106,6 +106,7 @@ class Deleterr:
 
         self.libraries_processed = 0
         self.libraries_failed = 0
+        self.library_failures = []  # (library name, error message) for each failed library
 
         self.process_radarr()
         self.process_sonarr()
@@ -772,6 +773,7 @@ class Deleterr:
         else:
             logger.error(str(error))
         self.libraries_failed += 1
+        self.library_failures.append((library_name, str(error)))
 
     def process_radarr(self):
         for name, radarr in self.radarr.items():
