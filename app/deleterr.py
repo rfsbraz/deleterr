@@ -164,7 +164,7 @@ class Deleterr:
 
         return items_to_delete
 
-    def _filter_by_duration(self, library_name, death_row_plex_items, duration_str):
+    def _filter_by_duration(self, library_name, death_row_plex_items, duration_str, is_dry_run=False):
         """
         Filter death row items by checking if their leaving_soon duration has elapsed.
 
@@ -174,6 +174,7 @@ class Deleterr:
             library_name: Library name for state lookup
             death_row_plex_items: List of Plex items in death row
             duration_str: Duration string like '7d' or '24h'
+            is_dry_run: Log untracked items instead of recording them in state
 
         Returns:
             tuple: (eligible_items, skipped_count)
@@ -197,6 +198,16 @@ class Deleterr:
             if tagged_at_str is None:
                 # No record of when this was tagged — treat as newly tagged
                 # (conservative: don't delete items with unknown tag date)
+                if is_dry_run:
+                    logger.info(
+                        "[DRY-RUN] Item '%s' (key=%s) in leaving_soon has no tagged date in state, "
+                        "would record %s and skip deletion until duration elapses",
+                        getattr(item, "title", "Unknown"),
+                        key_str,
+                        now.isoformat(),
+                    )
+                    skipped += 1
+                    continue
                 logger.info(
                     "Item '%s' (key=%s) in leaving_soon has no tagged date in state — "
                     "recording now and skipping deletion until duration elapses",
@@ -396,7 +407,8 @@ class Deleterr:
         duration_waiting_items = []
         if duration_str and all_death_row_plex_items:
             death_row_plex_items, skipped_count = self._filter_by_duration(
-                library_name, all_death_row_plex_items, duration_str
+                library_name, all_death_row_plex_items, duration_str,
+                is_dry_run=self.config.settings.get("dry_run", True),
             )
             # Track items still waiting for duration to elapse
             eligible_keys = {item.ratingKey for item in death_row_plex_items}
