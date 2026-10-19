@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.28](https://github.com/rfsbraz/deleterr/compare/v0.2.27...v0.2.28) (2026-10-19)
+
+
+### Bug Fixes
+
+* **dry-run:** stop recording tagged dates in state during dry runs ([#342](https://github.com/rfsbraz/deleterr/issues/342)) ([f7ac31c](https://github.com/rfsbraz/deleterr/commit/f7ac31cf62c3f8dfb70ec91ee5140950b9fb17d0))
+* **scheduler:** notify and record status when a scheduled run crashes ([#343](https://github.com/rfsbraz/deleterr/issues/343)) ([a4c41a4](https://github.com/rfsbraz/deleterr/commit/a4c41a4004103c8e35f6e7dcf2ac3fb44df621bc))
+
 ## [0.2.27](https://github.com/rfsbraz/deleterr/compare/v0.2.26...v0.2.27) (2026-10-14)
 
 
