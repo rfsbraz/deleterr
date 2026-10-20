@@ -19,6 +19,25 @@ Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files ba
 - **Leaving Soon Collections** - Warn users before content is removed with Plex collections and notifications
 - **Built-in Scheduler** - Runs on a schedule automatically (daily, weekly, or custom cron)
 
+## deleterr or Maintainerr?
+
+[Maintainerr](https://github.com/Maintainerr/Maintainerr) does the same job. This section was checked against Maintainerr v3.30.2 (its README and [docs](https://docs.maintainerr.info/)).
+
+Pick **Maintainerr** if you:
+
+- want a web UI to build rules, browse collections and test a rule against a title
+- run Jellyfin or Emby (Deleterr only works with Plex)
+- use Ombi, or want rules based on Sportarr, Streamystats or Tracearr
+- want actions other than delete, such as unmonitor or a quality profile change, or poster overlays
+
+Pick **Deleterr** if you:
+
+- want your whole setup in one YAML file you can keep in Git and review like code
+- want exclusions from Trakt lists, MDBList lists or JustWatch streaming availability
+- want a dry run switch: `dry_run` is on by default and logs what would be deleted without deleting anything
+
+Both can put titles in a Plex collection for a grace period before removing them, and both work with Seerr.
+
 ## Documentation
 
 - **[Getting Started](https://rfsbraz.github.io/deleterr/getting-started)** - Docker setup and first run
