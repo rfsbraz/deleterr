@@ -25,7 +25,7 @@ deleterr = "app.deleterr:main"
 dev = [
     "coverage",
     "pytest",
-    "pytest-mock==3.16.0",
+    "pytest-mock==3.17.0",
     "pytest-timeout",
 ]
 docs = [
