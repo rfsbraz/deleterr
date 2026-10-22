@@ -4,12 +4,6 @@
 
 Closes #
 
-## Before / After
-
-| Before | After |
-| --- | --- |
-|  |  |
-
 ## Screenshots
 
 <!-- UI changes only. Delete this section otherwise. -->
