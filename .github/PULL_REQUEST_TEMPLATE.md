@@ -1,17 +1,19 @@
-## What and why
+## Summary
 
-<!-- What does this change, and what problem did you hit? -->
+<!-- One or two lines: what changes and why. -->
 
-Closes #<!-- Please agree on the approach in an issue first. Typo and docs fixes can skip this. -->
+Closes #
 
-## Your setup
+## Before / After
 
-<!-- Do you run Deleterr? Media server, *arrs, Docker or bare metal. -->
+| Before | After |
+| --- | --- |
+|  |  |
 
-## How you tested it
+## Screenshots
 
-<!-- Tests added, and a dry run log snippet from your own setup if you can (personal details removed). -->
+<!-- UI changes only. Delete this section otherwise. -->
 
-## AI use
+## Tested
 
-<!-- Fine to use, just say so and confirm you understand every line. -->
+<!-- One line: what you ran, for example `make test`, and a dry run on your own setup if you have one. -->
