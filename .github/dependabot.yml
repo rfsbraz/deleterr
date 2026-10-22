@@ -13,6 +13,14 @@ updates:
       python-packages:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      python-packages-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
     ignore:
       # tautulli pins PlexAPI==4.15.* - bumping PlexAPI past that makes
       # pip resolution impossible. Remove when tautulli lifts the pin.
@@ -32,3 +40,10 @@ updates:
     # Check for updates once a week
     schedule:
       interval: daily
+    groups:
+      docker-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      docker-major:
+        patterns: ["*"]
+        update-types: ["major"]
