@@ -53,7 +53,7 @@ libraries:
       order: asc
     exclude:
       titles: ["Forrest Gump"]
-      tags: ["children", "favorite"]
+      plex_labels: ["children", "favorite"]
       genres: ["horror", "thriller"]
       collections: ["Marvel Cinematic Universe"]
       actors: ["Tom Cruise", "Brad Pitt"]

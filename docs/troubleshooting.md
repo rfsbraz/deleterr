@@ -2,6 +2,22 @@
 
 Common issues and solutions for Deleterr.
 
+## Configuration Issues
+
+### Unknown Config Key
+
+**Symptoms**: Deleterr exits at startup with `Unknown config key 'fieldd' at libraries[0].sort.fieldd, did you mean 'field'?`
+
+Deleterr refuses to start when the config has a key it does not recognize, so a typo can never silently turn off a rule.
+
+**Solutions**:
+
+1. **Fix the spelling**: Use the suggested key, if one is shown
+
+2. **Move the key**: Keys like `exclude`, `sort` and `leaving_soon` belong inside each library, not at the top level
+
+3. **Rename old keys**: `exclude.tags` was never read; use `exclude.plex_labels` for Plex labels, or `exclude.radarr.tags` / `exclude.sonarr.tags` for Radarr and Sonarr tags
+
 ## Connection Issues
 
 ### Plex Connection Failed

@@ -22,6 +22,7 @@ from app.modules.radarr import DRadarr
 from app.modules.sonarr import DSonarr
 from app.modules.trakt import Trakt
 from app.modules.seerr import Seerr
+from app.schema import find_unknown_keys
 from app.utils import validate_units
 
 def env_constructor(loader, node):
@@ -216,6 +217,7 @@ class Config:
 
     def validate(self):
         self._normalize_seerr_config()
+        self.validate_known_keys()
 
         started = time.monotonic()
         attempt = 0
@@ -298,8 +300,7 @@ class Config:
 
     def validate_config(self):
         return (
-                self.validate_root_level_keys()
-                and self.validate_trakt()
+                self.validate_trakt()
                 and self.validate_sonarr_and_radarr_instances()
                 and self.validate_watch_provider()
                 and self.validate_seerr()
@@ -307,22 +308,13 @@ class Config:
                 and self.validate_libraries()
         )
 
-    def validate_root_level_keys(self):
-        """Warn about library-level settings placed at root level."""
-        library_only_keys = {
-            "exclude": "exclusion rules",
-            "leaving_soon": "leaving soon configuration",
-            "sort": "sort configuration",
-        }
-        for key, description in library_only_keys.items():
-            if key in self.settings:
-                logger.warning(
-                    f"'{key}' found at root level in settings.yaml, but {description} "
-                    f"must be configured under each library. "
-                    f"Move '{key}' inside the library configuration where it should apply. "
-                    f"The current root-level '{key}' will be IGNORED."
-                )
-        return True
+    def validate_known_keys(self):
+        """Fail on keys the schema does not define, so a typo cannot silently disable a rule."""
+        unknown = find_unknown_keys(self.settings)
+        for key in unknown:
+            logger.error(key.message())
+        if unknown:
+            self.log_and_exit("Invalid configuration: unknown keys, exiting.")
 
     def validate_trakt(self):
         if not self.settings.get("trakt"):
@@ -624,30 +616,12 @@ class Config:
             self.validate_watch_status(library)
             self.validate_sort_configuration(library)
             self.validate_settings_for_instance(library)
-            self.validate_plex_label_exclusions(library)
             self.validate_justwatch_exclusions(library)
             self.validate_radarr_exclusions(library)
             self.validate_sonarr_exclusions(library)
             self.validate_seerr_exclusions(library)
             self.validate_leaving_soon(library)
 
-        return True
-
-    def validate_plex_label_exclusions(self, library):
-        """Warn about `exclude.tags`, which is not a supported key.
-
-        Plex labels are excluded with `exclude.plex_labels`; Radarr/Sonarr tags
-        live under `exclude.radarr.tags` / `exclude.sonarr.tags`. A top-level
-        `exclude.tags` is silently ignored, so items users meant to protect
-        would not be protected.
-        """
-        exclude = library.get("exclude") or {}
-        if "tags" in exclude:
-            logger.warning(
-                f"Library '{library.get('name')}' uses 'exclude.tags', which is not supported "
-                "and will be ignored. Use 'exclude.plex_labels' for Plex labels, or "
-                "'exclude.radarr.tags' / 'exclude.sonarr.tags' for Radarr/Sonarr tags."
-            )
         return True
 
     def validate_justwatch_exclusions(self, library):
@@ -788,13 +762,6 @@ class Config:
                 f"Radarr exclusions set for library '{library['name']}' but no radarr instance is set."
             )
 
-        allowed_exclusions = ["tags", "quality_profiles", "paths", "monitored"]
-        for exclusion in radar_exclusions:
-            if exclusion not in allowed_exclusions:
-                self.log_and_exit(
-                    f"Invalid exclusion '{exclusion}' in library '{library['name']}', supported values are {allowed_exclusions}."
-                )
-
         radarr_settings = self.settings.get("radarr", [])
         # Warn if tags do not exist in radarr
         if "tags" in radar_exclusions:
@@ -835,13 +802,6 @@ class Config:
             self.log_and_exit(
                 f"Sonarr exclusions set for library '{library['name']}' but no sonarr instance is set."
             )
-
-        allowed_exclusions = ["status", "tags", "quality_profiles", "paths", "monitored"]
-        for exclusion in sonarr_exclusions:
-            if exclusion not in allowed_exclusions:
-                self.log_and_exit(
-                    f"Invalid exclusion '{exclusion}' in library '{library['name']}', supported values are {allowed_exclusions}."
-                )
 
         # Validate status values
         valid_statuses = ["continuing", "ended", "upcoming", "deleted"]

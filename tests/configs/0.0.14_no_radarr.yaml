@@ -51,7 +51,7 @@ libraries:
       order: desc
     exclude:
       titles: []
-      tags: []
+      plex_labels: []
       genres: []
       collections: []
       actors: []
@@ -82,7 +82,7 @@ libraries:
       order: desc
     exclude:
       titles: ["Dragon Ball", "Dragon Ball Z", "Dragon Ball GT"]
-      tags: []
+      plex_labels: []
       genres: []
       collections: []
       actors: []
