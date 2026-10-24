@@ -608,6 +608,8 @@ class TestTraktListValidation:
         warning = " ".join(r.getMessage() for r in caplog.records if r.levelno == logging.WARNING)
         assert "'Movies'" in warning
         assert "trakt section with client_id and client_secret" in warning
+        assert "Lists that need the Trakt API will fail to fetch" in warning
+        assert "do not stop deletion" in warning
 
     def test_trakt_lists_with_trakt_config_pass(self):
         validator = Config(self._settings(trakt={"client_id": "ID", "client_secret": "SECRET"}))
