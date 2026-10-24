@@ -684,11 +684,14 @@ class Config:
 
     def validate_trakt_configuration(self, library, trakt_configured):
         if (
-                len(library.get("exclude", {}).get("trakt_lists", [])) > 0
+                (library.get("exclude", {}).get("trakt") or {}).get("lists")
                 and not trakt_configured
         ):
-            self.log_and_exit(
-                f"Trakt lists configured for {library['name']} but trakt is not configured, check your configuration."
+            logger.warning(
+                f"Library '{library['name']}' has Trakt list exclusions but there is no "
+                "top-level trakt section, so the lists cannot be fetched and this library "
+                "will be skipped each run with nothing deleted. Add a trakt section with "
+                "client_id and client_secret to use the lists."
             )
 
     def validate_action_mode(self, library):

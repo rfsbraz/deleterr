@@ -370,6 +370,8 @@ See [Seerr / Overseerr Integration](integrations/overseerr.md) for full setup de
 
 4. **Check matching IDs**: Trakt matches by TMDB/TVDB ID. If an item lacks these IDs, it won't match.
 
+If the startup log warns that a library has Trakt list exclusions but no top-level `trakt` section, add `trakt.client_id` and `trakt.client_secret`. Until then that library is skipped each run and nothing in it is deleted.
+
 See [Trakt Integration](integrations/trakt.md) and [MDBList Integration](integrations/mdblist.md) for full setup details.
 
 ## Getting Help
