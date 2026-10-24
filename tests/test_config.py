@@ -1,3 +1,4 @@
+import logging
 import os
 from io import StringIO
 from unittest.mock import MagicMock, patch
@@ -600,11 +601,13 @@ class TestTraktListValidation:
         }
         return {"libraries": [library], "radarr": self.radarr_config, **overrides}
 
-    def test_trakt_lists_without_trakt_config_fail(self):
+    def test_trakt_lists_without_trakt_config_warn(self, caplog):
         validator = Config(self._settings())
-        with pytest.raises(SystemExit), patch("app.config.hang_on_error", side_effect=SystemExit(1)) as hang:
-            validator.validate_libraries()
-        assert "Trakt lists configured for Movies" in hang.call_args[0][0]
+        with patch("app.config.hang_on_error", side_effect=SystemExit(1)), caplog.at_level(logging.WARNING):
+            assert validator.validate_libraries()
+        warning = " ".join(r.getMessage() for r in caplog.records if r.levelno == logging.WARNING)
+        assert "'Movies'" in warning
+        assert "trakt section with client_id and client_secret" in warning
 
     def test_trakt_lists_with_trakt_config_pass(self):
         validator = Config(self._settings(trakt={"client_id": "ID", "client_secret": "SECRET"}))

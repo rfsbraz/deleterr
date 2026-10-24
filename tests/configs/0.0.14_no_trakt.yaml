@@ -67,6 +67,16 @@ libraries:
       writers: ["Steven Spielberg"]
       studios: ["Studio Ghibli"]
       release_years: 5  # Exclude media released in the last 5 years
+      trakt:  # Exclude media based on Trakt lists
+        max_items_per_list: 100 # Maximum number of items to fetch from each list
+        lists: # Trakt lists to exclude
+          [
+            "https://trakt.tv/movies/trending",
+            "https://trakt.tv/movies/popular",
+            "https://trakt.tv/movies/watched/yearly",
+            "https://trakt.tv/movies/collected/yearly",
+            "https://trakt.tv/users/justin/lists/imdb-top-rated-movies"
+          ]
   - name: "TV Shows"
     action_mode: delete
     last_watched_threshold: 365
@@ -89,6 +99,15 @@ libraries:
       writers: []
       studios: []
       release_years: 2
+      trakt:
+        max_items_per_list: 50
+        lists:
+          [
+            "https://trakt.tv/shows/trending",
+            "https://trakt.tv/shows/popular",
+            "https://trakt.tv/shows/watched/yearly",
+            "https://trakt.tv/shows/collected/yearly"
+          ]
   - name: "Anime"
     action_mode: delete
     last_watched_threshold: 670
@@ -111,3 +130,13 @@ libraries:
       writers: []
       studios: []
       release_years: 0
+      trakt:
+        max_items_per_list: 50
+        lists:
+          [
+            "https://trakt.tv/shows/trending",
+            "https://trakt.tv/shows/popular",
+            "https://trakt.tv/shows/watched/yearly",
+            "https://trakt.tv/shows/collected/yearly",
+            "https://trakt.tv/users/lwerndly/lists/anime-best-series-of-all-time"
+          ]

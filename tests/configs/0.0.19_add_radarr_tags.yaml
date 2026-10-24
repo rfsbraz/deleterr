@@ -23,11 +23,6 @@ sonarr:
     url: "http://localhost:8990"
     api_key: "YOUR_SONARR_API_KEY2"
 
-# Trakt connection details, needed for the Trakt list exclusions below
-trakt:
-  client_id: "YOUR_TRAKT_CLIENT_ID"  # Replace with your Trakt client ID
-  client_secret: "YOUR_TRAKT_CLIENT_SECRET"  # Replace with your Trakt client secret
-
 # Tautulli connection details
 tautulli:
   url: "http://localhost:8181"  # Replace with your Tautulli server URL
