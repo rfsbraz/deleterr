@@ -370,7 +370,7 @@ See [Seerr / Overseerr Integration](integrations/overseerr.md) for full setup de
 
 4. **Check matching IDs**: Trakt matches by TMDB/TVDB ID. If an item lacks these IDs, it won't match.
 
-If the startup log warns that a library has Trakt list exclusions but no top-level `trakt` section, add `trakt.client_id` and `trakt.client_secret`. Until then that library is skipped each run and nothing in it is deleted.
+If the startup log warns that a library has Trakt list exclusions but no top-level `trakt` section, add `trakt.client_id` and `trakt.client_secret`. Until then, if the library uses a list that needs the Trakt API (user lists, watchlist, favorites, popular, trending), that list fails to fetch and the library is skipped each run with nothing deleted. Lists deleterr can't read (anticipated, boxoffice and the daily/weekly/monthly/yearly lists) are ignored and do not stop deletion.
 
 See [Trakt Integration](integrations/trakt.md) and [MDBList Integration](integrations/mdblist.md) for full setup details.
 

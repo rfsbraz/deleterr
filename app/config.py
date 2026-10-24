@@ -689,9 +689,12 @@ class Config:
         ):
             logger.warning(
                 f"Library '{library['name']}' has Trakt list exclusions but there is no "
-                "top-level trakt section, so the lists cannot be fetched and this library "
-                "will be skipped each run with nothing deleted. Add a trakt section with "
-                "client_id and client_secret to use the lists."
+                "top-level trakt section. Lists that need the Trakt API will fail to fetch "
+                "(user lists, watchlist, favorites, popular, trending), so this library "
+                "will be skipped each run with nothing deleted. Lists deleterr can't read "
+                "(anticipated, boxoffice and the daily/weekly/monthly/yearly lists) are "
+                "ignored and do not stop deletion. Add a trakt section with client_id and "
+                "client_secret to use the lists."
             )
 
     def validate_action_mode(self, library):
