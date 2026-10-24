@@ -584,3 +584,34 @@ class TestTransientRetryBehavior:
             assert config.test_api_connection(connection) is False
 
         assert config._last_failure_transient is True
+
+
+class TestTraktListValidation:
+    """Trakt list exclusions need top-level Trakt credentials to be fetched."""
+
+    radarr_config = [{"name": "test", "url": "http://localhost:7878", "api_key": "API_KEY"}]
+
+    def _settings(self, **overrides):
+        library = {
+            "name": "Movies",
+            "action_mode": "delete",
+            "radarr": "test",
+            "exclude": {"trakt": {"lists": ["https://trakt.tv/movies/trending"]}},
+        }
+        return {"libraries": [library], "radarr": self.radarr_config, **overrides}
+
+    def test_trakt_lists_without_trakt_config_fail(self):
+        validator = Config(self._settings())
+        with pytest.raises(SystemExit), patch("app.config.hang_on_error", side_effect=SystemExit(1)) as hang:
+            validator.validate_libraries()
+        assert "Trakt lists configured for Movies" in hang.call_args[0][0]
+
+    def test_trakt_lists_with_trakt_config_pass(self):
+        validator = Config(self._settings(trakt={"client_id": "ID", "client_secret": "SECRET"}))
+        assert validator.validate_libraries()
+
+    @pytest.mark.parametrize("exclude", [{}, {"trakt": {"lists": []}}, {"trakt": None}])
+    def test_no_trakt_lists_without_trakt_config_pass(self, exclude):
+        settings = self._settings()
+        settings["libraries"][0]["exclude"] = exclude
+        assert Config(settings).validate_libraries()

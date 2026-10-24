@@ -684,7 +684,7 @@ class Config:
 
     def validate_trakt_configuration(self, library, trakt_configured):
         if (
-                len(library.get("exclude", {}).get("trakt_lists", [])) > 0
+                (library.get("exclude", {}).get("trakt") or {}).get("lists")
                 and not trakt_configured
         ):
             self.log_and_exit(
