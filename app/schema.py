@@ -10,6 +10,10 @@ This module serves as the single source of truth for:
 Run `python -m scripts.generate_docs` to regenerate documentation from this schema.
 """
 
+import difflib
+import types
+import typing
+from dataclasses import dataclass
 from typing import Optional, Literal
 from pydantic import BaseModel, Field, model_validator
 
@@ -949,3 +953,79 @@ class DeleterrConfig(BaseModel):
             raise ValueError("At least one Radarr or Sonarr instance must be configured")
         return self
 
+
+
+@dataclass(frozen=True)
+class UnknownKey:
+    path: str
+    suggestions: tuple[str, ...] = ()
+
+    def message(self) -> str:
+        key = self.path.rsplit(".", 1)[-1]
+        where = "the top level" if key == self.path else self.path
+        text = f"Unknown config key '{key}' at {where}"
+        if self.suggestions:
+            text += ", did you mean " + " or ".join(f"'{s}'" for s in self.suggestions) + "?"
+        return text
+
+
+def _nested_model(annotation):
+    """Return (model, is_list) when the annotation holds a schema model."""
+    origin = typing.get_origin(annotation)
+    if origin in (typing.Union, types.UnionType):
+        for arg in typing.get_args(annotation):
+            found = _nested_model(arg)
+            if found:
+                return found
+        return None
+    if origin is list:
+        found = _nested_model(typing.get_args(annotation)[0])
+        return (found[0], True) if found else None
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return annotation, False
+    return None
+
+
+# Keys that old examples documented but the code never read (#316).
+FORMER_KEYS = {Exclusions: {"tags": "plex_labels"}}
+
+
+def _suggest(key: str, model: type[BaseModel], path: str) -> list[str]:
+    # A valid key placed one level too high, e.g. exclude at the root, beats a fuzzy match.
+    homes = [
+        f"{_join(path, name)}{'[]' if nested[1] else ''}.{key}"
+        for name, field in model.model_fields.items()
+        if (nested := _nested_model(field.annotation)) and key in nested[0].model_fields
+    ]
+    former = FORMER_KEYS.get(model, {}).get(key)
+    if former:
+        return [former, *homes]
+    return homes or difflib.get_close_matches(key, list(model.model_fields), n=1)
+
+
+def _join(path: str, key: str) -> str:
+    return f"{path}.{key}" if path else key
+
+
+def find_unknown_keys(data, model: type[BaseModel] = DeleterrConfig, path: str = "") -> list[UnknownKey]:
+    """Every key in a raw config mapping that the schema does not define."""
+    if not isinstance(data, dict):
+        return []
+    unknown = []
+    for raw_key, value in data.items():
+        key = str(raw_key)
+        key_path = _join(path, key)
+        field = model.model_fields.get(key)
+        if field is None:
+            unknown.append(UnknownKey(key_path, tuple(_suggest(key, model, path))))
+            continue
+        nested = _nested_model(field.annotation)
+        if not nested:
+            continue
+        nested_model, is_list = nested
+        if is_list and isinstance(value, list):
+            for index, item in enumerate(value):
+                unknown += find_unknown_keys(item, nested_model, f"{key_path}[{index}]")
+        else:
+            unknown += find_unknown_keys(value, nested_model, key_path)
+    return unknown
