@@ -58,6 +58,8 @@ The `duration` property controls how long items stay in the "Leaving Soon" state
 
 **Examples:** `7d` (7 days), `24h` (24 hours), `30d` (30 days)
 
+An item counts as due up to one hour before its duration is up (or half the duration, if that is shorter). A run tags items a few minutes after it starts, so without this the run exactly one duration later would start just short of it and the deletion would slip to the following run.
+
 If `duration` is not set, Deleterr will try to derive the deletion date from the scheduler interval. If neither is available, notifications will use the generic "next cleanup cycle" text.
 
 ### Collection Settings
