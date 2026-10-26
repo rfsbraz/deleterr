@@ -325,6 +325,48 @@ class TestDurationEnforcement:
         eligible_keys = {item.ratingKey for item in eligible}
         assert eligible_keys == {100, 300}
 
+    def _filter_at(self, deleterr_instance, now, tagged_at, duration_str):
+        class FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now
+
+        deleterr_instance.state_manager.set_tagged_dates(
+            "Movies", {"100": tagged_at.isoformat()}
+        )
+        with patch("app.deleterr.datetime", FrozenDatetime):
+            return deleterr_instance._filter_by_duration(
+                "Movies", [self._make_plex_item(100)], duration_str
+            )
+
+    def test_item_tagged_minutes_into_a_run_is_due_on_the_same_run_a_duration_later(self, deleterr_instance):
+        """A run starting at 03:00 tags at 03:03; the run seven days later at 03:00 deletes it."""
+        tagged_at = datetime(2026, 10, 19, 3, 3)
+        now = datetime(2026, 10, 26, 3, 0)
+
+        eligible, skipped = self._filter_at(deleterr_instance, now, tagged_at, "7d")
+
+        assert len(eligible) == 1
+        assert skipped == 0
+
+    def test_item_checked_two_hours_early_is_not_due(self, deleterr_instance):
+        tagged_at = datetime(2026, 10, 19, 3, 3)
+        now = datetime(2026, 10, 26, 1, 3)
+
+        eligible, skipped = self._filter_at(deleterr_instance, now, tagged_at, "7d")
+
+        assert len(eligible) == 0
+        assert skipped == 1
+
+    def test_tolerance_does_not_make_a_one_hour_duration_immediate(self, deleterr_instance):
+        tagged_at = datetime(2026, 10, 26, 3, 0)
+        now = datetime(2026, 10, 26, 3, 10)
+
+        eligible, skipped = self._filter_at(deleterr_instance, now, tagged_at, "1h")
+
+        assert len(eligible) == 0
+        assert skipped == 1
+
     def test_hours_duration_enforcement(self, deleterr_instance):
         """Duration in hours is correctly enforced."""
         # Tagged 12 hours ago with 24h duration — should NOT be eligible

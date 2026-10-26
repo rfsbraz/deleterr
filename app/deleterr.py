@@ -7,7 +7,7 @@ import locale
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.modules.radarr import DRadarr
 from app.modules.sonarr import DSonarr
@@ -26,6 +26,11 @@ from app.utils import print_readable_freed_space
 # Lock file for single instance detection
 LOCK_FILE = "/config/.deleterr.lock"
 _lock_file_handle = None
+
+# A run tags items a few minutes after it starts, so the run one duration later
+# starts a few minutes short of it. Capped at half the duration so short
+# durations still wait.
+DURATION_TOLERANCE = timedelta(hours=1)
 
 
 def acquire_instance_lock():
@@ -169,7 +174,8 @@ class Deleterr:
         """
         Filter death row items by checking if their leaving_soon duration has elapsed.
 
-        Items whose tagged_at + duration > now are not yet eligible for deletion.
+        Items whose tagged_at + duration is more than DURATION_TOLERANCE after now
+        are not yet eligible for deletion.
 
         Args:
             library_name: Library name for state lookup
@@ -186,6 +192,7 @@ class Deleterr:
             # Invalid duration string — don't block deletions
             return death_row_plex_items, 0
 
+        tolerance = min(DURATION_TOLERANCE, duration / 2)
         tagged_dates = self.state_manager.get_tagged_dates(library_name)
         now = datetime.now()
 
@@ -234,7 +241,7 @@ class Deleterr:
                 continue
 
             expires_at = tagged_at + duration
-            if now >= expires_at:
+            if now >= expires_at - tolerance:
                 eligible.append(item)
             else:
                 remaining = expires_at - now
