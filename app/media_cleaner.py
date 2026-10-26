@@ -1434,6 +1434,7 @@ class MediaCleaner:
             f"{len(plex_index.by_filename)} filename entries"
         )
 
+        self.watched_collections = set()
         self._collection_membership = None
         if apply_last_watch_threshold_to_collections:
             self._collection_membership = self.load_collection_membership(plex_library)

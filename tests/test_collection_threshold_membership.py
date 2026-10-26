@@ -144,3 +144,26 @@ def test_collections_not_fetched_when_feature_disabled(media_cleaner):
 
     plex_library.collections.assert_not_called()
     assert _titles(candidates) == ["Spirited Away"]
+
+
+def test_watched_collection_does_not_protect_items_in_another_library(media_cleaner):
+    """A collection watched in one library must not protect a same-named one in the next (#324)."""
+    movies_library, movies_radarr = _setup(media_cleaner)
+    list(media_cleaner.process_library_rules(
+        LIBRARY, movies_library, movies_radarr.get_movies(),
+        media_cleaner.watch_provider.get_activity(1), {}, radarr_instance=movies_radarr,
+    ))
+
+    kids_candidate = _plex_item(3, "My Neighbor Totoro")
+    kids_library = MagicMock(key=2, totalSize=1)
+    kids_library.all.return_value = [kids_candidate]
+    kids_library.collections.return_value = [_collection("Studio Ghibli", [kids_candidate])]
+    kids_radarr = MagicMock()
+    kids_radarr.get_movies.return_value = [_radarr_movie("My Neighbor Totoro")]
+
+    candidates = list(media_cleaner.process_library_rules(
+        dict(LIBRARY, name="Kids"), kids_library, kids_radarr.get_movies(),
+        {}, {}, radarr_instance=kids_radarr,
+    ))
+
+    assert _titles(candidates) == ["My Neighbor Totoro"]
