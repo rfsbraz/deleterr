@@ -69,6 +69,14 @@ class DeletedItem:
 
 
 @dataclass
+class LibraryFailure:
+    """A library that failed during an otherwise completed run."""
+
+    name: str
+    error: str  # Already redacted
+
+
+@dataclass
 class RunResult:
     """Aggregates results from a Deleterr run."""
 
@@ -83,6 +91,7 @@ class RunResult:
     deletion_date: Optional[datetime] = None
     deletion_date_str: Optional[str] = None
     error: Optional[str] = None  # Set when the run crashed
+    failed_libraries: list[LibraryFailure] = field(default_factory=list)  # Set on partial runs
 
     def add_deleted(self, item: DeletedItem) -> None:
         """Add a deleted item to the results."""

@@ -127,6 +127,14 @@ class DeleterrScheduler:
                 self._record_last_run("failed", error)
                 self._notify_failure(error)
                 return False
+            if deleterr.library_failures:
+                # The run summary notification already lists the failed libraries
+                error = "Some libraries failed: " + "; ".join(
+                    f"{name}: {logger.redact(message)}" for name, message in deleterr.library_failures
+                )
+                logger.warning(f"Scheduled run completed with errors. {error}")
+                self._record_last_run("partial", error)
+                return True
             if self.config.settings.get("dry_run"):
                 logger.info("[DRY-RUN] Scheduled run completed successfully (no changes were made)")
             else:

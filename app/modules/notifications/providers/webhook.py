@@ -73,6 +73,9 @@ class WebhookProvider(BaseNotificationProvider):
             "type": "deleterr_run_failed" if result.error else "deleterr_run_complete",
             "is_dry_run": result.is_dry_run,
             "error": result.error,
+            "failed_libraries": [
+                {"library": failure.name, "error": failure.error} for failure in result.failed_libraries
+            ],
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "summary": {
                 "deleted_count": len(result.deleted_items),

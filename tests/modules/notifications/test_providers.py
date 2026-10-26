@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.modules.notifications.models import DeletedItem, RunResult
+from app.modules.notifications.models import DeletedItem, LibraryFailure, RunResult
 from app.modules.notifications.providers.webhook import WebhookProvider
 from app.modules.notifications.providers.discord import DiscordProvider
 from app.modules.notifications.providers.email import DEFAULT_TEMPLATE_PATH, EmailProvider
@@ -921,3 +921,66 @@ class TestRunFailureRendering:
         subject, html, text = mock_send.call_args[0]
         assert subject == "Deleterr Run Failed"
         assert "Plex unreachable" in text
+
+
+class TestPartialRunRendering:
+    """Every provider lists the libraries that failed in a partial run (#344)."""
+
+    ERROR = "Unknown sort field <size_on_disk>"
+
+    def _partial(self, deleted=True):
+        result = RunResult(is_dry_run=False)
+        if deleted:
+            result.add_deleted(DeletedItem("Synthetic Movie", 2001, "movie", 1000, "Movies", "Radarr"))
+        result.failed_libraries.append(LibraryFailure("Kids Movies", self.ERROR))
+        return result
+
+    def test_base_title_and_summary(self):
+        provider = WebhookProvider({"url": "http://x"})
+        assert provider.build_title(self._partial()) == "Deleterr Run Partially Failed"
+        assert provider.build_summary(self._partial()) == "Deleted 1 items, freed 1000.00 B"
+        assert provider.build_summary(self._partial(deleted=False)) == "1 library failed this run"
+        assert provider.build_failure_lines(self._partial()) == [f"Kids Movies: {self.ERROR}"]
+
+    def test_webhook_payload(self):
+        payload = WebhookProvider({"url": "http://x"})._build_payload(self._partial())
+        assert payload["failed_libraries"] == [{"library": "Kids Movies", "error": self.ERROR}]
+
+    def test_webhook_payload_without_failures_has_empty_list(self):
+        payload = WebhookProvider({"url": "http://x"})._build_payload(RunResult())
+        assert payload["failed_libraries"] == []
+
+    def test_discord_payload(self):
+        payload = DiscordProvider({"webhook_url": "http://x"})._build_payload(self._partial(), "Deleterr", None)
+        embed = payload["embeds"][0]
+        assert embed["title"] == "Deleterr Run Partially Failed"
+        assert embed["color"] == DiscordProvider.COLOR_WARNING
+        failed = [f for f in embed["fields"] if f["name"] == "Failed Libraries"]
+        assert failed and f"Kids Movies: {self.ERROR}" in failed[0]["value"]
+
+    def test_slack_payload(self):
+        payload = SlackProvider({"webhook_url": "http://x"})._build_payload(
+            self._partial(), None, "Deleterr", ":wastebasket:"
+        )
+        text = str(payload["blocks"])
+        assert "Deleterr Run Partially Failed" in text
+        assert "Failed Libraries" in text
+        assert "Kids Movies: Unknown sort field &lt;size_on_disk&gt;" in text
+
+    def test_telegram_message(self):
+        message = TelegramProvider({"bot_token": "1:A", "chat_id": "2"})._build_message(self._partial())
+        assert "*Failed Libraries:*" in message
+        assert "Kids Movies: Unknown sort field <size\\_on\\_disk\\>" in message
+
+    def test_email_lists_failures_escaped(self):
+        provider = EmailProvider({
+            "smtp_server": "smtp.example.com",
+            "from_address": "test@example.com",
+            "to_addresses": ["user@example.com"],
+        })
+        with patch.object(provider, "_send_email", return_value=True) as mock_send:
+            provider.send(self._partial())
+        subject, html, text = mock_send.call_args[0]
+        assert subject == "Deleterr Run Partially Failed"
+        assert "Kids Movies: Unknown sort field &lt;size_on_disk&gt;" in html
+        assert f"Kids Movies: {self.ERROR}" in text

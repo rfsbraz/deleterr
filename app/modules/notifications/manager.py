@@ -138,10 +138,20 @@ class NotificationManager:
             logger.debug("Notifications disabled or no providers configured")
             return False
 
-        if not self.should_notify(result):
-            return False
+        if self.should_notify(result):
+            return self._send_to_providers(result)
 
-        return self._send_to_providers(result)
+        if result.failed_libraries:
+            # Failed libraries are always reported, even when the summary is filtered out
+            logger.debug("Run summary filtered out, sending failed libraries only")
+            return self._send_to_providers(RunResult(
+                is_dry_run=result.is_dry_run,
+                start_time=result.start_time,
+                end_time=result.end_time,
+                failed_libraries=result.failed_libraries,
+            ))
+
+        return False
 
     def send_run_failure(self, error: str, is_dry_run: bool) -> bool:
         """

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.modules.notifications.manager import NotificationManager
-from app.modules.notifications.models import DeletedItem, RunResult
+from app.modules.notifications.models import DeletedItem, LibraryFailure, RunResult
 
 
 def create_test_result(
@@ -292,3 +292,75 @@ class TestNotificationManager:
         results = manager.test_connections()
 
         assert "webhook" in results
+
+
+@pytest.mark.unit
+class TestPartialRunNotifications:
+    """Failed libraries are always reported, even when the summary is filtered out (#344)."""
+
+    FAILURE = LibraryFailure("Kids Movies", "Unknown sort field 'size_on_disk'")
+
+    def _manager(self, **notifications):
+        config = MagicMock()
+        config.settings = {
+            "notifications": {"enabled": True, "webhook": {"url": "https://example.com"}, **notifications}
+        }
+        return NotificationManager(config)
+
+    def _payload(self, mock_request):
+        mock_request.assert_called_once()
+        return mock_request.call_args.kwargs["json"]
+
+    @patch("app.modules.notifications.providers.webhook.requests.request")
+    def test_summary_includes_failed_libraries(self, mock_request):
+        mock_request.return_value.status_code = 200
+        result = create_test_result(is_dry_run=False, deleted_movies=2)
+        result.failed_libraries.append(self.FAILURE)
+
+        assert self._manager().send_run_summary(result) is True
+
+        payload = self._payload(mock_request)
+        assert payload["summary"]["deleted_count"] == 2
+        assert payload["failed_libraries"] == [
+            {"library": "Kids Movies", "error": "Unknown sort field 'size_on_disk'"}
+        ]
+
+    @patch("app.modules.notifications.providers.webhook.requests.request")
+    def test_failures_are_sent_as_a_warning_when_min_deletions_filters_the_summary(self, mock_request):
+        mock_request.return_value.status_code = 200
+        result = create_test_result(is_dry_run=False, deleted_movies=2)
+        result.failed_libraries.append(self.FAILURE)
+
+        assert self._manager(min_deletions_to_notify=10).send_run_summary(result) is True
+
+        payload = self._payload(mock_request)
+        assert payload["deleted"]["movies"] == []
+        assert payload["failed_libraries"][0]["library"] == "Kids Movies"
+
+    @patch("app.modules.notifications.providers.webhook.requests.request")
+    def test_failures_are_sent_as_a_warning_when_dry_run_notifications_are_off(self, mock_request):
+        mock_request.return_value.status_code = 200
+        result = create_test_result(is_dry_run=True, deleted_movies=2)
+        result.failed_libraries.append(self.FAILURE)
+
+        assert self._manager(notify_on_dry_run=False).send_run_summary(result) is True
+
+        payload = self._payload(mock_request)
+        assert payload["is_dry_run"] is True
+        assert payload["failed_libraries"][0]["library"] == "Kids Movies"
+
+    @patch("app.modules.notifications.providers.webhook.requests.request")
+    def test_failures_are_sent_when_the_run_has_no_other_content(self, mock_request):
+        mock_request.return_value.status_code = 200
+        result = create_test_result(is_dry_run=False)
+        result.failed_libraries.append(self.FAILURE)
+
+        assert self._manager().send_run_summary(result) is True
+        assert self._payload(mock_request)["failed_libraries"]
+
+    @patch("app.modules.notifications.providers.webhook.requests.request")
+    def test_filtered_summary_without_failures_is_still_skipped(self, mock_request):
+        result = create_test_result(is_dry_run=False, deleted_movies=2)
+
+        assert self._manager(min_deletions_to_notify=10).send_run_summary(result) is False
+        mock_request.assert_not_called()

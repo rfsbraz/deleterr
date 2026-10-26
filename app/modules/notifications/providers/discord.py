@@ -149,6 +149,14 @@ class DiscordProvider(BaseNotificationProvider):
             "inline": True,
         })
 
+        if result.failed_libraries:
+            color = self.COLOR_WARNING
+            fields.append({
+                "name": "Failed Libraries",
+                "value": self._truncate("\n".join(self.build_failure_lines(result)), 1024),
+                "inline": False,
+            })
+
         return {
             "title": title,
             "description": description,
@@ -156,6 +164,10 @@ class DiscordProvider(BaseNotificationProvider):
             "fields": fields,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+
+    @staticmethod
+    def _truncate(text: str, limit: int) -> str:
+        return text if len(text) <= limit else text[: limit - 3] + "..."
 
     def _build_deleted_embed(self, result: RunResult) -> dict:
         """Build embed for deleted items."""
