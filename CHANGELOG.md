@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/rfsbraz/deleterr/compare/v0.2.28...v0.3.0) (2026-10-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* **config:** unknown config keys now fail validation instead of warning; fix the reported key (or move it to the suggested location) before upgrading. exclude.tags is rejected; use exclude.plex_labels or exclude.radarr.tags / exclude.sonarr.tags.
+
+### Features
+
+* **config:** reject unknown config keys at startup ([#358](https://github.com/rfsbraz/deleterr/issues/358)) ([20aea82](https://github.com/rfsbraz/deleterr/commit/20aea82274f1ba255cd92311885919ab3fbbb1b8)), closes [#290](https://github.com/rfsbraz/deleterr/issues/290)
+* **notifications:** report libraries that fail in a partial run ([#369](https://github.com/rfsbraz/deleterr/issues/369)) ([edad214](https://github.com/rfsbraz/deleterr/commit/edad214c3e4c6556ef314e34f08048d91f3433d3)), closes [#344](https://github.com/rfsbraz/deleterr/issues/344)
+
+
+### Bug Fixes
+
+* **config:** read exclude.trakt.lists in the Trakt check ([#360](https://github.com/rfsbraz/deleterr/issues/360)) ([a83dcc2](https://github.com/rfsbraz/deleterr/commit/a83dcc2127d3210c6f0d115215259882f37c3dbe))
+* **config:** say which Trakt lists skip a library without credentials ([#364](https://github.com/rfsbraz/deleterr/issues/364)) ([10729ad](https://github.com/rfsbraz/deleterr/commit/10729ad26d168636b9460e175bf90b5180aee03b)), closes [#363](https://github.com/rfsbraz/deleterr/issues/363)
+* **leaving-soon:** allow an hour of tolerance in the duration check ([#366](https://github.com/rfsbraz/deleterr/issues/366)) ([a5a51b0](https://github.com/rfsbraz/deleterr/commit/a5a51b0e4f34cac486e4502ac2a8bb22e7607cdb)), closes [#365](https://github.com/rfsbraz/deleterr/issues/365)
+* **media-cleaner:** reset recently watched collections for each library ([#368](https://github.com/rfsbraz/deleterr/issues/368)) ([e4758a0](https://github.com/rfsbraz/deleterr/commit/e4758a01db07eafdb55138292e525414663abae7)), closes [#324](https://github.com/rfsbraz/deleterr/issues/324)
+
 ## [0.2.28](https://github.com/rfsbraz/deleterr/compare/v0.2.27...v0.2.28) (2026-10-19)
 
 
