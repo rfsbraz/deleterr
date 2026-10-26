@@ -269,6 +269,7 @@ class TestScheduledRunFailure:
     def test_successful_run_records_success_without_failure_notification(self, mock_request, scheduler):
         with patch("app.deleterr.Deleterr") as mock_deleterr:
             mock_deleterr.return_value.has_fatal_errors.return_value = False
+            mock_deleterr.return_value.library_failures = []
             scheduler._run_deleterr()
 
         mock_request.assert_not_called()
@@ -314,6 +315,55 @@ class TestScheduledRunFailure:
         last_run = self._last_run(scheduler)
         assert last_run["status"] == "failed"
         assert last_run["error"] == error
+
+    @patch("app.modules.notifications.providers.webhook.requests.request")
+    def test_some_libraries_failing_records_partial_and_reports_them_redacted(self, mock_request, scheduler):
+        from app.media_cleaner import ConfigurationError
+
+        scheduler.config.settings["radarr"] = [
+            {"name": "Radarr", "url": "http://radarr.test", "api_key": "radarr-secret"}
+        ]
+        scheduler.config.settings["libraries"] = [
+            {"name": "Movies", "radarr": "Radarr"},
+            {"name": "Kids Movies", "radarr": "Radarr"},
+        ]
+        movie = {"title": "Synthetic Movie", "year": 2001, "sizeOnDisk": 1000}
+
+        def process(library, instance):
+            if library["name"] == "Kids Movies":
+                raise ConfigurationError(
+                    "Radarr rejected http://radarr.test/api/v3/movie?apikey=radarr-secret "
+                    "(key radarr-secret) via http://admin:hunter2@proxy.test/ "
+                    "with X-Plex-Token=plex-token"
+                )
+            return 1000, [movie], []
+
+        cleaner = MagicMock()
+        cleaner.process_library_movies.side_effect = process
+
+        with patch("app.deleterr.PlexMediaServer"), \
+             patch("app.deleterr.MediaCleaner", return_value=cleaner), \
+             patch("app.deleterr.StateManager"), \
+             patch("app.deleterr.DRadarr"):
+            assert scheduler._run_deleterr() is True
+
+        payloads = self._sent_payloads(mock_request)
+        assert len(payloads) == 1
+        payload = payloads[0]
+        assert payload["type"] == "deleterr_run_complete"
+        assert payload["summary"]["deleted_count"] == 1
+        assert [f["library"] for f in payload["failed_libraries"]] == ["Kids Movies"]
+        error = payload["failed_libraries"][0]["error"]
+        assert "Radarr rejected" in error
+
+        last_run = self._last_run(scheduler)
+        assert last_run["status"] == "partial"
+        assert last_run["error"].startswith("Some libraries failed: Kids Movies: Radarr rejected")
+
+        for text in (str(payload), last_run["error"]):
+            assert "radarr-secret" not in text
+            assert "hunter2" not in text
+            assert "plex-token" not in text
 
     def test_failing_notification_does_not_break_the_scheduler(self, scheduler):
         with patch("app.deleterr.Deleterr", side_effect=Exception("boom")), \

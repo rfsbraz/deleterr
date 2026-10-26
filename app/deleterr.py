@@ -18,7 +18,7 @@ from app.config import hang_on_error, load_config
 from app.media_cleaner import ConfigurationError, MediaCleaner, WatchDataError, parse_leaving_soon_duration
 from app.modules.mdblist import MdblistError
 from app.modules.trakt import TraktError
-from app.modules.notifications import NotificationManager, RunResult, DeletedItem, LibraryStats
+from app.modules.notifications import NotificationManager, RunResult, DeletedItem, LibraryFailure, LibraryStats
 from app.modules.tautulli import TautulliApiError
 from app.state import StateManager
 from app.utils import print_readable_freed_space
@@ -780,7 +780,9 @@ class Deleterr:
         else:
             logger.error(str(error))
         self.libraries_failed += 1
-        self.library_failures.append((library_name, str(error)))
+        # The message goes to notifications and the status file, so drop every secret
+        message = logger.redact_secrets(str(error), logger.configured_secrets(self.config.settings))
+        self.library_failures.append((library_name, message))
 
     def process_radarr(self):
         for name, radarr in self.radarr.items():
@@ -1274,6 +1276,10 @@ class Deleterr:
 
     def _send_notification(self):
         """Send notification with run results."""
+        if self.has_partial_failures():
+            self.run_result.failed_libraries = [
+                LibraryFailure(name, message) for name, message in self.library_failures
+            ]
         if self.notifications.is_enabled():
             try:
                 self.notifications.send_run_summary(self.run_result)
@@ -1284,6 +1290,10 @@ class Deleterr:
         """Returns True if all libraries failed due to configuration errors."""
         total_libraries = self.libraries_processed + self.libraries_failed
         return total_libraries > 0 and self.libraries_failed == total_libraries
+
+    def has_partial_failures(self):
+        """Returns True if some libraries failed but at least one was processed."""
+        return self.libraries_failed > 0 and self.libraries_processed > 0
 
 
 def get_file_contents(file_path: str):

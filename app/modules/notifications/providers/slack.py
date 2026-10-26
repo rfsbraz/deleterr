@@ -77,6 +77,17 @@ class SlackProvider(BaseNotificationProvider):
         except requests.exceptions.RequestException:
             return False
 
+    def _build_failures_block(self, result: RunResult) -> dict:
+        """List the failed libraries, escaped so errors cannot inject links or mentions."""
+        lines = ["*Failed Libraries:*"]
+        for line in self.build_failure_lines(result):
+            escaped = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            lines.append(f"• {escaped}")
+        text = "\n".join(lines)
+        if len(text) > 3000:  # Slack section text limit
+            text = text[:2997] + "..."
+        return {"type": "section", "text": {"type": "mrkdwn", "text": text}}
+
     def _build_payload(
         self,
         result: RunResult,
@@ -93,6 +104,9 @@ class SlackProvider(BaseNotificationProvider):
         # Summary block (skip deletion stats for leaving_soon)
         if not result.is_leaving_soon:
             blocks.append(self._build_summary_block(result))
+
+        if result.failed_libraries:
+            blocks.append(self._build_failures_block(result))
 
         # Deleted items section
         if result.deleted_items:

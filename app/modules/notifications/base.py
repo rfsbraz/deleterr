@@ -65,6 +65,8 @@ class BaseNotificationProvider(ABC):
         prefix = "[DRY-RUN] " if result.is_dry_run else ""
         if result.error:
             return f"{prefix}Deleterr Run Failed"
+        if result.failed_libraries:
+            return f"{prefix}Deleterr Run Partially Failed"
         return f"{prefix}Deleterr Run Complete"
 
     def build_summary(self, result: RunResult) -> str:
@@ -73,12 +75,19 @@ class BaseNotificationProvider(ABC):
             return "The following content is scheduled for removal"
         if result.error:
             return f"Run failed: {result.error}"
+        if result.failed_libraries and not (result.deleted_items or result.preview_items):
+            count = len(result.failed_libraries)
+            return f"{count} {'library' if count == 1 else 'libraries'} failed this run"
         deleted_count = len(result.deleted_items)
         freed_size = self.format_size(result.total_freed_bytes)
 
         if result.is_dry_run:
             return f"Would delete {deleted_count} items, freeing {freed_size}"
         return f"Deleted {deleted_count} items, freed {freed_size}"
+
+    def build_failure_lines(self, result: RunResult) -> list[str]:
+        """One "library: error" line per failed library."""
+        return [f"{failure.name}: {failure.error}" for failure in result.failed_libraries]
 
     def build_item_list(
         self, items: list[DeletedItem], max_items: int = 10

@@ -18,7 +18,7 @@ logger = logging.getLogger("deleterr")
 # Secrets that show up as query params in request URLs, e.g. in requests/urllib3
 # exception messages: Sonarr/Radarr apiKey, Tautulli apikey, Plex X-Plex-Token.
 SECRET_QUERY_PARAM = re.compile(
-    r"(?i)((?:[?&]|&amp;)(?:api[_-]?key|x-plex-token)=)[^&\s'\"<>)\]]+"
+    r"(?i)((?:[?&]|&amp;)(?:api[_-]?key|x-plex-token)=)(?!\[REDACTED\])[^&\s'\"<>)\]]+"
 )
 # Same keys in dict or JSON form, e.g. "params={'apikey': '...'}".
 SECRET_MAPPING_VALUE = re.compile(
@@ -33,6 +33,38 @@ def redact(text):
         return text
     text = SECRET_QUERY_PARAM.sub(r"\1" + REDACTED, text)
     return SECRET_MAPPING_VALUE.sub(r"\1" + REDACTED, text)
+
+
+SECRET_SETTING_KEY = re.compile(
+    r"(?:^|_)(?:token|key|secret|password|authorization|webhook_url|client_id)$", re.IGNORECASE
+)
+URL_PASSWORD = re.compile(r"(\b[a-z][a-z0-9+.-]*://[^/\s:@]+:)[^/\s@]+@", re.IGNORECASE)
+MIN_SECRET_LENGTH = 4
+
+
+def configured_secrets(settings):
+    """Yield secret values (tokens, API keys, passwords, webhook URLs) from the settings."""
+    if isinstance(settings, dict):
+        for key, value in settings.items():
+            if isinstance(value, str) and SECRET_SETTING_KEY.search(str(key)):
+                yield value
+            elif str(key).lower() == "headers" and isinstance(value, dict):
+                yield from (v for v in value.values() if isinstance(v, str))
+            else:
+                yield from configured_secrets(value)
+    elif isinstance(settings, list):
+        for value in settings:
+            yield from configured_secrets(value)
+
+
+def redact_secrets(text, secrets=()):
+    """Redact secret query params, URL passwords and any of the given secret values."""
+    if not text:
+        return text
+    values = {s for s in secrets if isinstance(s, str) and len(s) >= MIN_SECRET_LENGTH}
+    for value in sorted(values, key=len, reverse=True):
+        text = text.replace(value, REDACTED)
+    return URL_PASSWORD.sub(r"\1" + REDACTED + "@", redact(text))
 
 
 class RedactingFormatter(logging.Formatter):

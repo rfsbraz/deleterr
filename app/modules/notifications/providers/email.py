@@ -3,6 +3,7 @@
 
 import smtplib
 import ssl
+from html import escape
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -41,7 +42,7 @@ class EmailProvider(BaseNotificationProvider):
 
         try:
             subject = self.config.get("subject", "Deleterr Run Complete")
-            if result.error:
+            if result.error or result.failed_libraries:
                 subject = self.build_title(result)
             elif result.is_dry_run:
                 subject = f"[DRY-RUN] {subject}"
@@ -177,6 +178,18 @@ class EmailProvider(BaseNotificationProvider):
             logger.error(f"Failed to send email: {e}")
             return False
 
+    def _build_failures_html(self, result: RunResult) -> str:
+        """Section listing failed libraries, escaped since errors are free text."""
+        if not result.failed_libraries:
+            return ""
+        items = "".join(f'<div class="item">{escape(line)}</div>' for line in self.build_failure_lines(result))
+        return f'<div class="section"><div class="section-title">⚠️ Failed Libraries</div>{items}</div>'
+
+    def _build_failures_text(self, result: RunResult) -> list[str]:
+        if not result.failed_libraries:
+            return []
+        return ["Failed Libraries:", *(f"  - {line}" for line in self.build_failure_lines(result)), ""]
+
     def _build_run_summary_html(self, result: RunResult) -> str:
         """Build HTML content for run summary email."""
         title = self.build_title(result)
@@ -207,6 +220,7 @@ class EmailProvider(BaseNotificationProvider):
         <div class="content">
             <div class="summary">{summary}</div>
 """
+        html += self._build_failures_html(result)
 
         if result.deleted_movies:
             html += '<div class="section"><div class="section-title">🎬 Deleted Movies</div>'
@@ -246,6 +260,7 @@ class EmailProvider(BaseNotificationProvider):
     def _build_run_summary_text(self, result: RunResult) -> str:
         """Build plain text content for run summary email."""
         lines = [self.build_title(result), "", self.build_summary(result), ""]
+        lines.extend(self._build_failures_text(result))
 
         if result.deleted_movies:
             lines.append("Deleted Movies:")

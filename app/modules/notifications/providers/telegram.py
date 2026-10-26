@@ -83,6 +83,8 @@ class TelegramProvider(BaseNotificationProvider):
             lines.append(self._escape_markdown(summary))
             lines.append("")
 
+        lines.extend(self._build_failure_section(result))
+
         # Deleted items
         if result.deleted_items:
             lines.append("*Deleted Items:*")
@@ -133,6 +135,15 @@ class TelegramProvider(BaseNotificationProvider):
                 lines.append(f"_\\.\\.\\.and {len(result.saved_items) - 5} more_")
 
         return "\n".join(lines)
+
+    def _build_failure_section(self, result: RunResult) -> list[str]:
+        """Failed libraries, one escaped line each."""
+        if not result.failed_libraries:
+            return []
+        lines = ["*Failed Libraries:*"]
+        lines.extend(f"• {self._escape_markdown(line)}" for line in self.build_failure_lines(result))
+        lines.append("")
+        return lines
 
     def _escape_markdown(self, text: str) -> str:
         """Escape special characters for MarkdownV2."""
