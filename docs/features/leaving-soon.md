@@ -60,6 +60,8 @@ The `duration` property controls how long items stay in the "Leaving Soon" state
 
 An item counts as due up to one hour before its duration is up (or half the duration, if that is shorter). A run tags items a few minutes after it starts, so without this the run exactly one duration later would start just short of it and the deletion would slip to the following run.
 
+With `duration` set, a new batch only enters once the current one is cleared. The run that deletes a batch tags nothing new, and the next batch is tagged on the run after it. So one cycle lasts the duration plus one run. For example, with `duration: "7d"` and a daily schedule, a batch tagged on day 0 is deleted on day 7 and the next batch is tagged on day 8.
+
 If `duration` is not set, Deleterr will try to derive the deletion date from the scheduler interval. If neither is available, notifications will use the generic "next cleanup cycle" text.
 
 ### Collection Settings
@@ -120,8 +122,8 @@ Here's what happens during a typical Deleterr run with Leaving Soon enabled:
 
 1. Deleterr identifies the same 15 movies are still tagged
 2. Those 15 movies are **deleted** from Radarr
-3. New movies matching criteria are tagged for the next cycle
-4. Users receive notification about newly tagged items
+3. Without `duration`, new movies matching criteria are tagged for the next cycle in this same run, and users receive a notification about them
+4. With `duration` set, nothing new is tagged in this run. The next batch is tagged on the following run, so a cycle is the duration plus one run (see [Duration](#duration))
 
 ### User Watches a Movie
 
