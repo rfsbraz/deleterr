@@ -369,7 +369,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/f1/2a/8c3ac3d8bc94e6de8
 
 [[package]]
 name = "deleterr"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "apscheduler" },
