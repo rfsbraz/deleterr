@@ -426,6 +426,11 @@ class TestDurationEnforcement:
             return_value=[{"id": 1, "title": "Waiting Movie", "tmdbId": "tt001"}]
         )
 
+        # The waiting item is this entry's own: it is in the Radarr universe.
+        media_instance = MagicMock()
+        media_instance.get_movies.return_value = [{"id": 1, "title": "Waiting Movie", "tmdbId": 100}]
+        deleterr_instance.media_server.get_guids.return_value = {"tmdb_id": 100, "tvdb_id": None, "imdb_id": None}
+
         library = {
             "name": "Movies",
             "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
@@ -434,7 +439,7 @@ class TestDurationEnforcement:
 
         with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
             saved_space, deleted_items, preview_candidates, saved_plex_items, _prior, _foreign = deleterr_instance._process_death_row(
-                library, MagicMock(), "movie"
+                library, media_instance, "movie"
             )
 
         # Nothing should be deleted (duration not elapsed)
@@ -446,6 +451,47 @@ class TestDurationEnforcement:
 
         # The expensive candidate scan was skipped
         deleterr_instance._get_deletion_candidates.assert_not_called()
+
+    def test_sibling_waiting_items_do_not_skip_candidate_scan(self, deleterr_instance):
+        """Two entries share the "TV Shows" library name. Only the sibling's item is waiting
+        on death row, so this entry must still scan and tag a new batch of its own."""
+        now = datetime.now()
+        deleterr_instance.state_manager.set_tagged_dates("TV Shows", {
+            "100": (now - timedelta(days=2)).isoformat(),
+        })
+
+        sibling_item = self._make_plex_item(100, "Standard Show")
+        own_candidate_plex = self._make_plex_item(200, "Daily Show")
+        deleterr_instance._get_death_row_items = MagicMock(return_value=[sibling_item])
+
+        own_show = {"id": 2, "title": "Daily Show", "tvdbId": 200}
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[own_show])
+        deleterr_instance.media_cleaner.filter_shows.return_value = [own_show]
+
+        guid_map = {100: 999, 200: 200}
+        deleterr_instance.media_server.get_guids.side_effect = lambda item: {
+            "tmdb_id": None, "tvdb_id": guid_map.get(item.ratingKey), "imdb_id": None,
+        }
+        deleterr_instance.media_server.find_item.side_effect = (
+            lambda lib, **kwargs: own_candidate_plex if kwargs.get("tvdb_id") == 200 else None
+        )
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+
+        library = {
+            "name": "TV Shows",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+            "series_type": "daily",
+            "max_actions_per_run": 10,
+        }
+
+        with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            _space, deleted_items, preview_candidates, _saved, _prior, foreign = deleterr_instance._process_death_row(
+                library, MagicMock(), "show", all_data=[own_show]
+            )
+
+        assert deleted_items == []
+        assert preview_candidates == [own_show]
+        assert {item.ratingKey for item in foreign} == {100}
 
     def test_new_candidates_added_when_death_row_empty(self, deleterr_instance):
         """New candidates are added to preview when death row is empty (first run or after clearing)."""
