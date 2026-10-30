@@ -427,9 +427,25 @@ class Deleterr:
         else:
             death_row_plex_items = all_death_row_plex_items
 
-        # If all death row items are still waiting for duration, skip the expensive
-        # candidate scan. The collection/state are already correct from the previous run.
-        if duration_str and all_death_row_plex_items and not death_row_plex_items:
+        # Distinguish items this entry OWNS (in its media universe) from FOREIGN items tagged by
+        # a sibling library entry sharing the same Plex library/collection name. Death-row state
+        # is keyed by library name, so two entries with the same name (e.g. "TV Shows" split by
+        # series_type) share state; without this distinction a sibling's items get misclassified.
+        universe_ids = self._get_universe_ids(library, media_instance, media_type, all_data)
+        universe_plex_keys = {
+            item.ratingKey for item in all_death_row_plex_items
+            if self._is_universe_member(item, universe_ids)
+        }
+
+        # If all death row items are this entry's own and still waiting for duration, skip the
+        # expensive candidate scan. The collection/state are already correct from the previous
+        # run. A sibling's waiting items must not stop this entry from tagging its own batch.
+        if (
+            duration_str
+            and all_death_row_plex_items
+            and not death_row_plex_items
+            and all(item.ratingKey in universe_plex_keys for item in all_death_row_plex_items)
+        ):
             logger.info(
                 "All %d death row items in library '%s' are waiting for duration to elapse "
                 "- skipping candidate scan",
@@ -480,16 +496,7 @@ class Deleterr:
         saved_plex_items = []
         is_dry_run = self.config.settings.get("dry_run", True)
 
-        # Distinguish items this entry OWNS (in its media universe) from FOREIGN items tagged by
-        # a sibling library entry sharing the same Plex library/collection name. Death-row state
-        # is keyed by library name, so two entries with the same name (e.g. "TV Shows" split by
-        # series_type) share state; without this distinction a sibling's items get misclassified.
-        # Computed once here and reused for the collection rebuild below.
-        universe_ids = self._get_universe_ids(library, media_instance, media_type, all_data)
-        own_plex_keys = set(candidate_by_plex_key.keys())
-        for item in all_death_row_plex_items:
-            if self._is_universe_member(item, universe_ids):
-                own_plex_keys.add(item.ratingKey)
+        own_plex_keys = set(candidate_by_plex_key.keys()) | universe_plex_keys
 
         # Log death row status and identify saved items.
         # An item is "saved" only if it is OWN (in this entry's universe), has a state entry (was
@@ -605,7 +612,7 @@ class Deleterr:
         # Using candidate membership alone (the previous heuristic) wrongly treated own saved
         # items as foreign and preserved them forever, causing the collection to grow without
         # bound across runs.
-        # (universe_ids and own_plex_keys are computed above, right after items_to_delete.)
+        # (own_plex_keys is computed above, right after items_to_delete.)
 
         # Get media items for duration-waiting Plex items that are still deletion candidates
         # (they need to stay in the collection until their duration elapses).
