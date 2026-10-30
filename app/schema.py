@@ -242,14 +242,18 @@ class LeavingSoonConfig(BaseModel):
     then deleted on the next run. This gives users a warning period before deletion.
 
     First run: Tag preview candidates, no deletions
-    Subsequent runs: Delete previously tagged items, then tag new candidates
+    Subsequent runs: Delete previously tagged items, then tag new candidates.
+    With duration set, the run that deletes a batch tags nothing new; the next batch
+    is tagged on the following run, so a cycle is the duration plus one run.
     """
 
     duration: Optional[str] = Field(
         default=None,
         description="How long items stay in 'Leaving Soon' before deletion. "
                     "Used to display the deletion date in notifications and collection descriptions. "
-                    "Examples: '7d', '24h', '30d'. Defaults to schedule interval if not set",
+                    "Examples: '7d', '24h', '30d'. Defaults to schedule interval if not set. "
+                    "The next batch is tagged on the run after a batch is deleted, "
+                    "so a cycle is the duration plus one run",
         json_schema_extra={"example": "7d"},
     )
     collection: Optional[LeavingSoonCollectionConfig] = Field(
