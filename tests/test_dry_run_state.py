@@ -70,7 +70,7 @@ def test_dry_run_leaves_state_file_byte_identical(deleterr_instance, state_file)
     d.media_server.find_item.side_effect = lambda lib, **kw: plex_by_tmdb.get(kw.get("tmdb_id"))
     d._get_death_row_items = MagicMock(return_value=[elapsed, untracked])
     d._get_deletion_candidates = MagicMock(return_value=list(candidates.values()))
-    d._get_universe_ids = MagicMock(return_value=set())
+    d._get_universe_ids = MagicMock(return_value={"tmdb": set(), "tvdb": set(), "imdb": set(), "scanned": 0})
     d._is_universe_member = MagicMock(return_value=True)
     d.media_cleaner.process_leaving_soon.return_value = [untracked, fresh]
 

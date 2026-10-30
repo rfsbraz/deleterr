@@ -1,6 +1,8 @@
 # encoding: utf-8
 """Unit tests for leaving_soon duration parsing, deletion date computation, and duration enforcement."""
 
+import logging
+
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
@@ -553,6 +555,75 @@ class TestDurationEnforcement:
         # It will be added on the next run when death row is empty.
         preview_titles = {m["title"] for m in preview_candidates}
         assert "New Movie" not in preview_titles
+
+    def _summary_lines(self, caplog):
+        return [
+            r.getMessage() for r in caplog.records
+            if r.levelno == logging.INFO and "leaving_soon summary" in r.getMessage()
+        ]
+
+    def _setup_movies(self, deleterr_instance, death_row_keys, candidate_keys, universe_size):
+        plex_items = {k: self._make_plex_item(k, f"Movie {k}") for k in range(1, universe_size + 1)}
+        movies = {k: {"id": k, "title": f"Movie {k}", "tmdbId": k, "year": 2024} for k in plex_items}
+        deleterr_instance._get_death_row_items = MagicMock(
+            return_value=[plex_items[k] for k in death_row_keys]
+        )
+        deleterr_instance._get_deletion_candidates = MagicMock(
+            return_value=[movies[k] for k in candidate_keys]
+        )
+        deleterr_instance.media_server.get_guids.side_effect = lambda item: {
+            "tmdb_id": item.ratingKey, "tvdb_id": None, "imdb_id": None,
+        }
+        deleterr_instance.media_server.find_item.side_effect = (
+            lambda lib, **kwargs: plex_items.get(kwargs.get("tmdb_id"))
+        )
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        media_instance = MagicMock()
+        media_instance.get_movies.return_value = list(movies.values())
+        return media_instance
+
+    def test_summary_explains_a_held_batch(self, deleterr_instance, caplog):
+        """A run that tags nothing logs one INFO line saying why."""
+        now = datetime.now()
+        deleterr_instance.state_manager.set_tagged_dates("Movies", {
+            "1": (now - timedelta(days=2)).isoformat(),
+            "2": (now - timedelta(days=10)).isoformat(),
+        })
+        media_instance = self._setup_movies(
+            deleterr_instance, death_row_keys=[1, 2], candidate_keys=[1, 3, 4], universe_size=5
+        )
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+            "max_actions_per_run": 10,
+        }
+
+        with caplog.at_level(logging.INFO, logger="deleterr"), \
+             patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            deleterr_instance._process_death_row(library, media_instance, "movie")
+
+        assert self._summary_lines(caplog) == [
+            "Library 'Movies' leaving_soon summary: 5 scanned, 3 matched, "
+            "1 already on death row, 1 saved, 2 held by duration, 0 tagged"
+        ]
+
+    def test_summary_counts_new_tags(self, deleterr_instance, caplog):
+        media_instance = self._setup_movies(
+            deleterr_instance, death_row_keys=[], candidate_keys=[1, 2, 3], universe_size=4
+        )
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d", "batch_size": 2},
+        }
+
+        with caplog.at_level(logging.INFO, logger="deleterr"), \
+             patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
+            deleterr_instance._process_death_row(library, media_instance, "movie")
+
+        assert self._summary_lines(caplog) == [
+            "Library 'Movies' leaving_soon summary: 4 scanned, 3 matched, "
+            "0 already on death row, 0 saved, 0 held by duration, 2 tagged"
+        ]
 
 
 class TestBatchSize:
