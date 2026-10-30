@@ -644,9 +644,12 @@ class Deleterr:
         own_in_death_row = any(
             item.ratingKey in candidate_by_plex_key for item in all_death_row_plex_items
         )
+        on_death_row_ids = {m.get("id") for m in items_to_delete + waiting_media_items}
+        held_by_duration = 0
         if duration_str and own_in_death_row:
             # Own items on death row - hold the batch, no new additions
-            preview_candidates = waiting_media_items
+            new_candidates = []
+            held_by_duration = sum(1 for m in all_deletion_candidates if m.get("id") not in on_death_row_ids)
             if waiting_media_items:
                 logger.debug(
                     "Death row active for library '%s' - holding %d items, "
@@ -661,7 +664,20 @@ class Deleterr:
                 m for m in all_deletion_candidates
                 if m.get("id") not in deleted_ids and m.get("id") not in waiting_ids
             ][:preview_next]
-            preview_candidates = waiting_media_items + new_candidates
+        preview_candidates = waiting_media_items + new_candidates
+
+        logger.info(
+            "%sLibrary '%s' leaving_soon summary: %d scanned, %d matched, %d already on death row, "
+            "%d saved, %d held by duration, %d tagged",
+            "[DRY-RUN] " if is_dry_run else "",
+            library_name,
+            universe_ids["scanned"],
+            len(all_deletion_candidates),
+            len(on_death_row_ids),
+            len(saved_plex_items),
+            held_by_duration,
+            len(new_candidates),
+        )
 
         return saved_space, deleted_items, preview_candidates, saved_plex_items, all_death_row_plex_items, foreign_plex_items
 
@@ -717,11 +733,11 @@ class Deleterr:
         library entry sharing the same Plex library/collection name (foreign).
 
         Returns:
-            dict with 'tmdb', 'tvdb', 'imdb' id sets. Empty sets on failure - a conservative
-            fallback that treats unknown items as foreign and preserves them, rather than
-            risking removal of a sibling entry's items.
+            dict with 'tmdb', 'tvdb', 'imdb' id sets and 'scanned', the number of items in the
+            universe. Empty sets on failure - a conservative fallback that treats unknown items
+            as foreign and preserves them, rather than risking removal of a sibling entry's items.
         """
-        ids = {"tmdb": set(), "tvdb": set(), "imdb": set()}
+        ids = {"tmdb": set(), "tvdb": set(), "imdb": set(), "scanned": 0}
         try:
             if media_type == "movie":
                 media_data = media_instance.get_movies()
@@ -736,6 +752,7 @@ class Deleterr:
                     ids["tvdb"].add(item["tvdbId"])
                 if item.get("imdbId"):
                     ids["imdb"].add(item["imdbId"])
+            ids["scanned"] = len(media_data)
         except Exception as e:
             logger.debug(
                 "Could not build media universe for library '%s': %s. "
