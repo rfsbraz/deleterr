@@ -167,13 +167,13 @@ def test_tautulli_api_error_skips_library_and_logs(media, deleterr):
     failed_before = deleterr.libraries_failed
     processed_before = deleterr.libraries_processed
 
-    with patch("app.deleterr.logger") as mock_logger:
+    with patch("app.deleterr.logger.error") as mock_error:
         getattr(deleterr, f"process_{media}")()
 
     assert deleterr.libraries_failed == failed_before + 1
     assert deleterr.libraries_processed == processed_before
     deleterr.run_result.add_deleted.assert_not_called()
-    logged = " ".join(str(c.args[0]) for c in mock_logger.error.call_args_list)
+    logged = " ".join(str(c.args[0]) for c in mock_error.call_args_list)
     assert "Skipping library" in logged
     assert "invalid history response" in logged
 
