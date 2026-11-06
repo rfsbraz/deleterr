@@ -13,6 +13,7 @@ import sys
 import tempfile
 from datetime import datetime
 
+from apscheduler.events import EVENT_JOB_MISSED, EVENT_JOB_MAX_INSTANCES
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -20,6 +21,7 @@ from app import logger
 from app.config import hang_on_error
 
 LAST_RUN_FILE = "/config/.deleterr_last_run.json"
+MISFIRE_GRACE_SECONDS = 6 * 60 * 60
 
 # Schedule presets mapping to cron expressions
 SCHEDULE_PRESETS = {
@@ -48,6 +50,9 @@ class DeleterrScheduler:
         self.scheduler_config = config.settings.get("scheduler", {})
         self.scheduler = BlockingScheduler()
         self.last_run_file = LAST_RUN_FILE
+        self.scheduler.add_listener(
+            self._handle_missed_run, EVENT_JOB_MISSED | EVENT_JOB_MAX_INSTANCES
+        )
         self._setup_signal_handlers()
 
     def _setup_signal_handlers(self):
@@ -149,6 +154,25 @@ class DeleterrScheduler:
             # Don't re-raise - we want the scheduler to continue for transient errors
             return True  # Not a config error, allow retries
 
+    def _handle_missed_run(self, event):
+        """Surface expired or overlapping cleanup runs through normal reporting."""
+        if event.job_id != "deleterr_cleanup":
+            return
+        if event.code == EVENT_JOB_MAX_INSTANCES:
+            times = ", ".join(t.isoformat() for t in event.scheduled_run_times)
+            error = (
+                f"Scheduled cleanup skipped because another cleanup is still running "
+                f"(scheduled for {times}); no overlapping cleanup was started."
+            )
+        else:
+            error = (
+                f"Scheduled cleanup missed its {MISFIRE_GRACE_SECONDS // 3600}-hour "
+                f"catch-up window (scheduled for {event.scheduled_run_time.isoformat()})."
+            )
+        logger.warning(error)
+        self._record_last_run("failed", error)
+        self._notify_failure(error)
+
     def _notify_failure(self, error):
         """Send a failed-run notification. Never raises."""
         from app.modules.notifications import NotificationManager
@@ -194,6 +218,9 @@ class DeleterrScheduler:
             id="deleterr_cleanup",
             name="Deleterr Media Cleanup",
             replace_existing=True,
+            misfire_grace_time=MISFIRE_GRACE_SECONDS,
+            coalesce=True,
+            max_instances=1,
         )
 
         logger.info("Deleterr scheduler started")
