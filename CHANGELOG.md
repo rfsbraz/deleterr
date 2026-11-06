@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2](https://github.com/rfsbraz/deleterr/compare/v0.3.1...v0.3.2) (2026-11-06)
+
+
+### Bug Fixes
+
+* **logging:** redact configured secrets in library errors ([#386](https://github.com/rfsbraz/deleterr/issues/386)) ([8e0a0b9](https://github.com/rfsbraz/deleterr/commit/8e0a0b952d321ed68911f0afea44688c86793e23))
+* **scheduler:** catch up delayed runs and report missed cleanups ([#385](https://github.com/rfsbraz/deleterr/issues/385)) ([dcc6327](https://github.com/rfsbraz/deleterr/commit/dcc63271637fa7a41fb2a8bbf6c4bbc78c2f87a0))
+
 ## [0.3.1](https://github.com/rfsbraz/deleterr/compare/v0.3.0...v0.3.1) (2026-10-30)
 
 
