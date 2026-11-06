@@ -111,6 +111,8 @@ class Deleterr:
 
         self.libraries_processed = 0
         self.libraries_failed = 0
+        self.configuration_failures = 0
+        self.notification_sent = False
         self.library_failures = []  # (library name, error message) for each failed library
 
         self.process_radarr()
@@ -806,6 +808,8 @@ class Deleterr:
         else:
             logger.error(message)
         self.libraries_failed += 1
+        if isinstance(error, ConfigurationError):
+            self.configuration_failures = getattr(self, "configuration_failures", 0) + 1
         self.library_failures.append((library_name, message))
 
     def process_radarr(self):
@@ -1308,20 +1312,20 @@ class Deleterr:
 
     def _send_notification(self):
         """Send notification with run results."""
-        if self.has_partial_failures():
+        if self.library_failures:
             self.run_result.failed_libraries = [
                 LibraryFailure(name, message) for name, message in self.library_failures
             ]
         if self.notifications.is_enabled():
             try:
-                self.notifications.send_run_summary(self.run_result)
+                self.notification_sent = bool(self.notifications.send_run_summary(self.run_result))
             except Exception as e:
                 logger.error(f"Failed to send notification: {e}")
 
     def has_fatal_errors(self):
         """Returns True if all libraries failed due to configuration errors."""
         total_libraries = self.libraries_processed + self.libraries_failed
-        return total_libraries > 0 and self.libraries_failed == total_libraries
+        return total_libraries > 0 and self.configuration_failures == total_libraries
 
     def has_partial_failures(self):
         """Returns True if some libraries failed but at least one was processed."""

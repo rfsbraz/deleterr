@@ -395,3 +395,75 @@ def test_run_still_summarizes_and_notifies_after_library_service_failures():
     summary.assert_called_once_with()
     manager.return_value.send_run_summary.assert_called_once_with(result.run_result)
     assert result.run_result.failed_libraries[0].name == "Failed movies"
+
+
+@pytest.mark.parametrize("config_error", [False, True])
+def test_only_all_configuration_failures_are_fatal(config_error, deleterr):
+    from app.media_cleaner import ConfigurationError
+
+    deleterr.config.settings = {}
+    error = ConfigurationError("Invalid sort field") if config_error else Timeout("Service unavailable")
+    deleterr._handle_library_failure("Movies", error)
+    assert deleterr.has_fatal_errors() is config_error
+    if config_error:
+        deleterr._handle_library_failure("Shows", Timeout("Service unavailable"))
+        assert deleterr.has_fatal_errors() is False
+
+
+def test_all_failed_run_bypasses_empty_summary_notification_filters(deleterr):
+    from app.modules.notifications import NotificationManager, RunResult
+
+    deleterr.config.settings = {"notifications": {
+        "enabled": False, "notify_on_dry_run": False,
+        "min_deletions_to_notify": 999, "include_preview": False,
+    }}
+    deleterr.run_result = RunResult(is_dry_run=True)
+    deleterr._handle_library_failure("Movies", Timeout("Service unavailable"))
+    manager = NotificationManager(deleterr.config)
+    provider = MagicMock()
+    provider.send.return_value = True
+    manager.providers = [provider]
+    deleterr.notifications = manager
+
+    deleterr._send_notification()
+
+    provider.send.assert_called_once()
+    sent = provider.send.call_args.args[0]
+    assert [failure.name for failure in sent.failed_libraries] == ["Movies"]
+    assert sent.deleted_items == []
+    assert deleterr.notification_sent is True
+
+
+def test_all_transient_failures_do_not_block_scheduler_startup(deleterr):
+    from app.scheduler import DeleterrScheduler
+
+    deleterr.config.settings = {"dry_run": True, "scheduler": {
+        "schedule": "weekly", "run_on_startup": True,
+    }}
+    deleterr._handle_library_failure("Movies", Timeout("Service unavailable"))
+    with patch("app.scheduler.BlockingScheduler"), \
+         patch("app.scheduler.hang_on_error") as hang, \
+         patch("app.deleterr.Deleterr", return_value=deleterr):
+        scheduler = DeleterrScheduler(deleterr.config)
+        scheduler._record_last_run = MagicMock()
+        scheduler.start()
+
+    hang.assert_not_called()
+    scheduler.scheduler.start.assert_called_once_with()
+    assert scheduler._record_last_run.call_args.args[0] == "failed"
+
+
+def test_fatal_run_does_not_duplicate_an_already_sent_failure_summary(deleterr):
+    from app.media_cleaner import ConfigurationError
+    from app.scheduler import DeleterrScheduler
+
+    deleterr.config.settings = {"scheduler": {"schedule": "weekly"}}
+    deleterr._handle_library_failure("Movies", ConfigurationError("Invalid sort field"))
+    deleterr.notification_sent = True
+    with patch("app.scheduler.BlockingScheduler"), \
+         patch("app.deleterr.Deleterr", return_value=deleterr):
+        scheduler = DeleterrScheduler(deleterr.config)
+        scheduler._record_last_run = MagicMock()
+        scheduler._notify_failure = MagicMock()
+        assert scheduler._run_deleterr() is False
+    scheduler._notify_failure.assert_not_called()
