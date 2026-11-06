@@ -139,7 +139,7 @@ def normalize_title(title: str) -> str:
     if not title:
         return ""
 
-    # Normalize unicode characters (Ã© -> e, Ã± -> n, etc.)
+    # Normalize unicode characters (é -> e, ñ -> n, etc.)
     normalized = unicodedata.normalize("NFKD", title)
     normalized = "".join(c for c in normalized if not unicodedata.combining(c))
 
@@ -308,10 +308,10 @@ class PlexLibraryIndex:
 
         Matching strategy (in order):
         1. Exact lowercase title + year match
-        2. Exact lowercase title + year with Â±2 year tolerance
+        2. Exact lowercase title + year with ±2 year tolerance
         3. Title with year in parentheses pattern
         4. Normalized title matching (strips punctuation, handles articles)
-        5. Normalized title with Â±2 year tolerance
+        5. Normalized title with ±2 year tolerance
 
         Args:
             title: Primary title to search for
@@ -2227,7 +2227,7 @@ def check_excluded_seerr_requester_watch(
     # Get request data from Seerr
     request_data = seerr_instance.get_request_data(tmdb_id)
     if not request_data:
-        # No request exists â€” not protected by this feature
+        # No request exists — not protected by this feature
         return True
 
     # Check request age against grace period and max protection
@@ -2275,7 +2275,7 @@ def check_excluded_seerr_requester_watch(
     if hasattr(plex_media_item, "grandparentRatingKey") and plex_media_item.grandparentRatingKey:
         grandparent_rating_key = str(plex_media_item.grandparentRatingKey)
     elif media_data.get("statistics"):
-        # Sonarr data indicates TV show â€” the plex_media_item IS the show (grandparent)
+        # Sonarr data indicates TV show — the plex_media_item IS the show (grandparent)
         grandparent_rating_key = rating_key
         rating_key = None
 
