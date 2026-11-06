@@ -65,7 +65,7 @@ def test_expired_cleanup_reports_failure_without_running(scheduler_clock):
     engine, wrapper, ran, notified = scheduler_clock
     job = add_cleanup(engine, wrapper)
     overdue = datetime.now(timezone.utc) - timedelta(hours=7)
-    job.modify(next_run_time=overdue)
+    job.reschedule("date", run_date=overdue)
     engine.resume()
     assert notified.wait(5), "APScheduler's missed-job event was not surfaced"
     assert not ran.is_set()
