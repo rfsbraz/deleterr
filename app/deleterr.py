@@ -868,7 +868,7 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except (ConfigurationError, TautulliApiError, TraktError, MdblistError, WatchDataError) as e:
+                except Exception as e:
                     self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "movie", self.config.settings.get("dry_run", True))
@@ -879,14 +879,22 @@ class Deleterr:
     def process_sonarr(self):
         for name, sonarr in self.sonarr.items():
             logger.info(f"Processing sonarr instance: '{name}'")
-            unfiltered_all_show_data = sonarr.get_series()
-
             # Get libraries for this instance
             libraries_for_instance = [
                 lib for lib in self.config.settings.get("libraries", [])
                 if lib.get("sonarr") == name
             ]
             total_libraries = len(libraries_for_instance)
+            if not libraries_for_instance:
+                continue
+            try:
+                unfiltered_all_show_data = sonarr.get_series()
+            except Exception as e:
+                # This fetch serves every library on the instance. Fail each
+                # affected library, then let the next instance run normally.
+                for library in libraries_for_instance:
+                    self._handle_library_failure(library.get("name", "Unknown"), e)
+                continue
 
             saved_space = 0
             all_preview = []
@@ -937,7 +945,7 @@ class Deleterr:
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except (ConfigurationError, TautulliApiError, TraktError, MdblistError, WatchDataError) as e:
+                except Exception as e:
                     self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "show", self.config.settings.get("dry_run", True))

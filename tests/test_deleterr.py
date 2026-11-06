@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import pytest
+from requests.exceptions import HTTPError, Timeout, ConnectionError as RequestsConnectionError
 
 from app.deleterr import Deleterr, acquire_instance_lock, release_instance_lock, main
 
@@ -311,3 +312,86 @@ def test_process_sonarr_unresolvable_plex_history_skips_library(radarr_mock, son
 
     assert deleterr.libraries_failed == failed_before + 1
     deleterr.run_result.add_deleted.assert_not_called()
+
+
+@pytest.mark.parametrize("media", ["radarr", "sonarr"])
+@pytest.mark.parametrize("error_type", [Timeout, RequestsConnectionError, HTTPError, RuntimeError])
+def test_service_error_does_not_starve_later_libraries(media, error_type, deleterr):
+    instance = MagicMock(get_series=MagicMock(return_value=[]))
+    setattr(deleterr, media, {"instance": instance})
+    first = {"name": "Unavailable", media: "instance"}
+    second = {"name": "Working", media: "instance"}
+    deleterr.config.settings = {"libraries": [first, second]}
+    cleaner = (
+        deleterr.media_cleaner.process_library_movies
+        if media == "radarr" else deleterr.media_cleaner.process_library
+    )
+    cleaner.side_effect = [error_type("Service unavailable"), (0, [], [])]
+    before_failed = deleterr.libraries_failed
+    before_processed = deleterr.libraries_processed
+
+    getattr(deleterr, f"process_{media}")()
+
+    assert cleaner.call_count == 2
+    assert cleaner.call_args_list[-1].args[0] == second
+    assert deleterr.libraries_failed == before_failed + 1
+    assert deleterr.libraries_processed == before_processed + 1
+    assert deleterr.library_failures[-1][0] == "Unavailable"
+
+
+def test_sonarr_fetch_failure_marks_affected_libraries_and_continues(deleterr):
+    bad = MagicMock(get_series=MagicMock(side_effect=TimeoutError("Unavailable")))
+    good = MagicMock(get_series=MagicMock(return_value=[{"id": 42}]))
+    deleterr.sonarr = {"bad": bad, "good": good}
+    deleterr.config.settings = {"libraries": [
+        {"name": "Bad 1", "sonarr": "bad"},
+        {"name": "Bad 2", "sonarr": "bad"},
+        {"name": "Good", "sonarr": "good"},
+    ]}
+    deleterr.media_cleaner.process_library.return_value = (0, [], [])
+    before_failed = deleterr.libraries_failed
+    before_processed = deleterr.libraries_processed
+
+    deleterr.process_sonarr()
+
+    assert deleterr.libraries_failed == before_failed + 2
+    assert deleterr.libraries_processed == before_processed + 1
+    bad.get_series.assert_called_once_with()
+    good.get_series.assert_called_once_with()
+    deleterr.media_cleaner.process_library.assert_called_once_with(
+        deleterr.config.settings["libraries"][2], good, [{"id": 42}]
+    )
+
+
+def test_run_still_summarizes_and_notifies_after_library_service_failures():
+    config = MagicMock()
+    config.settings = {
+        "dry_run": True,
+        "plex": {"url": "http://plex.invalid", "token": "test-token"},
+        "radarr": [{"name": "movies", "url": "http://radarr.invalid", "api_key": "test-key"}],
+        "sonarr": [{"name": "shows", "url": "http://sonarr.invalid", "api_key": "test-key"}],
+        "libraries": [
+            {"name": "Failed movies", "radarr": "movies"},
+            {"name": "Working shows", "sonarr": "shows"},
+        ],
+    }
+    cleaner = MagicMock()
+    cleaner.process_library_movies.side_effect = TimeoutError("Service unavailable")
+    cleaner.process_library.return_value = (0, [], [])
+    with patch("app.deleterr.MediaCleaner", return_value=cleaner), \
+         patch("app.deleterr.PlexMediaServer"), \
+         patch("app.deleterr.StateManager"), \
+         patch("app.deleterr.DRadarr"), \
+         patch("app.deleterr.DSonarr") as sonarr, \
+         patch("app.deleterr.NotificationManager") as manager, \
+         patch.object(Deleterr, "_log_run_summary") as summary:
+        sonarr.return_value.get_series.return_value = []
+        manager.return_value.is_enabled.return_value = True
+        result = Deleterr(config)
+
+    assert result.libraries_failed == 1
+    assert result.libraries_processed == 1
+    assert result.run_result.end_time is not None
+    summary.assert_called_once_with()
+    manager.return_value.send_run_summary.assert_called_once_with(result.run_result)
+    assert result.run_result.failed_libraries[0].name == "Failed movies"
