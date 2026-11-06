@@ -467,3 +467,43 @@ def test_fatal_run_does_not_duplicate_an_already_sent_failure_summary(deleterr):
         scheduler._notify_failure = MagicMock()
         assert scheduler._run_deleterr() is False
     scheduler._notify_failure.assert_not_called()
+
+
+@pytest.mark.parametrize("media", ["radarr", "sonarr"])
+def test_late_service_failure_preserves_deletions_without_counting_success(media, deleterr):
+    instance = MagicMock(get_series=MagicMock(return_value=[]))
+    setattr(deleterr, media, {"instance": instance})
+    deleterr.config.settings = {"libraries": [{
+        "name": "Late failure", media: "instance", "leaving_soon": {"duration": "1d"},
+    }]}
+    deleted = {"title": "Already deleted", "year": 2000, "sizeOnDisk": 100}
+    deleterr._process_death_row = MagicMock(return_value=(100, [deleted], [], [], [], []))
+    deleterr._process_library_leaving_soon = MagicMock(side_effect=Timeout("Tagging unavailable"))
+    before = deleterr.libraries_processed
+    failed_before = deleterr.libraries_failed
+
+    getattr(deleterr, f"process_{media}")()
+
+    assert deleterr.libraries_processed == before
+    assert deleterr.libraries_failed == failed_before + 1
+    assert deleterr.run_result.deleted_items[-1].title == "Already deleted"
+
+
+def test_all_configuration_failures_keep_the_failed_webhook_event(deleterr):
+    from app.media_cleaner import ConfigurationError
+    from app.modules.notifications import NotificationManager, RunResult
+
+    deleterr.config.settings = {"notifications": {
+        "enabled": True, "notify_on_dry_run": False, "min_deletions_to_notify": 999,
+        "webhook": {"url": "https://webhook.invalid/test"},
+    }}
+    deleterr.run_result = RunResult(is_dry_run=True)
+    deleterr.notifications = NotificationManager(deleterr.config)
+    deleterr._handle_library_failure("Movies", ConfigurationError("Invalid sort field"))
+    with patch("app.modules.notifications.providers.webhook.requests.request") as request:
+        deleterr._send_notification()
+    request.assert_called_once()
+    payload = request.call_args.kwargs["json"]
+    assert payload["type"] == "deleterr_run_failed"
+    assert "Movies: Invalid sort field" in payload["error"]
+    assert deleterr.notification_sent is True

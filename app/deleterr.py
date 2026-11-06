@@ -848,7 +848,6 @@ class Deleterr:
                         foreign = []
 
                     saved_space += space
-                    self.libraries_processed += 1
 
                     # Track deleted items for notifications
                     for item in deleted:
@@ -869,6 +868,7 @@ class Deleterr:
                         # Normal flow: preview items will be deleted on next run
                         all_preview.extend(preview)
 
+                    self.libraries_processed += 1
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
@@ -925,7 +925,6 @@ class Deleterr:
                         foreign = []
 
                     saved_space += space
-                    self.libraries_processed += 1
 
                     # Track deleted items for notifications
                     for item in deleted:
@@ -946,6 +945,7 @@ class Deleterr:
                         # Normal flow: preview items will be deleted on next run
                         all_preview.extend(preview)
 
+                    self.libraries_processed += 1
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
@@ -1318,7 +1318,15 @@ class Deleterr:
             ]
         if self.notifications.is_enabled():
             try:
-                self.notification_sent = bool(self.notifications.send_run_summary(self.run_result))
+                if self.has_fatal_errors():
+                    error = "All libraries failed: " + "; ".join(
+                        f"{name}: {message}" for name, message in self.library_failures
+                    )
+                    self.notification_sent = bool(self.notifications.send_run_failure(
+                        error, is_dry_run=self.run_result.is_dry_run
+                    ))
+                else:
+                    self.notification_sent = bool(self.notifications.send_run_summary(self.run_result))
             except Exception as e:
                 logger.error(f"Failed to send notification: {e}")
 
