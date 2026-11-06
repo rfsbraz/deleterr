@@ -791,21 +791,21 @@ class Deleterr:
         so the library is skipped entirely (fail safe). ConfigurationError keeps
         its own message.
         """
+        # Use the same redacted error in logs, notifications and the status file.
+        message = logger.redact_secrets(str(error), logger.configured_secrets(self.config.settings))
         if isinstance(error, (WatchDataError, TautulliApiError)):
             # Watch data is missing or unusable; nothing in this library was
             # touched (activity is fetched before any deletion decision).
-            logger.error(f"Skipping library '{library_name}': {error}")
+            logger.error(f"Skipping library '{library_name}': {message}")
         elif isinstance(error, (TraktError, MdblistError)):
             logger.error(
-                f"Skipping library '{library_name}': {error}. "
+                f"Skipping library '{library_name}': {message}. "
                 "Exclusions could not be verified, so no items were "
                 "deleted from this library this run."
             )
         else:
-            logger.error(str(error))
+            logger.error(message)
         self.libraries_failed += 1
-        # The message goes to notifications and the status file, so drop every secret
-        message = logger.redact_secrets(str(error), logger.configured_secrets(self.config.settings))
         self.library_failures.append((library_name, message))
 
     def process_radarr(self):
