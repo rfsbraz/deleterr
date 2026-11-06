@@ -150,6 +150,10 @@ scheduler:
   run_on_startup: true  # Also run when container starts
 ```
 
+If the scheduler process stays running while the host sleeps, a delayed cleanup can catch up within six hours of its scheduled time. Multiple overdue executions are combined into one cleanup, and cleanups never overlap. A run beyond that window, or one skipped because an earlier cleanup is still running, is logged in Deleterr's own log, recorded as failed in the last-run file and sent to configured failure-notification providers. The scheduler continues waiting for future runs.
+
+The schedule is kept in memory: this catches up a sleeping process, but does not replay schedules from before a container restart. Use `run_on_startup: true` when a cleanup on container startup is wanted.
+
 After every scheduled run, the scheduler writes `/config/.deleterr_last_run.json` with the `status` (`success`, `partial` when some libraries failed, or `failed`), a `timestamp` and the `error`, if any. Crashed runs also send a failure notification to your configured providers, and partial runs list the failed libraries in the run summary.
 
 ### Ofelia (External Scheduler)
