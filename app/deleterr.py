@@ -15,7 +15,7 @@ from app.modules.plex import PlexMediaServer
 
 from app import logger
 from app.config import hang_on_error, load_config
-from app.media_cleaner import ConfigurationError, MediaCleaner, WatchDataError, parse_leaving_soon_duration
+from app.media_cleaner import ConfigurationError, MediaCleaner, PartialDeletionError, WatchDataError, parse_leaving_soon_duration
 from app.modules.mdblist import MdblistError
 from app.modules.trakt import TraktError
 from app.modules.notifications import NotificationManager, RunResult, DeletedItem, LibraryFailure, LibraryStats
@@ -111,6 +111,8 @@ class Deleterr:
 
         self.libraries_processed = 0
         self.libraries_failed = 0
+        self.configuration_failures = 0
+        self.notification_sent = False
         self.library_failures = []  # (library name, error message) for each failed library
 
         self.process_radarr()
@@ -806,6 +808,8 @@ class Deleterr:
         else:
             logger.error(message)
         self.libraries_failed += 1
+        if isinstance(error, ConfigurationError):
+            self.configuration_failures = getattr(self, "configuration_failures", 0) + 1
         self.library_failures.append((library_name, message))
 
     def process_radarr(self):
@@ -844,7 +848,6 @@ class Deleterr:
                         foreign = []
 
                     saved_space += space
-                    self.libraries_processed += 1
 
                     # Track deleted items for notifications
                     for item in deleted:
@@ -865,10 +868,16 @@ class Deleterr:
                         # Normal flow: preview items will be deleted on next run
                         all_preview.extend(preview)
 
+                    self.libraries_processed += 1
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except (ConfigurationError, TautulliApiError, TraktError, MdblistError, WatchDataError) as e:
+                except Exception as e:
+                    if isinstance(e, PartialDeletionError):
+                        saved_space += e.saved_space
+                        for item in e.deleted_items:
+                            self.run_result.add_deleted(DeletedItem.from_radarr(item, library_name, name))
+                        e = e.error
                     self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "movie", self.config.settings.get("dry_run", True))
@@ -879,14 +888,22 @@ class Deleterr:
     def process_sonarr(self):
         for name, sonarr in self.sonarr.items():
             logger.info(f"Processing sonarr instance: '{name}'")
-            unfiltered_all_show_data = sonarr.get_series()
-
             # Get libraries for this instance
             libraries_for_instance = [
                 lib for lib in self.config.settings.get("libraries", [])
                 if lib.get("sonarr") == name
             ]
             total_libraries = len(libraries_for_instance)
+            if not libraries_for_instance:
+                continue
+            try:
+                unfiltered_all_show_data = sonarr.get_series()
+            except Exception as e:
+                # This fetch serves every library on the instance. Fail each
+                # affected library, then let the next instance run normally.
+                for library in libraries_for_instance:
+                    self._handle_library_failure(library.get("name", "Unknown"), e)
+                continue
 
             saved_space = 0
             all_preview = []
@@ -913,7 +930,6 @@ class Deleterr:
                         foreign = []
 
                     saved_space += space
-                    self.libraries_processed += 1
 
                     # Track deleted items for notifications
                     for item in deleted:
@@ -934,10 +950,16 @@ class Deleterr:
                         # Normal flow: preview items will be deleted on next run
                         all_preview.extend(preview)
 
+                    self.libraries_processed += 1
                     # Log library completion time
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
-                except (ConfigurationError, TautulliApiError, TraktError, MdblistError, WatchDataError) as e:
+                except Exception as e:
+                    if isinstance(e, PartialDeletionError):
+                        saved_space += e.saved_space
+                        for item in e.deleted_items:
+                            self.run_result.add_deleted(DeletedItem.from_sonarr(item, library_name, name))
+                        e = e.error
                     self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "show", self.config.settings.get("dry_run", True))
@@ -1300,20 +1322,28 @@ class Deleterr:
 
     def _send_notification(self):
         """Send notification with run results."""
-        if self.has_partial_failures():
+        if self.library_failures:
             self.run_result.failed_libraries = [
                 LibraryFailure(name, message) for name, message in self.library_failures
             ]
         if self.notifications.is_enabled():
             try:
-                self.notifications.send_run_summary(self.run_result)
+                if self.has_fatal_errors():
+                    error = "All libraries failed: " + "; ".join(
+                        f"{name}: {message}" for name, message in self.library_failures
+                    )
+                    self.notification_sent = bool(self.notifications.send_run_failure(
+                        error, is_dry_run=self.run_result.is_dry_run
+                    ))
+                else:
+                    self.notification_sent = bool(self.notifications.send_run_summary(self.run_result))
             except Exception as e:
                 logger.error(f"Failed to send notification: {e}")
 
     def has_fatal_errors(self):
         """Returns True if all libraries failed due to configuration errors."""
         total_libraries = self.libraries_processed + self.libraries_failed
-        return total_libraries > 0 and self.libraries_failed == total_libraries
+        return total_libraries > 0 and self.configuration_failures == total_libraries
 
     def has_partial_failures(self):
         """Returns True if some libraries failed but at least one was processed."""

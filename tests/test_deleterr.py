@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import pytest
+from requests.exceptions import HTTPError, Timeout, ConnectionError as RequestsConnectionError
 
 from app.deleterr import Deleterr, acquire_instance_lock, release_instance_lock, main
 
@@ -311,3 +312,217 @@ def test_process_sonarr_unresolvable_plex_history_skips_library(radarr_mock, son
 
     assert deleterr.libraries_failed == failed_before + 1
     deleterr.run_result.add_deleted.assert_not_called()
+
+
+@pytest.mark.parametrize("media", ["radarr", "sonarr"])
+@pytest.mark.parametrize("error_type", [Timeout, RequestsConnectionError, HTTPError, RuntimeError])
+def test_service_error_does_not_starve_later_libraries(media, error_type, deleterr):
+    instance = MagicMock(get_series=MagicMock(return_value=[]))
+    setattr(deleterr, media, {"instance": instance})
+    first = {"name": "Unavailable", media: "instance"}
+    second = {"name": "Working", media: "instance"}
+    deleterr.config.settings = {"libraries": [first, second]}
+    cleaner = (
+        deleterr.media_cleaner.process_library_movies
+        if media == "radarr" else deleterr.media_cleaner.process_library
+    )
+    cleaner.side_effect = [error_type("Service unavailable"), (0, [], [])]
+    before_failed = deleterr.libraries_failed
+    before_processed = deleterr.libraries_processed
+
+    getattr(deleterr, f"process_{media}")()
+
+    assert cleaner.call_count == 2
+    assert cleaner.call_args_list[-1].args[0] == second
+    assert deleterr.libraries_failed == before_failed + 1
+    assert deleterr.libraries_processed == before_processed + 1
+    assert deleterr.library_failures[-1][0] == "Unavailable"
+
+
+def test_sonarr_fetch_failure_marks_affected_libraries_and_continues(deleterr):
+    bad = MagicMock(get_series=MagicMock(side_effect=TimeoutError("Unavailable")))
+    good = MagicMock(get_series=MagicMock(return_value=[{"id": 42}]))
+    deleterr.sonarr = {"bad": bad, "good": good}
+    deleterr.config.settings = {"libraries": [
+        {"name": "Bad 1", "sonarr": "bad"},
+        {"name": "Bad 2", "sonarr": "bad"},
+        {"name": "Good", "sonarr": "good"},
+    ]}
+    deleterr.media_cleaner.process_library.return_value = (0, [], [])
+    before_failed = deleterr.libraries_failed
+    before_processed = deleterr.libraries_processed
+
+    deleterr.process_sonarr()
+
+    assert deleterr.libraries_failed == before_failed + 2
+    assert deleterr.libraries_processed == before_processed + 1
+    bad.get_series.assert_called_once_with()
+    good.get_series.assert_called_once_with()
+    deleterr.media_cleaner.process_library.assert_called_once_with(
+        deleterr.config.settings["libraries"][2], good, [{"id": 42}]
+    )
+
+
+def test_run_still_summarizes_and_notifies_after_library_service_failures():
+    config = MagicMock()
+    config.settings = {
+        "dry_run": True,
+        "plex": {"url": "http://plex.invalid", "token": "test-token"},
+        "radarr": [{"name": "movies", "url": "http://radarr.invalid", "api_key": "test-key"}],
+        "sonarr": [{"name": "shows", "url": "http://sonarr.invalid", "api_key": "test-key"}],
+        "libraries": [
+            {"name": "Failed movies", "radarr": "movies"},
+            {"name": "Working shows", "sonarr": "shows"},
+        ],
+    }
+    cleaner = MagicMock()
+    cleaner.process_library_movies.side_effect = TimeoutError("Service unavailable")
+    cleaner.process_library.return_value = (0, [], [])
+    with patch("app.deleterr.MediaCleaner", return_value=cleaner), \
+         patch("app.deleterr.PlexMediaServer"), \
+         patch("app.deleterr.StateManager"), \
+         patch("app.deleterr.DRadarr"), \
+         patch("app.deleterr.DSonarr") as sonarr, \
+         patch("app.deleterr.NotificationManager") as manager, \
+         patch.object(Deleterr, "_log_run_summary") as summary:
+        sonarr.return_value.get_series.return_value = []
+        manager.return_value.is_enabled.return_value = True
+        result = Deleterr(config)
+
+    assert result.libraries_failed == 1
+    assert result.libraries_processed == 1
+    assert result.run_result.end_time is not None
+    summary.assert_called_once_with()
+    manager.return_value.send_run_summary.assert_called_once_with(result.run_result)
+    assert result.run_result.failed_libraries[0].name == "Failed movies"
+
+
+@pytest.mark.parametrize("config_error", [False, True])
+def test_only_all_configuration_failures_are_fatal(config_error, deleterr):
+    from app.media_cleaner import ConfigurationError
+
+    deleterr.config.settings = {}
+    error = ConfigurationError("Invalid sort field") if config_error else Timeout("Service unavailable")
+    deleterr._handle_library_failure("Movies", error)
+    assert deleterr.has_fatal_errors() is config_error
+    if config_error:
+        deleterr._handle_library_failure("Shows", Timeout("Service unavailable"))
+        assert deleterr.has_fatal_errors() is False
+
+
+def test_all_failed_run_bypasses_empty_summary_notification_filters(deleterr):
+    from app.modules.notifications import NotificationManager, RunResult
+
+    deleterr.config.settings = {"notifications": {
+        "enabled": False, "notify_on_dry_run": False,
+        "min_deletions_to_notify": 999, "include_preview": False,
+    }}
+    deleterr.run_result = RunResult(is_dry_run=True)
+    deleterr._handle_library_failure("Movies", Timeout("Service unavailable"))
+    manager = NotificationManager(deleterr.config)
+    provider = MagicMock()
+    provider.send.return_value = True
+    manager.providers = [provider]
+    deleterr.notifications = manager
+
+    deleterr._send_notification()
+
+    provider.send.assert_called_once()
+    sent = provider.send.call_args.args[0]
+    assert [failure.name for failure in sent.failed_libraries] == ["Movies"]
+    assert sent.deleted_items == []
+    assert deleterr.notification_sent is True
+
+
+def test_all_transient_failures_do_not_block_scheduler_startup(deleterr):
+    from app.scheduler import DeleterrScheduler
+
+    deleterr.config.settings = {"dry_run": True, "scheduler": {
+        "schedule": "weekly", "run_on_startup": True,
+    }}
+    deleterr._handle_library_failure("Movies", Timeout("Service unavailable"))
+    with patch("app.scheduler.BlockingScheduler"), \
+         patch("app.scheduler.hang_on_error") as hang, \
+         patch("app.deleterr.Deleterr", return_value=deleterr):
+        scheduler = DeleterrScheduler(deleterr.config)
+        scheduler._record_last_run = MagicMock()
+        scheduler.start()
+
+    hang.assert_not_called()
+    scheduler.scheduler.start.assert_called_once_with()
+    assert scheduler._record_last_run.call_args.args[0] == "failed"
+
+
+def test_fatal_run_does_not_duplicate_an_already_sent_failure_summary(deleterr):
+    from app.media_cleaner import ConfigurationError
+    from app.scheduler import DeleterrScheduler
+
+    deleterr.config.settings = {"scheduler": {"schedule": "weekly"}}
+    deleterr._handle_library_failure("Movies", ConfigurationError("Invalid sort field"))
+    deleterr.notification_sent = True
+    with patch("app.scheduler.BlockingScheduler"), \
+         patch("app.deleterr.Deleterr", return_value=deleterr):
+        scheduler = DeleterrScheduler(deleterr.config)
+        scheduler._record_last_run = MagicMock()
+        scheduler._notify_failure = MagicMock()
+        assert scheduler._run_deleterr() is False
+    scheduler._notify_failure.assert_not_called()
+
+
+@pytest.mark.parametrize("media", ["radarr", "sonarr"])
+def test_late_service_failure_preserves_deletions_without_counting_success(media, deleterr):
+    instance = MagicMock(get_series=MagicMock(return_value=[]))
+    setattr(deleterr, media, {"instance": instance})
+    deleterr.config.settings = {"libraries": [{
+        "name": "Late failure", media: "instance", "leaving_soon": {"duration": "1d"},
+    }]}
+    deleted = {"title": "Already deleted", "year": 2000, "sizeOnDisk": 100}
+    deleterr._process_death_row = MagicMock(return_value=(100, [deleted], [], [], [], []))
+    deleterr._process_library_leaving_soon = MagicMock(side_effect=Timeout("Tagging unavailable"))
+    before = deleterr.libraries_processed
+    failed_before = deleterr.libraries_failed
+
+    getattr(deleterr, f"process_{media}")()
+
+    assert deleterr.libraries_processed == before
+    assert deleterr.libraries_failed == failed_before + 1
+    assert deleterr.run_result.deleted_items[-1].title == "Already deleted"
+
+
+@pytest.mark.parametrize("media", ["radarr", "sonarr"])
+def test_failure_between_deletions_keeps_confirmed_results_and_is_retryable(media, deleterr):
+    from app.media_cleaner import PartialDeletionError
+
+    setattr(deleterr, media, {"instance": MagicMock(get_series=MagicMock(return_value=[]))})
+    deleterr.config.settings = {"libraries": [{"name": "Partial failure", media: "instance"}]}
+    deleted = {"title": "Confirmed", "sizeOnDisk": 100, "statistics": {"sizeOnDisk": 100}}
+    method = "process_library_movies" if media == "radarr" else "process_library"
+    getattr(deleterr.media_cleaner, method).side_effect = PartialDeletionError(Timeout("Unavailable"), 100, [deleted])
+    before = deleterr.libraries_processed
+    with patch("app.deleterr.logger.log_freed_space") as freed:
+        getattr(deleterr, f"process_{media}")()
+    assert deleterr.libraries_processed == before
+    assert deleterr.run_result.deleted_items[-1].title == "Confirmed"
+    assert deleterr.library_failures[-1] == ("Partial failure", "Unavailable")
+    assert not deleterr.has_fatal_errors()
+    assert freed.call_args.args[0] == 100
+
+
+def test_all_configuration_failures_keep_the_failed_webhook_event(deleterr):
+    from app.media_cleaner import ConfigurationError
+    from app.modules.notifications import NotificationManager, RunResult
+
+    deleterr.config.settings = {"notifications": {
+        "enabled": True, "notify_on_dry_run": False, "min_deletions_to_notify": 999,
+        "webhook": {"url": "https://webhook.invalid/test"},
+    }}
+    deleterr.run_result = RunResult(is_dry_run=True)
+    deleterr.notifications = NotificationManager(deleterr.config)
+    deleterr._handle_library_failure("Movies", ConfigurationError("Invalid sort field"))
+    with patch("app.modules.notifications.providers.webhook.requests.request") as request:
+        deleterr._send_notification()
+    request.assert_called_once()
+    payload = request.call_args.kwargs["json"]
+    assert payload["type"] == "deleterr_run_failed"
+    assert "Movies: Invalid sort field" in payload["error"]
+    assert deleterr.notification_sent is True
