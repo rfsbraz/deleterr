@@ -139,7 +139,7 @@ def normalize_title(title: str) -> str:
     if not title:
         return ""
 
-    # Normalize unicode characters (é -> e, ñ -> n, etc.)
+    # Normalize unicode characters (Ã© -> e, Ã± -> n, etc.)
     normalized = unicodedata.normalize("NFKD", title)
     normalized = "".join(c for c in normalized if not unicodedata.combining(c))
 
@@ -308,10 +308,10 @@ class PlexLibraryIndex:
 
         Matching strategy (in order):
         1. Exact lowercase title + year match
-        2. Exact lowercase title + year with ±2 year tolerance
+        2. Exact lowercase title + year with Â±2 year tolerance
         3. Title with year in parentheses pattern
         4. Normalized title matching (strips punctuation, handles articles)
-        5. Normalized title with ±2 year tolerance
+        5. Normalized title with Â±2 year tolerance
 
         Args:
             title: Primary title to search for
@@ -670,36 +670,42 @@ class MediaCleaner:
         deleted_items = []
         preview_candidates = []
 
-        for sonarr_show in self.process_library_rules(
-                library, plex_library, all_show_data, show_activity, trakt_items,
-                sonarr_instance=sonarr_instance, mdblist_items=mdblist_items
-        ):
-            if max_actions_per_run and actions_performed >= max_actions_per_run:
-                # Continue collecting preview candidates after hitting the limit
-                if preview_next > 0 and len(preview_candidates) < preview_next:
-                    preview_candidates.append(sonarr_show)
-                    continue
-                # Stop once we have enough preview candidates (or preview is disabled)
-                if len(preview_candidates) >= preview_next:
+        try:
+            for sonarr_show in self.process_library_rules(
+                    library, plex_library, all_show_data, show_activity, trakt_items,
+                    sonarr_instance=sonarr_instance, mdblist_items=mdblist_items
+            ):
+                if max_actions_per_run and actions_performed >= max_actions_per_run:
+                    # Continue collecting preview candidates after hitting the limit
+                    if preview_next > 0 and len(preview_candidates) < preview_next:
+                        preview_candidates.append(sonarr_show)
+                        continue
+                    # Stop once we have enough preview candidates (or preview is disabled)
+                    if len(preview_candidates) >= preview_next:
+                        break
+                    logger.info(
+                        f"Reached max actions per run ({max_actions_per_run}), stopping"
+                    )
                     break
-                logger.info(
-                    f"Reached max actions per run ({max_actions_per_run}), stopping"
+
+                saved_space += self.process_show(
+                    library,
+                    sonarr_instance,
+                    sonarr_show,
+                    actions_performed,
+                    max_actions_per_run,
                 )
-                break
+                deleted_items.append(sonarr_show)
+                actions_performed += 1
 
-            saved_space += self.process_show(
-                library,
-                sonarr_instance,
-                sonarr_show,
-                actions_performed,
-                max_actions_per_run,
-            )
-            deleted_items.append(sonarr_show)
-            actions_performed += 1
+                if self.config.settings.get("action_delay"):
+                    # sleep in seconds
+                    time.sleep(self.config.settings.get("action_delay"))
 
-            if self.config.settings.get("action_delay"):
-                # sleep in seconds
-                time.sleep(self.config.settings.get("action_delay"))
+        except Exception as error:
+            if not deleted_items:
+                raise
+            raise PartialDeletionError(error, saved_space, deleted_items) from error
 
         return saved_space, deleted_items, preview_candidates
 
@@ -820,36 +826,42 @@ class MediaCleaner:
 
         all_movie_data = radarr_instance.get_movies()
 
-        for radarr_movie in self.process_library_rules(
-                library, movies_library, all_movie_data, movie_activity, trakt_movies,
-                radarr_instance=radarr_instance, mdblist_items=mdblist_items
-        ):
-            if max_actions_per_run and actions_performed >= max_actions_per_run:
-                # Continue collecting preview candidates after hitting the limit
-                if preview_next > 0 and len(preview_candidates) < preview_next:
-                    preview_candidates.append(radarr_movie)
-                    continue
-                # Stop once we have enough preview candidates (or preview is disabled)
-                if len(preview_candidates) >= preview_next:
+        try:
+            for radarr_movie in self.process_library_rules(
+                    library, movies_library, all_movie_data, movie_activity, trakt_movies,
+                    radarr_instance=radarr_instance, mdblist_items=mdblist_items
+            ):
+                if max_actions_per_run and actions_performed >= max_actions_per_run:
+                    # Continue collecting preview candidates after hitting the limit
+                    if preview_next > 0 and len(preview_candidates) < preview_next:
+                        preview_candidates.append(radarr_movie)
+                        continue
+                    # Stop once we have enough preview candidates (or preview is disabled)
+                    if len(preview_candidates) >= preview_next:
+                        break
+                    logger.info(
+                        f"Reached max actions per run ({max_actions_per_run}), stopping"
+                    )
                     break
-                logger.info(
-                    f"Reached max actions per run ({max_actions_per_run}), stopping"
+
+                saved_space += self.process_movie(
+                    library,
+                    radarr_instance,
+                    radarr_movie,
+                    actions_performed,
+                    max_actions_per_run,
                 )
-                break
+                deleted_items.append(radarr_movie)
+                actions_performed += 1
 
-            saved_space += self.process_movie(
-                library,
-                radarr_instance,
-                radarr_movie,
-                actions_performed,
-                max_actions_per_run,
-            )
-            deleted_items.append(radarr_movie)
-            actions_performed += 1
+                if self.config.settings.get("action_delay"):
+                    # sleep in seconds
+                    time.sleep(self.config.settings.get("action_delay"))
 
-            if self.config.settings.get("action_delay"):
-                # sleep in seconds
-                time.sleep(self.config.settings.get("action_delay"))
+        except Exception as error:
+            if not deleted_items:
+                raise
+            raise PartialDeletionError(error, saved_space, deleted_items) from error
 
         return saved_space, deleted_items, preview_candidates
 
@@ -2215,7 +2227,7 @@ def check_excluded_seerr_requester_watch(
     # Get request data from Seerr
     request_data = seerr_instance.get_request_data(tmdb_id)
     if not request_data:
-        # No request exists — not protected by this feature
+        # No request exists â€” not protected by this feature
         return True
 
     # Check request age against grace period and max protection
@@ -2263,7 +2275,7 @@ def check_excluded_seerr_requester_watch(
     if hasattr(plex_media_item, "grandparentRatingKey") and plex_media_item.grandparentRatingKey:
         grandparent_rating_key = str(plex_media_item.grandparentRatingKey)
     elif media_data.get("statistics"):
-        # Sonarr data indicates TV show — the plex_media_item IS the show (grandparent)
+        # Sonarr data indicates TV show â€” the plex_media_item IS the show (grandparent)
         grandparent_rating_key = rating_key
         rating_key = None
 
@@ -2453,6 +2465,16 @@ def get_rating(media_item):
 
 def _get_config_value(config, key, default=None):
     return config[key] if key in config else default
+
+
+class PartialDeletionError(Exception):
+    """A library stopped after confirmed deletions; keep those results with the original failure."""
+
+    def __init__(self, error, saved_space, deleted_items):
+        super().__init__(str(error))
+        self.error = error
+        self.saved_space = saved_space
+        self.deleted_items = tuple(deleted_items)
 
 
 class ConfigurationError(Exception):

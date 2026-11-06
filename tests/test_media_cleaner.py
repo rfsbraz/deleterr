@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from requests.exceptions import Timeout
 from pyarr.exceptions import PyarrResourceNotFound, PyarrServerError
 
 import app.media_cleaner
@@ -12,11 +13,40 @@ from app.media_cleaner import (
     DEFAULT_MAX_ACTIONS_PER_RUN,
     MediaCleaner,
     PlexLibraryIndex,
+    PartialDeletionError,
     check_excluded_radarr_fields,
     find_watched_data,
     library_meets_disk_space_threshold,
     normalize_title,
 )
+
+
+@pytest.mark.parametrize("media", ["movies", "shows"])
+@pytest.mark.parametrize("failure_stage", ["deletion", "candidate_iteration"])
+def test_partial_library_failure_carries_only_confirmed_deletions(media, failure_stage, standard_config):
+    cleaner = MediaCleaner(standard_config)
+    cleaner.config.settings = {"action_delay": 0}
+    first = {"title": "Confirmed", "sizeOnDisk": 100}
+    second = {"title": "Unconfirmed", "sizeOnDisk": 200}
+    failure = Timeout("Later request failed")
+
+    def candidates():
+        yield first
+        if failure_stage == "candidate_iteration":
+            raise failure
+        yield second
+
+    cleaner.process_library_rules = MagicMock(return_value=candidates())
+    process_one = MagicMock(side_effect=[100, failure])
+    setattr(cleaner, "process_movie" if media == "movies" else "process_show", process_one)
+    args = [{}, MagicMock(), MagicMock(), MagicMock(), MagicMock(), 0]
+    if media == "shows":
+        args.insert(3, [])
+    with pytest.raises(PartialDeletionError) as caught:
+        getattr(cleaner, f"process_{media}")(*args)
+    assert caught.value.error is failure
+    assert caught.value.saved_space == 100
+    assert caught.value.deleted_items == (first,)
 
 
 @pytest.fixture

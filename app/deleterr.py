@@ -15,7 +15,7 @@ from app.modules.plex import PlexMediaServer
 
 from app import logger
 from app.config import hang_on_error, load_config
-from app.media_cleaner import ConfigurationError, MediaCleaner, WatchDataError, parse_leaving_soon_duration
+from app.media_cleaner import ConfigurationError, MediaCleaner, PartialDeletionError, WatchDataError, parse_leaving_soon_duration
 from app.modules.mdblist import MdblistError
 from app.modules.trakt import TraktError
 from app.modules.notifications import NotificationManager, RunResult, DeletedItem, LibraryFailure, LibraryStats
@@ -191,7 +191,7 @@ class Deleterr:
         try:
             duration = parse_leaving_soon_duration(duration_str)
         except ValueError:
-            # Invalid duration string — don't block deletions
+            # Invalid duration string â€” don't block deletions
             return death_row_plex_items, 0
 
         tolerance = min(DURATION_TOLERANCE, duration / 2)
@@ -206,7 +206,7 @@ class Deleterr:
             tagged_at_str = tagged_dates.get(key_str)
 
             if tagged_at_str is None:
-                # No record of when this was tagged — treat as newly tagged
+                # No record of when this was tagged â€” treat as newly tagged
                 # (conservative: don't delete items with unknown tag date)
                 if is_dry_run:
                     logger.info(
@@ -219,7 +219,7 @@ class Deleterr:
                     skipped += 1
                     continue
                 logger.info(
-                    "Item '%s' (key=%s) in leaving_soon has no tagged date in state — "
+                    "Item '%s' (key=%s) in leaving_soon has no tagged date in state â€” "
                     "recording now and skipping deletion until duration elapses",
                     getattr(item, "title", "Unknown"),
                     key_str,
@@ -235,7 +235,7 @@ class Deleterr:
                 tagged_at = datetime.fromisoformat(tagged_at_str)
             except (ValueError, TypeError):
                 logger.warning(
-                    "Invalid tagged date '%s' for item '%s' — skipping deletion",
+                    "Invalid tagged date '%s' for item '%s' â€” skipping deletion",
                     tagged_at_str,
                     getattr(item, "title", "Unknown"),
                 )
@@ -254,7 +254,7 @@ class Deleterr:
                 else:
                     time_remaining = f"{hours}h"
                 logger.info(
-                    "Item '%s' in leaving_soon for library '%s' — %s remaining before deletion",
+                    "Item '%s' in leaving_soon for library '%s' â€” %s remaining before deletion",
                     getattr(item, "title", "Unknown"),
                     library_name,
                     time_remaining,
@@ -873,6 +873,11 @@ class Deleterr:
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
                 except Exception as e:
+                    if isinstance(e, PartialDeletionError):
+                        saved_space += e.saved_space
+                        for item in e.deleted_items:
+                            self.run_result.add_deleted(DeletedItem.from_radarr(item, library_name, name))
+                        e = e.error
                     self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "movie", self.config.settings.get("dry_run", True))
@@ -950,6 +955,11 @@ class Deleterr:
                     library_duration = time.time() - library_start
                     logger.info(f"Library '{library_name}' completed in {logger.format_duration(library_duration)}")
                 except Exception as e:
+                    if isinstance(e, PartialDeletionError):
+                        saved_space += e.saved_space
+                        for item in e.deleted_items:
+                            self.run_result.add_deleted(DeletedItem.from_sonarr(item, library_name, name))
+                        e = e.error
                     self._handle_library_failure(library_name, e)
 
             logger.log_freed_space(saved_space, "show", self.config.settings.get("dry_run", True))

@@ -489,6 +489,25 @@ def test_late_service_failure_preserves_deletions_without_counting_success(media
     assert deleterr.run_result.deleted_items[-1].title == "Already deleted"
 
 
+@pytest.mark.parametrize("media", ["radarr", "sonarr"])
+def test_failure_between_deletions_keeps_confirmed_results_and_is_retryable(media, deleterr):
+    from app.media_cleaner import PartialDeletionError
+
+    setattr(deleterr, media, {"instance": MagicMock(get_series=MagicMock(return_value=[]))})
+    deleterr.config.settings = {"libraries": [{"name": "Partial failure", media: "instance"}]}
+    deleted = {"title": "Confirmed", "sizeOnDisk": 100, "statistics": {"sizeOnDisk": 100}}
+    method = "process_library_movies" if media == "radarr" else "process_library"
+    getattr(deleterr.media_cleaner, method).side_effect = PartialDeletionError(Timeout("Unavailable"), 100, [deleted])
+    before = deleterr.libraries_processed
+    with patch("app.deleterr.logger.log_freed_space") as freed:
+        getattr(deleterr, f"process_{media}")()
+    assert deleterr.libraries_processed == before
+    assert deleterr.run_result.deleted_items[-1].title == "Confirmed"
+    assert deleterr.library_failures[-1] == ("Partial failure", "Unavailable")
+    assert not deleterr.has_fatal_errors()
+    assert freed.call_args.args[0] == 100
+
+
 def test_all_configuration_failures_keep_the_failed_webhook_event(deleterr):
     from app.media_cleaner import ConfigurationError
     from app.modules.notifications import NotificationManager, RunResult
