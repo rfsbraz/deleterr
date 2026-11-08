@@ -7,8 +7,21 @@ This module provides:
 """
 
 import os
+from unittest.mock import Mock
 
 import pytest
+
+
+@pytest.fixture
+def assert_no_deletions():
+    """Assert every explicitly supplied mocked deletion boundary stayed untouched."""
+    def check(*boundaries):
+        assert boundaries, "Supply at least one mocked deletion boundary"
+        for boundary in boundaries:
+            assert isinstance(boundary, Mock), "Deletion boundaries must be mocks"
+            boundary.assert_not_called()
+
+    return check
 
 
 # JustWatch proxy URL for integration tests
