@@ -363,3 +363,19 @@ def test_prepare_activity_entry_missing_year():
 
     assert result["title"] == "Test Movie"
     assert result["year"] == 0  # Should default to 0
+
+
+@patch("app.modules.tautulli.RawAPI", MagicMock())
+@pytest.mark.parametrize("page_count", [0, 1])
+def test_history_transport_failure_never_returns_partial_activity(page_count):
+    client = Tautulli("http://tautulli.invalid", "synthetic-test-key")
+    client.api = MagicMock()
+    pages = [{"data": [{"rating_key": "123", "stopped": 1000, "guid": "movie://123"}]}] * page_count
+    client.api.get_history.side_effect = pages + [TimeoutError("url contains synthetic-test-key")]
+
+    with pytest.raises(TautulliApiError, match="incomplete history") as raised:
+        client.get_activity("section")
+
+    assert f"offset {page_count}" in str(raised.value)
+    assert "synthetic-test-key" not in str(raised.value)
+    assert client.api.get_history.call_count == page_count + 1

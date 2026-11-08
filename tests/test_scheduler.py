@@ -298,8 +298,9 @@ class TestScheduledRunFailure:
         with patch("app.deleterr.PlexMediaServer"), \
              patch("app.deleterr.MediaCleaner", return_value=cleaner), \
              patch("app.deleterr.StateManager"), \
-             patch("app.deleterr.NotificationManager"), \
+             patch("app.deleterr.NotificationManager") as manager, \
              patch("app.deleterr.DRadarr"):
+            manager.return_value.send_run_failure.return_value = False
             assert scheduler._run_deleterr() is False
 
         payloads = self._sent_payloads(mock_request)

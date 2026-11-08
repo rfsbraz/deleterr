@@ -88,14 +88,23 @@ class Tautulli:
         start = 0
         raw_data = []
         while True:
-            history = self.api.get_history(
-                section_id=section,
-                order_column="date",
-                order_direction="asc",
-                start=start,
-                length=HISTORY_PAGE_SIZE,
-                include_activity=1,
-            )
+            try:
+                history = self.api.get_history(
+                    section_id=section,
+                    order_column="date",
+                    order_direction="asc",
+                    start=start,
+                    length=HISTORY_PAGE_SIZE,
+                    include_activity=1,
+                )
+            except Exception as e:
+                # Never return the pages collected so far as complete history.
+                # Do not include provider exception text, which may contain a key.
+                raise TautulliApiError(
+                    f"Tautulli history request failed for section {section} "
+                    f"(offset {start}, {type(e).__name__}); incomplete history "
+                    "cannot be used for deletion decisions."
+                ) from e
             if not isinstance(history, dict) or "data" not in history:
                 raise TautulliApiError(
                     f"Tautulli returned an invalid history response for section "
