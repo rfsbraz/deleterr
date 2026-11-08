@@ -50,7 +50,7 @@ def _plex_item(rating_key, title):
     return item
 
 
-def test_dry_run_leaves_state_file_byte_identical(deleterr_instance, state_file):
+def test_dry_run_leaves_state_file_byte_identical(deleterr_instance, state_file, assert_no_deletions):
     before = state_file.read_bytes()
 
     elapsed = _plex_item(100, "Elapsed Movie")
@@ -79,12 +79,14 @@ def test_dry_run_leaves_state_file_byte_identical(deleterr_instance, state_file)
         "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
     }
 
+    media_instance = MagicMock()
     with patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True):
-        _, deleted, preview, _, prior, foreign = d._process_death_row(library, MagicMock(), "movie")
+        _, deleted, preview, _, prior, foreign = d._process_death_row(library, media_instance, "movie")
     d._process_library_leaving_soon(
         library, preview or [], "movie", death_row_plex_items=prior, foreign_plex_items=foreign
     )
 
     # The elapsed item is reported as a would-be deletion, nothing is actually deleted
     assert [m["title"] for m in deleted] == ["Elapsed Movie"]
+    assert_no_deletions(media_instance.del_movie, d.media_cleaner.delete_series)
     assert state_file.read_bytes() == before
