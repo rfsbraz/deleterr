@@ -62,6 +62,8 @@ An item counts as due up to one hour before its duration is up (or half the dura
 
 With `duration` set, a new batch only enters once the current one is cleared. The run that deletes a batch tags nothing new, and the next batch is tagged on the run after it. So one cycle lasts the duration plus one run. For example, with `duration: "7d"` and a daily schedule, a batch tagged on day 0 is deleted on day 7 and the next batch is tagged on day 8.
 
+Deleterr remembers when each item was tagged in `/config/.deleterr_state.json` and keeps a copy in `/config/.deleterr_state.json.bak` after every save. If the state file is damaged, Deleterr reads the copy instead. If neither can be read, it logs an error and starts over, so the timers restart and items can be announced again. The unreadable file is kept as `.deleterr_state.json.reset-<date>` when the new state is first saved.
+
 If `duration` is not set, Deleterr will try to derive the deletion date from the scheduler interval. If neither is available, notifications will use the generic "next cleanup cycle" text.
 
 ### Collection Settings
