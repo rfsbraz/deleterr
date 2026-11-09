@@ -3,6 +3,7 @@
 
 import json
 import os
+import shutil
 import tempfile
 from datetime import datetime
 
@@ -34,28 +35,38 @@ class StateManager:
     def __init__(self, state_file=STATE_FILE):
         self._state_file = state_file
         self._backup_file = state_file + ".bak"
+        self._rejected = []
 
     def load(self) -> dict:
         """Load state from file, falling back to the backup, then to empty state.
 
-        Old versions are migrated. If neither file can be used, the unreadable file is
-        kept aside so the next save does not destroy it.
+        Old versions are migrated. Loading never changes files on disk (dry runs
+        read state too). A file that could not be used is copied aside by the next
+        save, before it is replaced.
         """
-        try:
-            data = self._read(self._state_file)
-        except FileNotFoundError:
-            return self._empty_state()
-        except (ValueError, OSError) as e:
-            logger.warning("Failed to read state file '%s': %s", self._state_file, e)
+        rejected = []
+        for path in (self._state_file, self._backup_file):
             try:
-                data = self._read(self._backup_file)
-            except (ValueError, OSError) as backup_error:
-                logger.warning(
-                    "Failed to read state backup '%s': %s", self._backup_file, backup_error
-                )
-                return self._reset()
-            logger.warning("Recovered state from backup '%s'", self._backup_file)
-        return data
+                data = self._read(path)
+            except FileNotFoundError:
+                continue
+            except (ValueError, OSError) as e:
+                logger.warning("Failed to read state file '%s': %s", path, e)
+                rejected.append(path)
+                continue
+            self._rejected = rejected
+            if path == self._backup_file:
+                logger.warning("Recovered state from backup '%s'", path)
+            return data
+        self._rejected = rejected
+        if rejected:
+            logger.error(
+                "State file '%s' could not be used and was reset; leaving soon timers "
+                "restart and notifications may be sent again. The unreadable file is "
+                "kept as '<name>.reset-<date>' on the next save.",
+                self._state_file,
+            )
+        return self._empty_state()
 
     def _read(self, path: str) -> dict:
         """Read and migrate one state file. Raises ValueError if it cannot be used."""
@@ -74,28 +85,24 @@ class StateManager:
             data["version"] = version
         return data
 
-    def _reset(self) -> dict:
-        """Keep the unreadable state file aside and start from empty state."""
-        kept = f"{self._state_file}.reset-{datetime.now().strftime('%Y%m%dT%H%M%S')}"
-        try:
-            os.replace(self._state_file, kept)
-        except OSError:
-            kept = None
-        logger.error(
-            "State file '%s' could not be used and was reset; leaving soon timers restart "
-            "and notifications may be sent again.%s",
-            self._state_file,
-            f" The old file was kept as '{kept}'." if kept else "",
-        )
-        return self._empty_state()
-
     def save(self, state: dict):
         """Atomically save state to file and to its backup (write to temp, then rename)."""
         try:
+            self._keep_rejected()
             self._write(self._state_file, state)
             self._write(self._backup_file, state)
         except OSError as e:
             logger.error("Failed to save state file '%s': %s", self._state_file, e)
+
+    def _keep_rejected(self):
+        """Copy files the last load could not use aside, before they are replaced."""
+        stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        for path in self._rejected:
+            if os.path.exists(path):
+                kept = f"{path}.reset-{stamp}"
+                shutil.copy2(path, kept)
+                logger.warning("Kept unreadable state file as '%s'", kept)
+        self._rejected = []
 
     def _write(self, path: str, state: dict):
         fd, tmp_path = tempfile.mkstemp(

@@ -213,29 +213,66 @@ class TestStateBackupAndRecovery:
                 f.write("{not valid json")
         assert state_manager.load() == {"version": STATE_VERSION, "leaving_soon": {}}
 
-    def test_reset_keeps_the_unreadable_file_and_logs_an_error(
+    def test_missing_file_is_recovered_from_backup(self, state_file, state_manager):
+        state_manager.save(SAMPLE)
+        os.remove(state_file)
+        assert state_manager.load() == SAMPLE
+
+    def test_reset_logs_an_error_and_save_keeps_the_unreadable_file(
         self, state_file, state_manager, caplog
     ):
         with open(state_file, "w") as f:
             f.write("{not valid json")
         with caplog.at_level("ERROR"):
-            state_manager.load()
-        assert "leaving soon timers restart" in caplog.text
-        kept = [p for p in os.listdir(os.path.dirname(state_file)) if ".reset-" in p]
-        assert len(kept) == 1
-        with open(os.path.join(os.path.dirname(state_file), kept[0])) as f:
-            assert f.read() == "{not valid json"
+            state = state_manager.load()
+        assert "leaving soon timers" in caplog.text
+        state_manager.save(state)
+        assert kept_files(state_file) == {
+            os.path.basename(state_file): "{not valid json"
+        }
 
-    def test_newer_version_is_not_overwritten(self, state_file, state_manager):
+    def test_load_does_not_change_files(self, state_file, state_manager):
+        for path in (state_file, state_file + ".bak"):
+            with open(path, "w") as f:
+                f.write("{not valid json")
+        before = sorted(os.listdir(os.path.dirname(state_file)))
+        state_manager.load()
+        assert sorted(os.listdir(os.path.dirname(state_file))) == before
+
+    def test_newer_version_is_kept_when_recovering_from_backup(
+        self, state_file, state_manager
+    ):
+        state_manager.save(SAMPLE)
         newer = {"version": STATE_VERSION + 1, "leaving_soon": {"Movies": {"1": "x"}}}
         with open(state_file, "w") as f:
             json.dump(newer, f)
-        state_manager.load()
+        state = state_manager.load()
+        assert state == SAMPLE
+        state_manager.save(state)
+        kept = kept_files(state_file)
+        assert json.loads(kept[os.path.basename(state_file)]) == newer
+
+    def test_unusable_backup_is_kept_too(self, state_file, state_manager):
+        newer = {"version": STATE_VERSION + 1, "leaving_soon": {}}
+        for path in (state_file, state_file + ".bak"):
+            with open(path, "w") as f:
+                json.dump(newer, f)
         state_manager.save(state_manager.load())
-        kept = [p for p in os.listdir(os.path.dirname(state_file)) if ".reset-" in p]
-        assert len(kept) == 1
-        with open(os.path.join(os.path.dirname(state_file), kept[0])) as f:
-            assert json.load(f) == newer
+        assert set(kept_files(state_file)) == {
+            os.path.basename(state_file),
+            os.path.basename(state_file) + ".bak",
+        }
+
+
+def kept_files(state_file):
+    """{original name: content} of the files set aside as .reset-<date>."""
+    folder = os.path.dirname(state_file)
+    kept = {}
+    for name in os.listdir(folder):
+        if ".reset-" in name:
+            with open(os.path.join(folder, name)) as f:
+                kept[name.split(".reset-")[0]] = f.read()
+    return kept
 
 
 class TestStateMigration:
@@ -267,6 +304,7 @@ class TestStateMigration:
             json.dump({"version": 1, "leaving_soon": {"Movies": {"1": "t"}}}, f)
         monkeypatch.setattr(state_module, "STATE_VERSION", 2)
         monkeypatch.setattr(state_module, "MIGRATIONS", {})
-        assert state_manager.load()["leaving_soon"] == {}
-        kept = [p for p in os.listdir(os.path.dirname(state_file)) if ".reset-" in p]
-        assert len(kept) == 1
+        state = state_manager.load()
+        assert state["leaving_soon"] == {}
+        state_manager.save(state)
+        assert list(kept_files(state_file)) == [os.path.basename(state_file)]
