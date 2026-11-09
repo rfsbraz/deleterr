@@ -179,3 +179,94 @@ class TestStateManagerCleanup:
 
         result = state_manager.get_tagged_dates("Movies")
         assert result == {"100": "2026-03-01T00:00:00"}
+
+
+SAMPLE = {
+    "version": STATE_VERSION,
+    "leaving_soon": {"Movies": {"12345": "2026-03-01T13:27:49"}},
+}
+
+
+class TestStateBackupAndRecovery:
+    """A bad state file is recovered from the backup instead of wiping timers (#295)."""
+
+    def test_save_keeps_a_backup(self, state_file, state_manager):
+        state_manager.save(SAMPLE)
+        with open(state_file + ".bak", encoding="utf-8") as f:
+            assert json.load(f) == SAMPLE
+
+    def test_corrupt_file_is_recovered_from_backup(self, state_file, state_manager):
+        state_manager.save(SAMPLE)
+        with open(state_file, "w") as f:
+            f.write("{not valid json")
+        assert state_manager.load() == SAMPLE
+
+    def test_non_dict_file_is_recovered_from_backup(self, state_file, state_manager):
+        state_manager.save(SAMPLE)
+        with open(state_file, "w") as f:
+            json.dump([1, 2, 3], f)
+        assert state_manager.load() == SAMPLE
+
+    def test_corrupt_backup_falls_back_to_empty(self, state_file, state_manager):
+        for path in (state_file, state_file + ".bak"):
+            with open(path, "w") as f:
+                f.write("{not valid json")
+        assert state_manager.load() == {"version": STATE_VERSION, "leaving_soon": {}}
+
+    def test_reset_keeps_the_unreadable_file_and_logs_an_error(
+        self, state_file, state_manager, caplog
+    ):
+        with open(state_file, "w") as f:
+            f.write("{not valid json")
+        with caplog.at_level("ERROR"):
+            state_manager.load()
+        assert "leaving soon timers restart" in caplog.text
+        kept = [p for p in os.listdir(os.path.dirname(state_file)) if ".reset-" in p]
+        assert len(kept) == 1
+        with open(os.path.join(os.path.dirname(state_file), kept[0])) as f:
+            assert f.read() == "{not valid json"
+
+    def test_newer_version_is_not_overwritten(self, state_file, state_manager):
+        newer = {"version": STATE_VERSION + 1, "leaving_soon": {"Movies": {"1": "x"}}}
+        with open(state_file, "w") as f:
+            json.dump(newer, f)
+        state_manager.load()
+        state_manager.save(state_manager.load())
+        kept = [p for p in os.listdir(os.path.dirname(state_file)) if ".reset-" in p]
+        assert len(kept) == 1
+        with open(os.path.join(os.path.dirname(state_file), kept[0])) as f:
+            assert json.load(f) == newer
+
+
+class TestStateMigration:
+    """A STATE_VERSION bump migrates old files instead of wiping them (#295)."""
+
+    def test_old_version_is_migrated(self, state_file, state_manager, monkeypatch):
+        from app import state as state_module
+
+        def v1_to_v2(data):
+            data["leaving_soon"] = {
+                lib: {k: {"tagged": ts} for k, ts in items.items()}
+                for lib, items in data["leaving_soon"].items()
+            }
+            return data
+
+        with open(state_file, "w") as f:
+            json.dump({"version": 1, "leaving_soon": {"Movies": {"1": "t"}}}, f)
+        monkeypatch.setattr(state_module, "STATE_VERSION", 2)
+        monkeypatch.setattr(state_module, "MIGRATIONS", {1: v1_to_v2})
+        assert state_manager.load() == {
+            "version": 2,
+            "leaving_soon": {"Movies": {"1": {"tagged": "t"}}},
+        }
+
+    def test_missing_migration_does_not_wipe(self, state_file, state_manager, monkeypatch):
+        from app import state as state_module
+
+        with open(state_file, "w") as f:
+            json.dump({"version": 1, "leaving_soon": {"Movies": {"1": "t"}}}, f)
+        monkeypatch.setattr(state_module, "STATE_VERSION", 2)
+        monkeypatch.setattr(state_module, "MIGRATIONS", {})
+        assert state_manager.load()["leaving_soon"] == {}
+        kept = [p for p in os.listdir(os.path.dirname(state_file)) if ".reset-" in p]
+        assert len(kept) == 1

@@ -11,6 +11,10 @@ from app import logger
 STATE_FILE = "/config/.deleterr_state.json"
 STATE_VERSION = 1
 
+# One function per old version, upgrading its state dict to the next version. Bumping
+# STATE_VERSION needs an entry here, or old files are set aside and timers restart.
+MIGRATIONS = {}
+
 
 class StateManager:
     """Manages persistent state for leaving soon tagged timestamps.
@@ -29,44 +33,85 @@ class StateManager:
 
     def __init__(self, state_file=STATE_FILE):
         self._state_file = state_file
+        self._backup_file = state_file + ".bak"
 
     def load(self) -> dict:
-        """Load state from file, return empty state if missing or corrupt."""
+        """Load state from file, falling back to the backup, then to empty state.
+
+        Old versions are migrated. If neither file can be used, the unreadable file is
+        kept aside so the next save does not destroy it.
+        """
         try:
-            with open(self._state_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if not isinstance(data, dict) or data.get("version") != STATE_VERSION:
-                logger.warning(
-                    "State file has unexpected format or version, starting fresh"
-                )
-                return self._empty_state()
-            return data
+            data = self._read(self._state_file)
         except FileNotFoundError:
             return self._empty_state()
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning("Failed to read state file '%s': %s. Starting fresh.", self._state_file, e)
-            return self._empty_state()
+        except (ValueError, OSError) as e:
+            logger.warning("Failed to read state file '%s': %s", self._state_file, e)
+            try:
+                data = self._read(self._backup_file)
+            except (ValueError, OSError) as backup_error:
+                logger.warning(
+                    "Failed to read state backup '%s': %s", self._backup_file, backup_error
+                )
+                return self._reset()
+            logger.warning("Recovered state from backup '%s'", self._backup_file)
+        return data
+
+    def _read(self, path: str) -> dict:
+        """Read and migrate one state file. Raises ValueError if it cannot be used."""
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict) or not isinstance(data.get("version"), int):
+            raise ValueError("unexpected format")
+        version = data["version"]
+        if version > STATE_VERSION:
+            raise ValueError(f"version {version} is newer than {STATE_VERSION}")
+        while version < STATE_VERSION:
+            if version not in MIGRATIONS:
+                raise ValueError(f"no migration from version {version}")
+            data = MIGRATIONS[version](data)
+            version += 1
+            data["version"] = version
+        return data
+
+    def _reset(self) -> dict:
+        """Keep the unreadable state file aside and start from empty state."""
+        kept = f"{self._state_file}.reset-{datetime.now().strftime('%Y%m%dT%H%M%S')}"
+        try:
+            os.replace(self._state_file, kept)
+        except OSError:
+            kept = None
+        logger.error(
+            "State file '%s' could not be used and was reset; leaving soon timers restart "
+            "and notifications may be sent again.%s",
+            self._state_file,
+            f" The old file was kept as '{kept}'." if kept else "",
+        )
+        return self._empty_state()
 
     def save(self, state: dict):
-        """Atomically save state to file (write to temp, then rename)."""
-        state_dir = os.path.dirname(self._state_file)
+        """Atomically save state to file and to its backup (write to temp, then rename)."""
         try:
-            fd, tmp_path = tempfile.mkstemp(
-                dir=state_dir, prefix=".deleterr_state_", suffix=".tmp"
-            )
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(state, f, indent=2)
-                os.replace(tmp_path, self._state_file)
-            except Exception:
-                # Clean up temp file on failure
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
-                raise
+            self._write(self._state_file, state)
+            self._write(self._backup_file, state)
         except OSError as e:
             logger.error("Failed to save state file '%s': %s", self._state_file, e)
+
+    def _write(self, path: str, state: dict):
+        fd, tmp_path = tempfile.mkstemp(
+            dir=os.path.dirname(path), prefix=".deleterr_state_", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2)
+            os.replace(tmp_path, path)
+        except Exception:
+            # Clean up temp file on failure
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def get_tagged_dates(self, library_name: str) -> dict:
         """Get {rating_key: iso_timestamp} for a library.
