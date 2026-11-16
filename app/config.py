@@ -37,16 +37,17 @@ def env_constructor(loader, node):
     return env_value
 
 
-def hang_on_error(msg):
+def hang_on_error(msg, record=True):
     """Log error and hang indefinitely to prevent restart loops."""
     logger.error(msg)
     logger.error("Container will stay idle. Fix the configuration and restart the container.")
-    try:
-        from app.scheduler import record_startup_failure
+    if record:
+        try:
+            from app.scheduler import record_startup_failure
 
-        record_startup_failure(msg)
-    except Exception:
-        pass
+            record_startup_failure(msg)
+        except Exception:
+            pass
     # Set up signal handler for graceful shutdown
     def shutdown_handler(signum, frame):
         logger.info("Received shutdown signal, exiting.")

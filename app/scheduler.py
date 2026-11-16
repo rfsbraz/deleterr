@@ -53,23 +53,106 @@ def schedule_interval_seconds(schedule, timezone="UTC"):
     return _max_cron_gap_seconds(trigger)
 
 
-def _max_cron_gap_seconds(trigger, horizon_days=400, max_samples=200000):
-    # Walk a long calendar window so clustered crons such as "* 3 * * *"
-    # include the overnight idle gap, not only the one-minute burst.
-    previous = None
+def _next_cron_fire(trigger, fire):
+    return trigger.get_next_fire_time(fire, fire + timedelta(seconds=1))
+
+
+def _last_fire_on_or_before(trigger, lo_fire, probe):
+    """Latest fire in [lo_fire, probe]. lo_fire must itself be a fire time."""
+    if probe <= lo_fire:
+        return lo_fire
+    if trigger.get_next_fire_time(None, probe) == probe:
+        return probe
+    left, right = lo_fire, probe
+    while (right - left).total_seconds() > 1:
+        mid = left + timedelta(seconds=(right - left).total_seconds() / 2)
+        found = trigger.get_next_fire_time(None, mid)
+        if found is not None and found <= probe:
+            left = found
+        else:
+            right = mid
+    return left
+
+
+def _extend_sparse_horizon(last, nxt, end, n, extended):
+    """Give annual or leap-day crons enough room to see a second fire."""
+    if nxt is None or nxt <= end:
+        return end, extended, nxt is None
+    if n < 2 and not extended:
+        end = last + timedelta(days=1600)
+        return end, True, nxt > end
+    return end, extended, True
+
+
+def _skip_dense_cron_burst(trigger, last, gap, end, max_gap, n, extended):
+    """Jump through a tight burst and return after the next idle gap, if any."""
+    step = max(gap * 4, 60.0)
+    cluster_last = last
+    after = last
+    while True:
+        probe = cluster_last + timedelta(seconds=step)
+        if probe > end:
+            probe = end
+        lf = _last_fire_on_or_before(trigger, cluster_last, probe)
+        after = _next_cron_fire(trigger, lf)
+        last = lf
+        if after is None:
+            return last, max_gap, n, extended, True
+        g2 = (after - lf).total_seconds()
+        if g2 > max_gap:
+            max_gap = g2
+        n += 1
+        end, extended, stop = _extend_sparse_horizon(last, after, end, n, extended)
+        if stop:
+            return last, max_gap, n, extended, True
+        if g2 > gap * 1.5:
+            return after, max_gap, n, extended, False
+        cluster_last = after
+        last = after
+        step = min(step * 2, 40 * 24 * 3600)
+        if probe >= end:
+            return last, max_gap, n, extended, True
+
+
+def _max_cron_gap_seconds(trigger, horizon_days=800):
+    # Measure the longest gap without visiting every fire in a dense burst.
+    # Annual and leap-day crons need a window longer than one year; clustered
+    # crons such as "* 3 * * *" and "* * * 1-6 *" must still include the
+    # idle stretch, not only the one-minute samples inside the burst.
     cursor = datetime.now(trigger.timezone)
     end = cursor + timedelta(days=horizon_days)
-    times = []
-    while len(times) < max_samples:
-        nxt = trigger.get_next_fire_time(previous, cursor)
-        if nxt is None or nxt > end:
-            break
-        times.append(nxt)
-        previous = nxt
-        cursor = nxt + timedelta(seconds=1)
-    if len(times) < 2:
+    last = trigger.get_next_fire_time(None, cursor)
+    if last is None:
         raise ValueError("Could not measure the schedule interval")
-    return int(max((finish - start).total_seconds() for start, finish in zip(times, times[1:])))
+
+    max_gap = 0
+    n = 1
+    extended = False
+
+    while True:
+        nxt = _next_cron_fire(trigger, last)
+        end, extended, stop = _extend_sparse_horizon(last, nxt, end, n, extended)
+        if stop:
+            break
+
+        gap = (nxt - last).total_seconds()
+        if gap > max_gap:
+            max_gap = gap
+        n += 1
+
+        if gap >= 12 * 3600:
+            last = nxt
+            continue
+
+        last, max_gap, n, extended, stop = _skip_dense_cron_burst(
+            trigger, nxt, gap, end, max_gap, n, extended
+        )
+        if stop:
+            break
+
+    if n < 2 or max_gap <= 0:
+        raise ValueError("Could not measure the schedule interval")
+    return int(max_gap)
 
 
 def _as_int(value, default=0):
@@ -111,7 +194,7 @@ def record_startup_failure(error, path=None):
     data = {
         "status": "failed",
         "timestamp": now,
-        "error": error,
+        "error": logger.redact(error) if error else error,
         "interval_seconds": previous.get("interval_seconds") or 7 * 24 * 60 * 60,
         "last_success_at": previous.get("last_success_at"),
         "libraries_processed": 0,
@@ -281,12 +364,17 @@ class DeleterrScheduler:
             logger.error(f"Failed to send run failure notification: {e}")
 
     def _interval_seconds(self):
+        cached = getattr(self, "_cached_interval_seconds", None)
+        if cached is not None:
+            return cached
         schedule = self.scheduler_config.get("schedule", "weekly")
         timezone = self.scheduler_config.get("timezone", "UTC")
         try:
-            return schedule_interval_seconds(schedule, timezone)
+            value = schedule_interval_seconds(schedule, timezone)
         except ValueError:
-            return schedule_interval_seconds("weekly", timezone)
+            value = schedule_interval_seconds("weekly", timezone)
+        self._cached_interval_seconds = value
+        return value
 
     def _previous_last_run(self):
         return _read_last_run(self.last_run_file)
@@ -373,7 +461,8 @@ class DeleterrScheduler:
             if not success:
                 hang_on_error(
                     "Initial run failed due to configuration errors. "
-                    "Scheduler will not start until configuration is fixed."
+                    "Scheduler will not start until configuration is fixed.",
+                    record=False,
                 )
 
         # Start the scheduler (blocks)

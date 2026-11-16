@@ -1086,7 +1086,12 @@ class Deleterr:
                     failed_to_tag += 1
 
             if tagged_items:
-                self.items_tagged = getattr(self, "items_tagged", 0) + len(tagged_items)
+                prior_keys = existing_keys | {
+                    str(getattr(item, "ratingKey", ""))
+                    for item in (death_row_plex_items or [])
+                }
+                added = sum(1 for key in tagged_items if key not in prior_keys)
+                self.items_tagged = getattr(self, "items_tagged", 0) + added
                 self.state_manager.set_tagged_dates(library_name, tagged_items)
                 logger.debug(
                     "Recorded tagged timestamps for %d items in library '%s'",
