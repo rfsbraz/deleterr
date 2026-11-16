@@ -271,6 +271,7 @@ See [Notifications Troubleshooting](features/notifications.md#troubleshooting) f
 1. **Read the last-run file**: `/config/.deleterr_last_run.json` records the last attempt. `failed` means the latest run (or a missed one) did not succeed. `starting` that is older than twice the schedule interval means no run has finished in time.
 2. **Check the logs** for the error stored in that file, then fix the cause (credentials, a missed window, a library that failed).
 3. **Override the age limit** only if a longer gap is expected: set `DELETERR_HEALTH_MULTIPLIER` (default `2`) in the container environment.
+4. **External schedulers and `--run-once`**: the healthcheck is for the built-in scheduler. Disable it with `healthcheck: disable: true` in Compose, or set `DELETERR_HEALTHCHECK=0`.
 
 ### Ofelia Not Triggering
 
