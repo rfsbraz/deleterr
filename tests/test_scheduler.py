@@ -595,6 +595,31 @@ class TestScheduleInterval:
         # 29 February 2028 to 29 February 2032 is 1461 days.
         assert schedule_interval_seconds("0 0 29 2 *") == 1461 * 24 * 60 * 60
 
+
+    def test_uneven_daily_hours_use_the_longest_overnight_gap(self, monkeypatch):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from app.scheduler import schedule_interval_seconds
+
+        # 00, 02, 10 and 14: the longest wait is 14:00 to 00:00, ten hours.
+        # Starting mid-morning used to skip that overnight gap and report 8 hours.
+        self._freeze_scheduler_now(
+            monkeypatch, datetime(2026, 11, 16, 9, 0, tzinfo=ZoneInfo("UTC"))
+        )
+        assert schedule_interval_seconds("0 0,2,10,14 * * *") == 10 * 60 * 60
+
+    def test_january_first_that_is_also_monday_is_not_a_week(self, monkeypatch):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from app.scheduler import schedule_interval_seconds
+
+        self._freeze_scheduler_now(monkeypatch, datetime(2026, 11, 16, tzinfo=ZoneInfo("UTC")))
+        # Fires on 1 January 2029, 2035 and 2046. The longest gap is 2035 to
+        # 2046, 4018 days, not the first 2191-day wait.
+        assert schedule_interval_seconds("0 0 1 1 mon") == 4018 * 24 * 60 * 60
+
 class TestStartupFailureStatus:
     def test_hang_on_error_records_a_failed_status(self, tmp_path, monkeypatch):
         import json
