@@ -53,26 +53,77 @@ def schedule_interval_seconds(schedule, timezone="UTC"):
     return _max_cron_gap_seconds(trigger)
 
 
-def _max_cron_gap_seconds(trigger, samples=24):
+def _max_cron_gap_seconds(trigger, horizon_days=400, max_samples=200000):
+    # Walk a long calendar window so clustered crons such as "* 3 * * *"
+    # include the overnight idle gap, not only the one-minute burst.
     previous = None
     cursor = datetime.now(trigger.timezone)
+    end = cursor + timedelta(days=horizon_days)
     times = []
-    for _ in range(samples):
+    while len(times) < max_samples:
         nxt = trigger.get_next_fire_time(previous, cursor)
-        if nxt is None:
+        if nxt is None or nxt > end:
             break
         times.append(nxt)
         previous = nxt
         cursor = nxt + timedelta(seconds=1)
     if len(times) < 2:
         raise ValueError("Could not measure the schedule interval")
-    return int(max((end - start).total_seconds() for start, end in zip(times, times[1:])))
+    return int(max((finish - start).total_seconds() for start, finish in zip(times, times[1:])))
 
 
 def _as_int(value, default=0):
     if isinstance(value, int) and not isinstance(value, bool):
         return value
     return default
+
+
+def _read_last_run(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _atomic_write_last_run(path, data):
+    fd, tmp_path = tempfile.mkstemp(
+        dir=os.path.dirname(path) or ".", prefix=".deleterr_last_run_", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def record_startup_failure(error, path=None):
+    """Write a failed last-run status before hang_on_error idles the process."""
+    path = path or LAST_RUN_FILE
+    previous = _read_last_run(path)
+    now = datetime.now().isoformat()
+    data = {
+        "status": "failed",
+        "timestamp": now,
+        "error": error,
+        "interval_seconds": previous.get("interval_seconds") or 7 * 24 * 60 * 60,
+        "last_success_at": previous.get("last_success_at"),
+        "libraries_processed": 0,
+        "libraries_failed": 0,
+        "items_deleted": 0,
+        "items_tagged": 0,
+        "dry_run": previous.get("dry_run"),
+    }
+    try:
+        _atomic_write_last_run(path, data)
+    except OSError as exc:
+        logger.warning(f"Failed to write last run status to '{path}': {exc}")
 
 
 class DeleterrScheduler:
@@ -238,29 +289,27 @@ class DeleterrScheduler:
             return schedule_interval_seconds("weekly", timezone)
 
     def _previous_last_run(self):
-        try:
-            with open(self.last_run_file, encoding="utf-8") as f:
-                data = json.load(f)
-            return data if isinstance(data, dict) else {}
-        except (OSError, json.JSONDecodeError):
-            return {}
+        return _read_last_run(self.last_run_file)
 
     def _run_counts(self, deleterr=None):
+        dry_run = bool(self.config.settings.get("dry_run", True))
         if deleterr is None:
             return {
                 "libraries_processed": 0,
                 "libraries_failed": 0,
                 "items_deleted": 0,
                 "items_tagged": 0,
+                "dry_run": dry_run,
             }
         result = getattr(deleterr, "run_result", None)
         deleted = getattr(result, "deleted_items", None) if result is not None else None
-        tagged = getattr(result, "preview_items", None) if result is not None else None
+        deleted_count = len(deleted) if isinstance(deleted, list) else 0
         return {
             "libraries_processed": _as_int(getattr(deleterr, "libraries_processed", 0)),
             "libraries_failed": _as_int(getattr(deleterr, "libraries_failed", 0)),
-            "items_deleted": len(deleted) if isinstance(deleted, list) else 0,
-            "items_tagged": len(tagged) if isinstance(tagged, list) else 0,
+            "items_deleted": 0 if dry_run else deleted_count,
+            "items_tagged": _as_int(getattr(deleterr, "items_tagged", 0)),
+            "dry_run": dry_run,
         }
 
     def _record_last_run(self, status, error=None, deleterr=None):
@@ -280,12 +329,7 @@ class DeleterrScheduler:
             **self._run_counts(deleterr),
         }
         try:
-            fd, tmp_path = tempfile.mkstemp(
-                dir=os.path.dirname(self.last_run_file), prefix=".deleterr_last_run_", suffix=".tmp"
-            )
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            os.replace(tmp_path, self.last_run_file)
+            _atomic_write_last_run(self.last_run_file, data)
         except OSError as e:
             logger.warning(f"Failed to write last run status to '{self.last_run_file}': {e}")
 

@@ -111,6 +111,7 @@ class Deleterr:
 
         self.libraries_processed = 0
         self.libraries_failed = 0
+        self.items_tagged = 0
         self.configuration_failures = 0
         self.notification_sent = False
         self.library_failures = []  # (library name, error message) for each failed library
@@ -1021,6 +1022,7 @@ class Deleterr:
         # In dry_run mode, log what would be tagged but don't actually tag
         if is_dry_run:
             if preview:
+                self.items_tagged = getattr(self, "items_tagged", 0) + len(preview)
                 logger.info(
                     "[DRY-RUN] %d items would be added to leaving_soon collection/labels:",
                     len(preview)
@@ -1084,6 +1086,7 @@ class Deleterr:
                     failed_to_tag += 1
 
             if tagged_items:
+                self.items_tagged = getattr(self, "items_tagged", 0) + len(tagged_items)
                 self.state_manager.set_tagged_dates(library_name, tagged_items)
                 logger.debug(
                     "Recorded tagged timestamps for %d items in library '%s'",

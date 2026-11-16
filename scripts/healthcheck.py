@@ -53,7 +53,7 @@ def _load_status(path):
 
 
 def _reference_time(data, status):
-    if status in {"success", "partial"}:
+    if status in {"success", "partial", "starting"}:
         return data.get("last_success_at") or data.get("timestamp")
     return data.get("timestamp")
 
@@ -104,7 +104,13 @@ def _multiplier_from_env():
     return value
 
 
+def _is_disabled():
+    return os.environ.get("DELETERR_HEALTHCHECK", "1").strip().lower() in {"0", "false", "off", "no"}
+
+
 def main(argv=None):
+    if _is_disabled():
+        return 0
     path = os.environ.get("DELETERR_LAST_RUN_FILE", DEFAULT_PATH)
     ok, reason = check(path, multiplier=_multiplier_from_env())
     if not ok:

@@ -414,6 +414,7 @@ class TestLastRunStats:
             instance.library_failures = []
             instance.libraries_processed = 3
             instance.libraries_failed = 0
+            instance.items_tagged = 2
             instance.run_result = result
             scheduler._run_deleterr()
 

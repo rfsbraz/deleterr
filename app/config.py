@@ -41,6 +41,12 @@ def hang_on_error(msg):
     """Log error and hang indefinitely to prevent restart loops."""
     logger.error(msg)
     logger.error("Container will stay idle. Fix the configuration and restart the container.")
+    try:
+        from app.scheduler import record_startup_failure
+
+        record_startup_failure(msg)
+    except Exception:
+        pass
     # Set up signal handler for graceful shutdown
     def shutdown_handler(signum, frame):
         logger.info("Received shutdown signal, exiting.")
