@@ -11,7 +11,7 @@ import os
 import signal
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from apscheduler.events import EVENT_JOB_MISSED, EVENT_JOB_MAX_INSTANCES
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -30,6 +30,49 @@ SCHEDULE_PRESETS = {
     "weekly": "0 3 * * 0",      # Sunday at 3 AM
     "monthly": "0 3 1 * *",     # First day of month at 3 AM
 }
+
+
+def schedule_interval_seconds(schedule, timezone="UTC"):
+    """Return the longest gap, in seconds, between consecutive runs of a schedule."""
+    cron_expr = SCHEDULE_PRESETS.get(schedule.lower(), schedule)
+    parts = cron_expr.split()
+    if len(parts) != 5:
+        raise ValueError(
+            f"Invalid cron expression '{cron_expr}'. "
+            "Expected 5 fields: minute hour day month day_of_week"
+        )
+    minute, hour, day, month, day_of_week = parts
+    trigger = CronTrigger(
+        minute=minute,
+        hour=hour,
+        day=day,
+        month=month,
+        day_of_week=day_of_week,
+        timezone=timezone,
+    )
+    return _max_cron_gap_seconds(trigger)
+
+
+def _max_cron_gap_seconds(trigger, samples=24):
+    previous = None
+    cursor = datetime.now(trigger.timezone)
+    times = []
+    for _ in range(samples):
+        nxt = trigger.get_next_fire_time(previous, cursor)
+        if nxt is None:
+            break
+        times.append(nxt)
+        previous = nxt
+        cursor = nxt + timedelta(seconds=1)
+    if len(times) < 2:
+        raise ValueError("Could not measure the schedule interval")
+    return int(max((end - start).total_seconds() for start, end in zip(times, times[1:])))
+
+
+def _as_int(value, default=0):
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return default
 
 
 class DeleterrScheduler:
@@ -129,7 +172,7 @@ class DeleterrScheduler:
                 error = "All libraries failed: " + "; ".join(
                     f"{name}: {logger.redact(message)}" for name, message in deleterr.library_failures
                 )
-                self._record_last_run("failed", error)
+                self._record_last_run("failed", error, deleterr)
                 if not deleterr.notification_sent:
                     self._notify_failure(error)
                 return False
@@ -140,13 +183,13 @@ class DeleterrScheduler:
                     f"{name}: {logger.redact(message)}" for name, message in deleterr.library_failures
                 )
                 logger.warning(f"Scheduled run completed with errors. {error}")
-                self._record_last_run("partial" if deleterr.libraries_processed else "failed", error)
+                self._record_last_run("partial" if deleterr.libraries_processed else "failed", error, deleterr)
                 return True  # Service failures remain retryable, including at startup.
             if self.config.settings.get("dry_run"):
                 logger.info("[DRY-RUN] Scheduled run completed successfully (no changes were made)")
             else:
                 logger.info("Scheduled run completed successfully")
-            self._record_last_run("success")
+            self._record_last_run("success", deleterr=deleterr)
             return True
         except Exception as e:
             error = logger.redact(f"{type(e).__name__}: {e}")
@@ -186,9 +229,56 @@ class DeleterrScheduler:
         except Exception as e:
             logger.error(f"Failed to send run failure notification: {e}")
 
-    def _record_last_run(self, status, error=None):
+    def _interval_seconds(self):
+        schedule = self.scheduler_config.get("schedule", "weekly")
+        timezone = self.scheduler_config.get("timezone", "UTC")
+        try:
+            return schedule_interval_seconds(schedule, timezone)
+        except ValueError:
+            return schedule_interval_seconds("weekly", timezone)
+
+    def _previous_last_run(self):
+        try:
+            with open(self.last_run_file, encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _run_counts(self, deleterr=None):
+        if deleterr is None:
+            return {
+                "libraries_processed": 0,
+                "libraries_failed": 0,
+                "items_deleted": 0,
+                "items_tagged": 0,
+            }
+        result = getattr(deleterr, "run_result", None)
+        deleted = getattr(result, "deleted_items", None) if result is not None else None
+        tagged = getattr(result, "preview_items", None) if result is not None else None
+        return {
+            "libraries_processed": _as_int(getattr(deleterr, "libraries_processed", 0)),
+            "libraries_failed": _as_int(getattr(deleterr, "libraries_failed", 0)),
+            "items_deleted": len(deleted) if isinstance(deleted, list) else 0,
+            "items_tagged": len(tagged) if isinstance(tagged, list) else 0,
+        }
+
+    def _record_last_run(self, status, error=None, deleterr=None):
         """Atomically write the last run status for healthchecks. Never raises."""
-        data = {"status": status, "timestamp": datetime.now().isoformat(), "error": error}
+        now = datetime.now().isoformat()
+        previous = self._previous_last_run()
+        if status in ("success", "partial"):
+            last_success_at = now
+        else:
+            last_success_at = previous.get("last_success_at")
+        data = {
+            "status": status,
+            "timestamp": now,
+            "error": error,
+            "interval_seconds": self._interval_seconds(),
+            "last_success_at": last_success_at,
+            **self._run_counts(deleterr),
+        }
         try:
             fd, tmp_path = tempfile.mkstemp(
                 dir=os.path.dirname(self.last_run_file), prefix=".deleterr_last_run_", suffix=".tmp"
@@ -228,6 +318,9 @@ class DeleterrScheduler:
         logger.info("Deleterr scheduler started")
         logger.info(f"Schedule: {schedule}")
         logger.info(f"Timezone: {self.scheduler_config.get('timezone', 'UTC')}")
+
+        # So the HEALTHCHECK has a file before the first run.
+        self._record_last_run("starting")
 
         # Run immediately if configured
         if run_on_startup:
