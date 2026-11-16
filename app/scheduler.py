@@ -86,40 +86,60 @@ def _extend_sparse_horizon(last, nxt, end, n, extended):
     return end, extended, True
 
 
-def _skip_dense_cron_burst(trigger, last, gap, end, max_gap, n, extended):
-    """Jump through a tight burst and return after the next idle gap, if any."""
-    step = max(gap * 4, 60.0)
-    cluster_last = last
+def _bisect_idle_gap(trigger, start, end_fire, limit):
+    """Return the first idle gap in (start, end_fire], if any."""
+    left = start
+    right = end_fire
+    while (right - left).total_seconds() > limit * 2:
+        mid_time = left + (right - left) / 2
+        mid_fire = _last_fire_on_or_before(trigger, left, mid_time)
+        mid_next = _next_cron_fire(trigger, mid_fire)
+        if mid_next is not None and mid_next <= right and (mid_next - mid_fire).total_seconds() > limit:
+            return mid_fire, mid_next
+        if mid_fire == left:
+            if mid_next is None or mid_next > right:
+                return left, mid_next
+            if (mid_next - left).total_seconds() > limit:
+                return left, mid_next
+            left = mid_next
+        else:
+            left = mid_fire
+    last = left
+    while last < right:
+        nxt = _next_cron_fire(trigger, last)
+        if nxt is None or nxt > right:
+            return last, nxt
+        if (nxt - last).total_seconds() > limit:
+            return last, nxt
+        last = nxt
+    return right, _next_cron_fire(trigger, right)
+
+
+def _first_idle_gap(trigger, start, probe, tight_gap):
+    """Last fire in a tight run starting at start, and the fire after the first idle gap."""
+    last = start
+    limit = tight_gap * 1.5
     while True:
-        # Measure the immediate next fire before jumping, so an irregular
-        # schedule cannot hide a longer gap behind the probe.
-        after = _next_cron_fire(trigger, cluster_last)
-        if after is None:
-            return cluster_last, max_gap, n, extended, True
-        g2 = (after - cluster_last).total_seconds()
-        if g2 > max_gap:
-            max_gap = g2
-        n += 1
-        end, extended, stop = _extend_sparse_horizon(cluster_last, after, end, n, extended)
-        if stop:
-            return cluster_last, max_gap, n, extended, True
-        if g2 > gap * 1.5:
-            return after, max_gap, n, extended, False
-        probe = cluster_last + timedelta(seconds=step)
-        if probe > end:
-            probe = end
-        cluster_last = _last_fire_on_or_before(trigger, after, probe)
-        last = cluster_last
-        step = min(step * 2, 40 * 24 * 3600)
-        if probe >= end:
-            return last, max_gap, n, extended, True
+        nxt = _next_cron_fire(trigger, last)
+        if nxt is None or nxt > probe:
+            return last, nxt
+        if (nxt - last).total_seconds() > limit:
+            return last, nxt
+        lf = _last_fire_on_or_before(trigger, nxt, probe)
+        if lf <= nxt:
+            last = nxt
+            continue
+        hole_last, hole_next = _bisect_idle_gap(trigger, last, lf, limit)
+        if hole_next is not None and (hole_next - hole_last).total_seconds() > limit:
+            return hole_last, hole_next
+        last = lf
 
 
 def _max_cron_gap_seconds(trigger, horizon_days=800):
-    # Measure the longest gap without visiting every fire in a dense burst.
-    # Annual and leap-day crons need a window longer than one year; clustered
-    # crons such as "* 3 * * *" and "* * * 1-6 *" must still include the
-    # idle stretch, not only the one-minute samples inside the burst.
+    # Measure the longest gap without visiting every fire in a dense burst,
+    # and without jumping over a shorter idle hole (for example the 61-minute
+    # wait in "* 0-22 * * *"). Annual and weekday-constrained crons keep
+    # walking until a second fire is seen, up to 40 years out.
     cursor = datetime.now(trigger.timezone)
     end = cursor + timedelta(days=horizon_days)
     last = trigger.get_next_fire_time(None, cursor)
@@ -141,17 +161,21 @@ def _max_cron_gap_seconds(trigger, horizon_days=800):
             max_gap = gap
         n += 1
 
-        # Only skip tight bursts (every minute or so). Longer irregular
-        # gaps, such as a few hours, are walked fire-to-fire.
         if gap > 3600:
             last = nxt
             continue
 
-        last, max_gap, n, extended, stop = _skip_dense_cron_burst(
-            trigger, nxt, gap, end, max_gap, n, extended
-        )
+        idle_last, idle_next = _first_idle_gap(trigger, last, end, gap)
+        if idle_next is None:
+            break
+        idle = (idle_next - idle_last).total_seconds()
+        if idle > max_gap:
+            max_gap = idle
+        n += 1
+        end, extended, stop = _extend_sparse_horizon(idle_last, idle_next, end, n, extended)
         if stop:
             break
+        last = idle_next
 
     if n < 2 or max_gap <= 0:
         raise ValueError("Could not measure the schedule interval")
