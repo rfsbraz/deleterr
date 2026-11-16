@@ -11,7 +11,7 @@ import os
 import signal
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from apscheduler.events import EVENT_JOB_MISSED, EVENT_JOB_MAX_INSTANCES
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -30,6 +30,210 @@ SCHEDULE_PRESETS = {
     "weekly": "0 3 * * 0",      # Sunday at 3 AM
     "monthly": "0 3 1 * *",     # First day of month at 3 AM
 }
+
+
+def schedule_interval_seconds(schedule, timezone="UTC"):
+    """Return the longest gap, in seconds, between consecutive runs of a schedule."""
+    cron_expr = SCHEDULE_PRESETS.get(schedule.lower(), schedule)
+    parts = cron_expr.split()
+    if len(parts) != 5:
+        raise ValueError(
+            f"Invalid cron expression '{cron_expr}'. "
+            "Expected 5 fields: minute hour day month day_of_week"
+        )
+    minute, hour, day, month, day_of_week = parts
+    trigger = CronTrigger(
+        minute=minute,
+        hour=hour,
+        day=day,
+        month=month,
+        day_of_week=day_of_week,
+        timezone=timezone,
+    )
+    return _max_cron_gap_seconds(trigger)
+
+
+def _next_cron_fire(trigger, fire):
+    return trigger.get_next_fire_time(fire, fire + timedelta(seconds=1))
+
+
+def _last_fire_on_or_before(trigger, lo_fire, probe):
+    """Latest fire in [lo_fire, probe]. lo_fire must itself be a fire time."""
+    if probe <= lo_fire:
+        return lo_fire
+    if trigger.get_next_fire_time(None, probe) == probe:
+        return probe
+    left, right = lo_fire, probe
+    while (right - left).total_seconds() > 1:
+        mid = left + timedelta(seconds=(right - left).total_seconds() / 2)
+        found = trigger.get_next_fire_time(None, mid)
+        if found is not None and found <= probe:
+            left = found
+        else:
+            right = mid
+    return left
+
+
+def _extend_sparse_horizon(last, nxt, end, n, extended):
+    """Keep walking until a second fire is seen, up to 40 years out."""
+    if nxt is None or nxt <= end:
+        return end, extended, nxt is None
+    if n < 2:
+        cap = last + timedelta(days=40 * 366)
+        if nxt <= cap:
+            return cap, True, False
+        return cap, True, True
+    return end, extended, True
+
+
+def _bisect_idle_gap(trigger, start, end_fire, limit):
+    """Return the first idle gap in (start, end_fire], if any."""
+    left = start
+    right = end_fire
+    while (right - left).total_seconds() > limit * 2:
+        mid_time = left + (right - left) / 2
+        mid_fire = _last_fire_on_or_before(trigger, left, mid_time)
+        mid_next = _next_cron_fire(trigger, mid_fire)
+        if mid_next is not None and mid_next <= right and (mid_next - mid_fire).total_seconds() > limit:
+            return mid_fire, mid_next
+        if mid_fire == left:
+            if mid_next is None or mid_next > right:
+                return left, mid_next
+            if (mid_next - left).total_seconds() > limit:
+                return left, mid_next
+            left = mid_next
+        else:
+            left = mid_fire
+    last = left
+    while last < right:
+        nxt = _next_cron_fire(trigger, last)
+        if nxt is None or nxt > right:
+            return last, nxt
+        if (nxt - last).total_seconds() > limit:
+            return last, nxt
+        last = nxt
+    return right, _next_cron_fire(trigger, right)
+
+
+def _first_idle_gap(trigger, start, probe, tight_gap):
+    """Last fire in a tight run starting at start, and the fire after the first idle gap."""
+    last = start
+    limit = tight_gap * 1.5
+    while True:
+        nxt = _next_cron_fire(trigger, last)
+        if nxt is None or nxt > probe:
+            return last, nxt
+        if (nxt - last).total_seconds() > limit:
+            return last, nxt
+        lf = _last_fire_on_or_before(trigger, nxt, probe)
+        if lf <= nxt:
+            last = nxt
+            continue
+        hole_last, hole_next = _bisect_idle_gap(trigger, last, lf, limit)
+        if hole_next is not None and (hole_next - hole_last).total_seconds() > limit:
+            return hole_last, hole_next
+        last = lf
+
+
+def _max_cron_gap_seconds(trigger, horizon_days=800):
+    # Measure the longest gap without visiting every fire in a dense burst,
+    # and without jumping over a shorter idle hole (for example the 61-minute
+    # wait in "* 0-22 * * *"). Annual and weekday-constrained crons keep
+    # walking until a second fire is seen, up to 40 years out.
+    cursor = datetime.now(trigger.timezone)
+    end = cursor + timedelta(days=horizon_days)
+    last = trigger.get_next_fire_time(None, cursor)
+    if last is None:
+        raise ValueError("Could not measure the schedule interval")
+
+    max_gap = 0
+    n = 1
+    extended = False
+
+    while True:
+        nxt = _next_cron_fire(trigger, last)
+        end, extended, stop = _extend_sparse_horizon(last, nxt, end, n, extended)
+        if stop:
+            break
+
+        gap = (nxt - last).total_seconds()
+        if gap > max_gap:
+            max_gap = gap
+        n += 1
+
+        if gap > 3600:
+            last = nxt
+            continue
+
+        idle_last, idle_next = _first_idle_gap(trigger, last, end, gap)
+        if idle_next is None:
+            break
+        idle = (idle_next - idle_last).total_seconds()
+        if idle > max_gap:
+            max_gap = idle
+        n += 1
+        end, extended, stop = _extend_sparse_horizon(idle_last, idle_next, end, n, extended)
+        if stop:
+            break
+        last = idle_next
+
+    if n < 2 or max_gap <= 0:
+        raise ValueError("Could not measure the schedule interval")
+    return int(max_gap)
+
+
+def _as_int(value, default=0):
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return default
+
+
+def _read_last_run(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _atomic_write_last_run(path, data):
+    fd, tmp_path = tempfile.mkstemp(
+        dir=os.path.dirname(path) or ".", prefix=".deleterr_last_run_", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def record_startup_failure(error, path=None):
+    """Write a failed last-run status before hang_on_error idles the process."""
+    path = path or LAST_RUN_FILE
+    previous = _read_last_run(path)
+    now = datetime.now().isoformat()
+    data = {
+        "status": "failed",
+        "timestamp": now,
+        "error": logger.redact(error) if error else error,
+        "interval_seconds": previous.get("interval_seconds") or 7 * 24 * 60 * 60,
+        "last_success_at": previous.get("last_success_at"),
+        "libraries_processed": 0,
+        "libraries_failed": 0,
+        "items_deleted": 0,
+        "items_tagged": 0,
+        "dry_run": previous.get("dry_run"),
+    }
+    try:
+        _atomic_write_last_run(path, data)
+    except OSError as exc:
+        logger.warning(f"Failed to write last run status to '{path}': {exc}")
 
 
 class DeleterrScheduler:
@@ -129,7 +333,7 @@ class DeleterrScheduler:
                 error = "All libraries failed: " + "; ".join(
                     f"{name}: {logger.redact(message)}" for name, message in deleterr.library_failures
                 )
-                self._record_last_run("failed", error)
+                self._record_last_run("failed", error, deleterr)
                 if not deleterr.notification_sent:
                     self._notify_failure(error)
                 return False
@@ -140,13 +344,13 @@ class DeleterrScheduler:
                     f"{name}: {logger.redact(message)}" for name, message in deleterr.library_failures
                 )
                 logger.warning(f"Scheduled run completed with errors. {error}")
-                self._record_last_run("partial" if deleterr.libraries_processed else "failed", error)
+                self._record_last_run("partial" if deleterr.libraries_processed else "failed", error, deleterr)
                 return True  # Service failures remain retryable, including at startup.
             if self.config.settings.get("dry_run"):
                 logger.info("[DRY-RUN] Scheduled run completed successfully (no changes were made)")
             else:
                 logger.info("Scheduled run completed successfully")
-            self._record_last_run("success")
+            self._record_last_run("success", deleterr=deleterr)
             return True
         except Exception as e:
             error = logger.redact(f"{type(e).__name__}: {e}")
@@ -186,16 +390,61 @@ class DeleterrScheduler:
         except Exception as e:
             logger.error(f"Failed to send run failure notification: {e}")
 
-    def _record_last_run(self, status, error=None):
-        """Atomically write the last run status for healthchecks. Never raises."""
-        data = {"status": status, "timestamp": datetime.now().isoformat(), "error": error}
+    def _interval_seconds(self):
+        cached = getattr(self, "_cached_interval_seconds", None)
+        if cached is not None:
+            return cached
+        schedule = self.scheduler_config.get("schedule", "weekly")
+        timezone = self.scheduler_config.get("timezone", "UTC")
         try:
-            fd, tmp_path = tempfile.mkstemp(
-                dir=os.path.dirname(self.last_run_file), prefix=".deleterr_last_run_", suffix=".tmp"
-            )
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            os.replace(tmp_path, self.last_run_file)
+            value = schedule_interval_seconds(schedule, timezone)
+        except ValueError:
+            value = schedule_interval_seconds("weekly", timezone)
+        self._cached_interval_seconds = value
+        return value
+
+    def _previous_last_run(self):
+        return _read_last_run(self.last_run_file)
+
+    def _run_counts(self, deleterr=None):
+        dry_run = bool(self.config.settings.get("dry_run", True))
+        if deleterr is None:
+            return {
+                "libraries_processed": 0,
+                "libraries_failed": 0,
+                "items_deleted": 0,
+                "items_tagged": 0,
+                "dry_run": dry_run,
+            }
+        result = getattr(deleterr, "run_result", None)
+        deleted = getattr(result, "deleted_items", None) if result is not None else None
+        deleted_count = len(deleted) if isinstance(deleted, list) else 0
+        return {
+            "libraries_processed": _as_int(getattr(deleterr, "libraries_processed", 0)),
+            "libraries_failed": _as_int(getattr(deleterr, "libraries_failed", 0)),
+            "items_deleted": 0 if dry_run else deleted_count,
+            "items_tagged": _as_int(getattr(deleterr, "items_tagged", 0)),
+            "dry_run": dry_run,
+        }
+
+    def _record_last_run(self, status, error=None, deleterr=None):
+        """Atomically write the last run status for healthchecks. Never raises."""
+        now = datetime.now().isoformat()
+        previous = self._previous_last_run()
+        if status in ("success", "partial"):
+            last_success_at = now
+        else:
+            last_success_at = previous.get("last_success_at")
+        data = {
+            "status": status,
+            "timestamp": now,
+            "error": error,
+            "interval_seconds": self._interval_seconds(),
+            "last_success_at": last_success_at,
+            **self._run_counts(deleterr),
+        }
+        try:
+            _atomic_write_last_run(self.last_run_file, data)
         except OSError as e:
             logger.warning(f"Failed to write last run status to '{self.last_run_file}': {e}")
 
@@ -229,6 +478,9 @@ class DeleterrScheduler:
         logger.info(f"Schedule: {schedule}")
         logger.info(f"Timezone: {self.scheduler_config.get('timezone', 'UTC')}")
 
+        # So the HEALTHCHECK has a file before the first run.
+        self._record_last_run("starting")
+
         # Run immediately if configured
         if run_on_startup:
             logger.info("run_on_startup enabled, executing initial run...")
@@ -236,7 +488,8 @@ class DeleterrScheduler:
             if not success:
                 hang_on_error(
                     "Initial run failed due to configuration errors. "
-                    "Scheduler will not start until configuration is fixed."
+                    "Scheduler will not start until configuration is fixed.",
+                    record=False,
                 )
 
         # Start the scheduler (blocks)

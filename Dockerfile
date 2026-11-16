@@ -53,5 +53,8 @@ RUN \
 COPY ./config/ /config
 VOLUME /config
 
+# The healthcheck script reads /config/.deleterr_last_run.json (stdlib only).
+HEALTHCHECK --interval=5m --timeout=10s --start-period=2m --retries=3     CMD python3 /app/scripts/healthcheck.py
+
 # Run deleterr when the container launches
 CMD ["deleterr"]
