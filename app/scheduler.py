@@ -75,12 +75,14 @@ def _last_fire_on_or_before(trigger, lo_fire, probe):
 
 
 def _extend_sparse_horizon(last, nxt, end, n, extended):
-    """Give annual or leap-day crons enough room to see a second fire."""
+    """Keep walking until a second fire is seen, up to 40 years out."""
     if nxt is None or nxt <= end:
         return end, extended, nxt is None
-    if n < 2 and not extended:
-        end = last + timedelta(days=1600)
-        return end, True, nxt > end
+    if n < 2:
+        cap = last + timedelta(days=40 * 366)
+        if nxt <= cap:
+            return cap, True, False
+        return cap, True, True
     return end, extended, True
 
 
@@ -88,27 +90,26 @@ def _skip_dense_cron_burst(trigger, last, gap, end, max_gap, n, extended):
     """Jump through a tight burst and return after the next idle gap, if any."""
     step = max(gap * 4, 60.0)
     cluster_last = last
-    after = last
     while True:
-        probe = cluster_last + timedelta(seconds=step)
-        if probe > end:
-            probe = end
-        lf = _last_fire_on_or_before(trigger, cluster_last, probe)
-        after = _next_cron_fire(trigger, lf)
-        last = lf
+        # Measure the immediate next fire before jumping, so an irregular
+        # schedule cannot hide a longer gap behind the probe.
+        after = _next_cron_fire(trigger, cluster_last)
         if after is None:
-            return last, max_gap, n, extended, True
-        g2 = (after - lf).total_seconds()
+            return cluster_last, max_gap, n, extended, True
+        g2 = (after - cluster_last).total_seconds()
         if g2 > max_gap:
             max_gap = g2
         n += 1
-        end, extended, stop = _extend_sparse_horizon(last, after, end, n, extended)
+        end, extended, stop = _extend_sparse_horizon(cluster_last, after, end, n, extended)
         if stop:
-            return last, max_gap, n, extended, True
+            return cluster_last, max_gap, n, extended, True
         if g2 > gap * 1.5:
             return after, max_gap, n, extended, False
-        cluster_last = after
-        last = after
+        probe = cluster_last + timedelta(seconds=step)
+        if probe > end:
+            probe = end
+        cluster_last = _last_fire_on_or_before(trigger, after, probe)
+        last = cluster_last
         step = min(step * 2, 40 * 24 * 3600)
         if probe >= end:
             return last, max_gap, n, extended, True
@@ -140,7 +141,9 @@ def _max_cron_gap_seconds(trigger, horizon_days=800):
             max_gap = gap
         n += 1
 
-        if gap >= 12 * 3600:
+        # Only skip tight bursts (every minute or so). Longer irregular
+        # gaps, such as a few hours, are walked fire-to-fire.
+        if gap > 3600:
             last = nxt
             continue
 
