@@ -620,6 +620,33 @@ class TestScheduleInterval:
         # 2046, 4018 days, not the first 2191-day wait.
         assert schedule_interval_seconds("0 0 1 1 mon") == 4018 * 24 * 60 * 60
 
+
+    def test_every_minute_until_hour_22_includes_the_overnight_hour(self, monkeypatch):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from app.scheduler import schedule_interval_seconds
+
+        self._freeze_scheduler_now(
+            monkeypatch, datetime(2026, 11, 16, 0, 0, tzinfo=ZoneInfo("UTC"))
+        )
+        # * 0-22 * * * fires every minute until 22:59, then waits until 00:00.
+        # A growing probe used to jump over that 61-minute idle gap.
+        assert schedule_interval_seconds("* 0-22 * * *") == 61 * 60
+
+    def test_midday_break_is_the_longest_gap(self, monkeypatch):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from app.scheduler import schedule_interval_seconds
+
+        self._freeze_scheduler_now(
+            monkeypatch, datetime(2026, 11, 16, 0, 0, tzinfo=ZoneInfo("UTC"))
+        )
+        # Every minute from 00:00-10:59 and 14:00-22:59. The lunch break
+        # (10:59 to 14:00) is 3 hours and 1 minute, longer than overnight.
+        assert schedule_interval_seconds("* 0-10,14-22 * * *") == 3 * 60 * 60 + 60
+
 class TestStartupFailureStatus:
     def test_hang_on_error_records_a_failed_status(self, tmp_path, monkeypatch):
         import json
