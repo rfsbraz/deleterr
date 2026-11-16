@@ -372,3 +372,125 @@ class TestScheduledRunFailure:
             assert scheduler._run_deleterr() is True
 
         assert self._last_run(scheduler)["status"] == "failed"
+
+
+class TestLastRunStats:
+    """The last-run file also records counts and the schedule interval (#294)."""
+
+    @pytest.fixture
+    def scheduler(self, tmp_path):
+        config = Mock()
+        config.settings = {
+            "dry_run": False,
+            "scheduler": {"enabled": True, "schedule": "weekly", "timezone": "UTC"},
+        }
+        with patch("app.scheduler.BlockingScheduler"):
+            s = DeleterrScheduler(config)
+        s.last_run_file = str(tmp_path / ".deleterr_last_run.json")
+        return s
+
+    def _last_run(self, scheduler):
+        import json
+
+        with open(scheduler.last_run_file, encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_successful_run_records_counts_and_interval(self, scheduler):
+        from app.modules.notifications.models import DeletedItem, RunResult
+
+        result = RunResult(
+            is_dry_run=False,
+            deleted_items=[
+                DeletedItem("A", 2020, "movie", 1, "Movies", "Radarr"),
+            ],
+            preview_items=[
+                DeletedItem("B", 2021, "movie", 2, "Movies", "Radarr"),
+                DeletedItem("C", 2022, "movie", 3, "Movies", "Radarr"),
+            ],
+        )
+        with patch("app.deleterr.Deleterr") as mock_deleterr:
+            instance = mock_deleterr.return_value
+            instance.has_fatal_errors.return_value = False
+            instance.library_failures = []
+            instance.libraries_processed = 3
+            instance.libraries_failed = 0
+            instance.run_result = result
+            scheduler._run_deleterr()
+
+        last_run = self._last_run(scheduler)
+        assert last_run["status"] == "success"
+        assert last_run["libraries_processed"] == 3
+        assert last_run["libraries_failed"] == 0
+        assert last_run["items_deleted"] == 1
+        assert last_run["items_tagged"] == 2
+        assert last_run["interval_seconds"] == 7 * 24 * 60 * 60
+        assert last_run["last_success_at"] == last_run["timestamp"]
+
+    def test_failed_run_keeps_the_previous_success_timestamp(self, scheduler):
+        import json
+
+        previous = {
+            "status": "success",
+            "timestamp": "2026-11-01T03:00:00",
+            "error": None,
+            "libraries_processed": 2,
+            "libraries_failed": 0,
+            "items_deleted": 4,
+            "items_tagged": 1,
+            "interval_seconds": 604800,
+            "last_success_at": "2026-11-01T03:00:00",
+        }
+        with open(scheduler.last_run_file, "w", encoding="utf-8") as f:
+            json.dump(previous, f)
+
+        with patch("app.deleterr.Deleterr", side_effect=Exception("boom")), \
+             patch("app.modules.notifications.NotificationManager.send_run_failure"):
+            scheduler._run_deleterr()
+
+        last_run = self._last_run(scheduler)
+        assert last_run["status"] == "failed"
+        assert last_run["libraries_processed"] == 0
+        assert last_run["libraries_failed"] == 0
+        assert last_run["items_deleted"] == 0
+        assert last_run["items_tagged"] == 0
+        assert last_run["last_success_at"] == "2026-11-01T03:00:00"
+        assert last_run["interval_seconds"] == 7 * 24 * 60 * 60
+
+    def test_start_records_a_starting_status_before_the_first_run(self, scheduler):
+        scheduler.scheduler = Mock()
+        scheduler.scheduler.start.side_effect = KeyboardInterrupt()
+        with patch.object(scheduler, "_parse_schedule", return_value=Mock()):
+            try:
+                scheduler.start()
+            except (KeyboardInterrupt, SystemExit):
+                pass
+
+        last_run = self._last_run(scheduler)
+        assert last_run["status"] == "starting"
+        assert last_run["interval_seconds"] == 7 * 24 * 60 * 60
+        assert last_run["last_success_at"] is None
+        assert last_run["timestamp"]
+
+
+class TestScheduleInterval:
+    def test_weekly_preset_is_seven_days(self):
+        from app.scheduler import schedule_interval_seconds
+
+        assert schedule_interval_seconds("weekly") == 7 * 24 * 60 * 60
+
+    def test_hourly_and_daily_presets(self):
+        from app.scheduler import schedule_interval_seconds
+
+        assert schedule_interval_seconds("hourly") == 3600
+        assert schedule_interval_seconds("daily") == 24 * 60 * 60
+
+    def test_every_four_hours_cron(self):
+        from app.scheduler import schedule_interval_seconds
+
+        assert schedule_interval_seconds("0 */4 * * *") == 4 * 60 * 60
+
+    def test_monday_and_thursday_uses_the_longer_gap(self):
+        from app.scheduler import schedule_interval_seconds
+
+        # Thursday 4am to Monday 4am is four days.
+        assert schedule_interval_seconds("0 4 * * 1,4") == 4 * 24 * 60 * 60
