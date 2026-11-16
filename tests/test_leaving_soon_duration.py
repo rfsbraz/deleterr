@@ -1649,3 +1649,40 @@ class TestDuplicateLibraryNameStatePreservation:
         expected = datetime.fromisoformat(tagged_at) + timedelta(days=7)
         assert deletion_date == expected, \
             f"Deletion date {deletion_date} should be {expected} (tagged_at + 7d), not now + 7d"
+
+
+    def test_items_tagged_counts_only_new_death_row_members(self, deleterr_instance):
+        """items_tagged is the number of items newly added to Leaving Soon, not the full row."""
+        plex_existing = self._make_plex_item(1001, "Derek")
+        plex_new = self._make_plex_item(1003, "New Show")
+
+        deleterr_instance.items_tagged = 0
+        deleterr_instance.state_manager.set_tagged_dates("TV Shows", {
+            "1001": "2026-03-10T20:02:29",
+        })
+
+        library = {
+            "name": "TV Shows",
+            "sonarr": "Sonarr",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}, "duration": "7d"},
+        }
+        preview = [
+            {"title": "Derek", "tvdbId": 101, "year": 2013},
+            {"title": "New Show", "tvdbId": 103, "year": 2024},
+        ]
+
+        deleterr_instance.media_cleaner.process_leaving_soon.return_value = [
+            plex_existing, plex_new,
+        ]
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance._get_death_row_items = MagicMock(
+            return_value=[plex_existing, plex_new],
+        )
+
+        deleterr_instance._process_library_leaving_soon(
+            library, preview, "show",
+            death_row_plex_items=[plex_existing],
+        )
+
+        assert deleterr_instance.items_tagged == 1
+

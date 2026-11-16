@@ -546,6 +546,55 @@ class TestScheduleInterval:
         assert schedule_interval_seconds("* 3 * * *") == 23 * 60 * 60 + 60
 
 
+
+    def _freeze_scheduler_now(self, monkeypatch, when):
+        from datetime import datetime
+
+        class FrozenDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return when if tz is None else when.astimezone(tz)
+
+        monkeypatch.setattr("app.scheduler.datetime", FrozenDateTime)
+
+    def test_annual_schedule_is_a_full_year_even_in_november(self, monkeypatch):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from app.scheduler import schedule_interval_seconds
+
+        self._freeze_scheduler_now(monkeypatch, datetime(2026, 11, 16, tzinfo=ZoneInfo("UTC")))
+        # From mid-November the next two 1 January fires are 365 days apart.
+        # A 400-day sample window only sees the first fire and used to fall back
+        # to a week, marking a healthy yearly scheduler unhealthy.
+        assert schedule_interval_seconds("0 0 1 1 *") in (
+            365 * 24 * 60 * 60,
+            366 * 24 * 60 * 60,
+        )
+
+    def test_every_minute_for_the_first_half_of_the_year_includes_the_idle_half(self, monkeypatch):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from app.scheduler import schedule_interval_seconds
+
+        self._freeze_scheduler_now(monkeypatch, datetime(2026, 11, 16, tzinfo=ZoneInfo("UTC")))
+        # * * * 1-6 * fires every minute from January to June, then idles until
+        # January. The idle gap is 184 days and one minute (30 June 23:59 to
+        # 1 January 00:00). A 200_000-sample cap used to stop in the burst and
+        # report 60 seconds.
+        assert schedule_interval_seconds("* * * 1-6 *") == 184 * 24 * 60 * 60 + 60
+
+    def test_leap_day_schedule_uses_the_four_year_gap(self, monkeypatch):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from app.scheduler import schedule_interval_seconds
+
+        self._freeze_scheduler_now(monkeypatch, datetime(2026, 11, 16, tzinfo=ZoneInfo("UTC")))
+        # 29 February 2028 to 29 February 2032 is 1461 days.
+        assert schedule_interval_seconds("0 0 29 2 *") == 1461 * 24 * 60 * 60
+
 class TestStartupFailureStatus:
     def test_hang_on_error_records_a_failed_status(self, tmp_path, monkeypatch):
         import json
@@ -566,3 +615,73 @@ class TestStartupFailureStatus:
             last_run = json.load(f)
         assert last_run["status"] == "failed"
         assert "YAML parsing error" in last_run["error"]
+
+    def test_startup_failure_redacts_api_keys(self, tmp_path, monkeypatch):
+        import json
+
+        from app.config import hang_on_error
+
+        path = tmp_path / ".deleterr_last_run.json"
+        monkeypatch.setattr("app.scheduler.LAST_RUN_FILE", str(path))
+
+        def stop(_seconds):
+            raise SystemExit(0)
+
+        monkeypatch.setattr("app.config.time.sleep", stop)
+        secret = "super-secret-sonarr-key"
+        with pytest.raises(SystemExit):
+            hang_on_error(
+                "YAML parsing error: url: http://sonarr:8989/api?apikey=" + secret
+            )
+
+        with open(path, encoding="utf-8") as f:
+            last_run = json.load(f)
+        assert last_run["status"] == "failed"
+        assert secret not in last_run["error"]
+        assert "[REDACTED]" in last_run["error"]
+
+    def test_startup_hang_preserves_a_recorded_cleanup_failure(self, tmp_path, monkeypatch):
+        import json
+        from unittest.mock import Mock, patch
+
+        from app.scheduler import DeleterrScheduler
+
+        path = tmp_path / ".deleterr_last_run.json"
+        recorded = {
+            "status": "failed",
+            "timestamp": "2026-11-16T09:00:00",
+            "error": "All libraries failed: Movies: connection refused",
+            "libraries_processed": 0,
+            "libraries_failed": 2,
+            "items_deleted": 0,
+            "items_tagged": 0,
+        }
+        monkeypatch.setattr("app.scheduler.LAST_RUN_FILE", str(path))
+
+        config = Mock()
+        config.settings = {
+            "scheduler": {"enabled": True, "schedule": "weekly", "run_on_startup": True}
+        }
+        with patch("app.scheduler.BlockingScheduler"):
+            scheduler = DeleterrScheduler(config)
+        scheduler.last_run_file = str(path)
+
+        def already_recorded():
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(recorded, f)
+            return False
+
+        monkeypatch.setattr(scheduler, "_run_deleterr", already_recorded)
+        monkeypatch.setattr(scheduler, "_parse_schedule", Mock())
+        monkeypatch.setattr("app.config.time.sleep", lambda _s: (_ for _ in ()).throw(SystemExit(0)))
+
+        with pytest.raises(SystemExit):
+            scheduler.start()
+
+        with open(path, encoding="utf-8") as f:
+            last_run = json.load(f)
+        assert last_run["status"] == "failed"
+        assert last_run["libraries_failed"] == 2
+        assert last_run["error"] == recorded["error"]
+        assert "Initial run failed" not in (last_run["error"] or "")
+
