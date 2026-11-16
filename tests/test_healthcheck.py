@@ -123,3 +123,27 @@ class TestHealthcheckScript:
         path = tmp_path / "last_run.json"
         monkeypatch.setenv("DELETERR_LAST_RUN_FILE", str(path))
         assert healthcheck.main() == 1
+
+
+    def test_starting_with_a_stale_last_success_is_unhealthy(self, healthcheck, tmp_path):
+        now = datetime(2026, 11, 16, 9, 0, 0)
+        stale = now - timedelta(hours=3)
+        started = now - timedelta(minutes=1)
+        path = tmp_path / "last_run.json"
+        _write(
+            path,
+            _stamp(
+                started,
+                status="starting",
+                last_success_at=stale.isoformat(),
+                interval_seconds=3600,
+            ),
+        )
+        ok, reason = healthcheck.check(path, now=now, multiplier=2)
+        assert ok is False
+        assert "stale" in reason.lower()
+
+    def test_main_can_be_disabled_with_an_environment_variable(self, healthcheck, tmp_path, monkeypatch):
+        monkeypatch.setenv("DELETERR_LAST_RUN_FILE", str(tmp_path / "missing.json"))
+        monkeypatch.setenv("DELETERR_HEALTHCHECK", "0")
+        assert healthcheck.main() == 0

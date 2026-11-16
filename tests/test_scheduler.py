@@ -425,6 +425,48 @@ class TestLastRunStats:
         assert last_run["items_tagged"] == 2
         assert last_run["interval_seconds"] == 7 * 24 * 60 * 60
         assert last_run["last_success_at"] == last_run["timestamp"]
+        assert last_run["dry_run"] is False
+
+    def test_dry_run_records_zero_deletions_and_the_dry_run_flag(self, scheduler):
+        from app.modules.notifications.models import DeletedItem, RunResult
+
+        scheduler.config.settings["dry_run"] = True
+        result = RunResult(
+            is_dry_run=True,
+            deleted_items=[DeletedItem("A", 2020, "movie", 1, "Movies", "Radarr")],
+        )
+        with patch("app.deleterr.Deleterr") as mock_deleterr:
+            instance = mock_deleterr.return_value
+            instance.has_fatal_errors.return_value = False
+            instance.library_failures = []
+            instance.libraries_processed = 1
+            instance.libraries_failed = 0
+            instance.items_tagged = 0
+            instance.run_result = result
+            scheduler._run_deleterr()
+
+        last_run = self._last_run(scheduler)
+        assert last_run["status"] == "success"
+        assert last_run["dry_run"] is True
+        assert last_run["items_deleted"] == 0
+        assert last_run["items_tagged"] == 0
+
+    def test_tagged_count_comes_from_deleterr_not_preview_items(self, scheduler):
+        from app.modules.notifications.models import RunResult
+
+        with patch("app.deleterr.Deleterr") as mock_deleterr:
+            instance = mock_deleterr.return_value
+            instance.has_fatal_errors.return_value = False
+            instance.library_failures = []
+            instance.libraries_processed = 1
+            instance.libraries_failed = 0
+            instance.items_tagged = 4
+            instance.run_result = RunResult(is_dry_run=False)
+            scheduler._run_deleterr()
+
+        last_run = self._last_run(scheduler)
+        assert last_run["items_tagged"] == 4
+        assert last_run["items_deleted"] == 0
 
     def test_failed_run_keeps_the_previous_success_timestamp(self, scheduler):
         import json
@@ -494,3 +536,32 @@ class TestScheduleInterval:
 
         # Thursday 4am to Monday 4am is four days.
         assert schedule_interval_seconds("0 4 * * 1,4") == 4 * 24 * 60 * 60
+
+
+    def test_every_minute_during_hour_three_includes_the_overnight_gap(self):
+        from app.scheduler import schedule_interval_seconds
+
+        # * 3 * * * fires every minute at 03:00-03:59, then waits until the next 03:00.
+        assert schedule_interval_seconds("* 3 * * *") == 23 * 60 * 60 + 60
+
+
+class TestStartupFailureStatus:
+    def test_hang_on_error_records_a_failed_status(self, tmp_path, monkeypatch):
+        import json
+
+        from app.config import hang_on_error
+
+        path = tmp_path / ".deleterr_last_run.json"
+        monkeypatch.setattr("app.scheduler.LAST_RUN_FILE", str(path))
+
+        def stop(_seconds):
+            raise SystemExit(0)
+
+        monkeypatch.setattr("app.config.time.sleep", stop)
+        with pytest.raises(SystemExit):
+            hang_on_error("YAML parsing error: bad indent")
+
+        with open(path, encoding="utf-8") as f:
+            last_run = json.load(f)
+        assert last_run["status"] == "failed"
+        assert "YAML parsing error" in last_run["error"]
