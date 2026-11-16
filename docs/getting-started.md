@@ -154,7 +154,9 @@ If the scheduler process stays running while the host sleeps, a delayed cleanup 
 
 The schedule is kept in memory: this catches up a sleeping process, but does not replay schedules from before a container restart. Use `run_on_startup: true` when a cleanup on container startup is wanted.
 
-After every scheduled run, the scheduler writes `/config/.deleterr_last_run.json` with the `status` (`success`, `partial` when some libraries failed, or `failed`), a `timestamp` and the `error`, if any. Crashed runs also send a failure notification to your configured providers, and partial runs list the failed libraries in the run summary.
+After every scheduled run, the scheduler writes `/config/.deleterr_last_run.json` with the `status` (`success`, `partial` when some libraries failed, or `failed`), a `timestamp`, the `error` if any, `libraries_processed`, `libraries_failed`, `items_deleted`, `items_tagged` (items listed for leaving soon or the next deletion), `interval_seconds` and `last_success_at`. When the scheduler starts, and before the first run, the file is written with `status` set to `starting`. Crashed runs also send a failure notification to your configured providers, and partial runs list the failed libraries in the run summary.
+
+The published Docker image includes a `HEALTHCHECK` that reads this file. The container is unhealthy when the last run `status` is `failed`, or when the last successful run (or the `starting` timestamp, if no run has finished yet) is older than twice the schedule interval. Set `DELETERR_HEALTH_MULTIPLIER` to change that multiplier. The script uses only the Python standard library and the same file can be read by a dashboard or an external check.
 
 ### Ofelia (External Scheduler)
 

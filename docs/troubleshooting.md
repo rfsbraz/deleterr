@@ -262,6 +262,16 @@ See [Notifications Troubleshooting](features/notifications.md#troubleshooting) f
    docker logs deleterr | grep -i schedul
    ```
 
+### Container marked unhealthy
+
+**Symptoms**: `docker inspect` reports `unhealthy` for the Deleterr container
+
+**Solutions**:
+
+1. **Read the last-run file**: `/config/.deleterr_last_run.json` records the last attempt. `failed` means the latest run (or a missed one) did not succeed. `starting` that is older than twice the schedule interval means no run has finished in time.
+2. **Check the logs** for the error stored in that file, then fix the cause (credentials, a missed window, a library that failed).
+3. **Override the age limit** only if a longer gap is expected: set `DELETERR_HEALTH_MULTIPLIER` (default `2`) in the container environment.
+
 ### Ofelia Not Triggering
 
 **Symptoms**: Using Ofelia but Deleterr never runs
