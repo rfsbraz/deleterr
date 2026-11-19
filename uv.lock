@@ -407,7 +407,7 @@ requires-dist = [
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "requests", specifier = "==2.34.2" },
     { name = "simple-justwatch-python-api", specifier = "==0.13" },
-    { name = "tautulli", specifier = "==4.8.2.2180" },
+    { name = "tautulli", specifier = "==4.9.0.2190" },
     { name = "trakt-py", specifier = "==4.4.0" },
 ]
 
@@ -1132,7 +1132,7 @@ wheels = [
 
 [[package]]
 name = "tautulli"
-version = "4.8.2.2180"
+version = "4.9.0.2190"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "objectrest" },
@@ -1144,7 +1144,7 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/02/36/5a45fee383f4e8ba388434788708280a3928f485ac0f7d4de5159d6ee965/tautulli-4.8.2.2180-py3-none-any.whl", hash = "sha256:01fdbb1ac06917559a801ded4942f0103cb7b9d23aab7a75f3ac46b23662698c", size = 90221, upload-time = "2026-09-29T02:07:48.438Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/21/a512f62b5099fc154421e51db454c5864bc1935fdd49a866840fd6ea6cc3/tautulli-4.9.0.2190-py3-none-any.whl", hash = "sha256:586333bb87ee0a2dc8c56c39654fb7eb3794a5f53f7a4d21e79847ccf5473d1d", size = 91043, upload-time = "2026-11-14T09:43:45.199Z" },
 ]
 
 [[package]]
