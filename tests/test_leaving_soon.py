@@ -757,6 +757,265 @@ class TestDeathRowIntersectionLogic:
         deleterr_instance.media_cleaner.delete_series.assert_called_once()
 
 
+
+class TestManualRemovalFromLeavingSoon:
+    """Death row membership comes from the current Plex collection and labels.
+
+    If a user removes an item from the Leaving Soon collection or label, the
+    next run does not delete it, even when it still matches deletion rules.
+    That is not a permanent exclusion. The item can be tagged again later.
+    """
+
+    @pytest.fixture
+    def deleterr_instance(self):
+        """Create a Deleterr instance with mocked dependencies."""
+        with patch("app.deleterr.PlexMediaServer") as mock_plex_class, \
+             patch("app.deleterr.MediaCleaner") as mock_cleaner_class, \
+             patch("app.deleterr.NotificationManager"), \
+             patch("app.deleterr.DRadarr"), \
+             patch("app.deleterr.DSonarr"):
+            from app.deleterr import Deleterr
+
+            instance = object.__new__(Deleterr)
+            instance.config = MagicMock(
+                settings={
+                    "dry_run": False,
+                    "plex": {"url": "http://localhost:32400", "token": "test_token"},
+                    "radarr": [{"name": "radarr", "url": "http://localhost:7878", "api_key": "test"}],
+                    "sonarr": [],
+                    "ssl_verify": False,
+                }
+            )
+            instance.media_server = MagicMock()
+            instance.media_cleaner = MagicMock()
+            instance.state_manager = MagicMock()
+            instance.state_manager.get_tagged_dates.return_value = {}
+            instance.notifications = MagicMock()
+            instance.run_result = MagicMock()
+            instance.radarr = {}
+            instance.sonarr = {}
+            instance.libraries_processed = 0
+            instance.libraries_failed = 0
+            return instance
+
+    def _plex_item(self, rating_key, title):
+        item = MagicMock()
+        item.ratingKey = rating_key
+        item.title = title
+        return item
+
+    def test_collection_omits_a_title_removed_from_the_collection(self, deleterr_instance):
+        """A title no longer in the collection is not on death row."""
+        kept = self._plex_item(1001, "Kept Movie")
+        collection = MagicMock()
+        collection.items.return_value = [kept]
+        deleterr_instance.media_server.get_collection.return_value = collection
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+        }
+
+        items = deleterr_instance._get_death_row_items(library, MagicMock())
+
+        assert [item.ratingKey for item in items] == [1001]
+        deleterr_instance.media_server.get_items_with_label.assert_not_called()
+
+    def test_label_omits_a_title_after_the_label_is_removed(self, deleterr_instance):
+        """A title that no longer has the Leaving Soon label is not on death row."""
+        kept = self._plex_item(1001, "Kept Show")
+        deleterr_instance.media_server.get_items_with_label.return_value = [kept]
+
+        library = {
+            "name": "TV Shows",
+            "leaving_soon": {"labels": {"name": "leaving-soon"}},
+        }
+
+        items = deleterr_instance._get_death_row_items(library, MagicMock())
+
+        assert [item.ratingKey for item in items] == [1001]
+        deleterr_instance.media_server.get_collection.assert_not_called()
+
+    def test_title_removed_from_collection_only_stays_on_death_row_if_label_remains(
+        self, deleterr_instance
+    ):
+        """When both are configured, either the collection or the label is enough."""
+        kept = self._plex_item(1001, "Kept Movie")
+        removed_from_collection = self._plex_item(1002, "Still Labeled Movie")
+        collection = MagicMock()
+        collection.items.return_value = [kept]
+        deleterr_instance.media_server.get_collection.return_value = collection
+        deleterr_instance.media_server.get_items_with_label.return_value = [
+            kept,
+            removed_from_collection,
+        ]
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+                "labels": {"name": "leaving-soon"},
+            },
+        }
+
+        items = deleterr_instance._get_death_row_items(library, MagicMock())
+
+        assert {item.ratingKey for item in items} == {1001, 1002}
+
+    def test_title_removed_from_collection_is_not_deleted_even_when_it_still_matches(
+        self, deleterr_instance
+    ):
+        """Removing a title from the collection skips deletion on the next run."""
+        kept = self._plex_item(1001, "Movie A")
+        removed = self._plex_item(1002, "Movie B")
+        movie_a = {
+            "id": 101,
+            "title": "Movie A",
+            "tmdbId": 550,
+            "sizeOnDisk": 1000,
+        }
+        movie_b = {
+            "id": 102,
+            "title": "Movie B",
+            "tmdbId": 551,
+            "sizeOnDisk": 2000,
+        }
+
+        collection = MagicMock()
+        collection.items.return_value = [kept]
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = collection
+        deleterr_instance._get_deletion_candidates = MagicMock(
+            return_value=[movie_a, movie_b]
+        )
+
+        def find_item(lib, tmdb_id=None, imdb_id=None, title=None, year=None):
+            if tmdb_id == 550:
+                return kept
+            if tmdb_id == 551:
+                return removed
+            return None
+
+        deleterr_instance.media_server.find_item.side_effect = find_item
+        radarr_instance = MagicMock()
+        radarr_instance.get_movies.return_value = [movie_a, movie_b]
+        deleterr_instance.media_server.get_guids.side_effect = lambda item: {
+            "tmdb_id": 550 if item.ratingKey == 1001 else 551,
+            "tvdb_id": None,
+            "imdb_id": None,
+        }
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {"collection": {"name": "Leaving Soon"}},
+            "preview_next": 10,
+        }
+
+        with patch(
+            "app.media_cleaner.library_meets_disk_space_threshold", return_value=True
+        ):
+            _space, deleted, preview, _saved, _prior, _foreign = (
+                deleterr_instance._process_death_row(library, radarr_instance, "movie")
+            )
+
+        assert [item["title"] for item in deleted] == ["Movie A"]
+        radarr_instance.del_movie.assert_called_once()
+        assert [item["title"] for item in preview] == ["Movie B"]
+
+    def test_removed_title_is_not_tagged_again_while_a_duration_batch_is_waiting(
+        self, deleterr_instance
+    ):
+        """A duration batch that is still waiting is left alone, including a removed title."""
+        from datetime import datetime, timedelta
+
+        waiting = self._plex_item(1001, "Waiting Movie")
+        removed = self._plex_item(1002, "Removed Movie")
+        waiting_movie = {"id": 101, "title": "Waiting Movie", "tmdbId": 550}
+        removed_movie = {"id": 102, "title": "Removed Movie", "tmdbId": 551}
+
+        collection = MagicMock()
+        collection.items.return_value = [waiting]
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = collection
+        deleterr_instance.state_manager.get_tagged_dates.return_value = {
+            "1001": (datetime.now() - timedelta(days=2)).isoformat(),
+            "1002": (datetime.now() - timedelta(days=2)).isoformat(),
+        }
+        deleterr_instance._get_deletion_candidates = MagicMock(
+            return_value=[waiting_movie, removed_movie]
+        )
+
+        radarr_instance = MagicMock()
+        radarr_instance.get_movies.return_value = [waiting_movie, removed_movie]
+        deleterr_instance.media_server.get_guids.side_effect = lambda item: {
+            "tmdb_id": 550 if item.ratingKey == 1001 else 551,
+            "tvdb_id": None,
+            "imdb_id": None,
+        }
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+                "duration": "7d",
+            },
+        }
+
+        with patch(
+            "app.media_cleaner.library_meets_disk_space_threshold", return_value=True
+        ):
+            _space, deleted, preview, _saved, _prior, _foreign = (
+                deleterr_instance._process_death_row(library, radarr_instance, "movie")
+            )
+
+        assert deleted == []
+        assert preview is None
+        deleterr_instance._get_deletion_candidates.assert_not_called()
+        radarr_instance.del_movie.assert_not_called()
+
+    def test_emptying_the_collection_during_a_duration_batch_lets_a_new_batch_in(
+        self, deleterr_instance
+    ):
+        """If the collection is empty, a duration batch is treated as cleared."""
+        from datetime import datetime, timedelta
+
+        new_item = self._plex_item(1003, "New Movie")
+        new_movie = {"id": 103, "title": "New Movie", "tmdbId": 552, "sizeOnDisk": 3000}
+
+        collection = MagicMock()
+        collection.items.return_value = []
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = collection
+        deleterr_instance.state_manager.get_tagged_dates.return_value = {
+            "1001": (datetime.now() - timedelta(days=2)).isoformat(),
+        }
+        deleterr_instance._get_deletion_candidates = MagicMock(return_value=[new_movie])
+        deleterr_instance.media_server.find_item.return_value = new_item
+
+        radarr_instance = MagicMock()
+        radarr_instance.get_movies.return_value = [new_movie]
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+                "duration": "7d",
+            },
+            "preview_next": 10,
+        }
+
+        with patch(
+            "app.media_cleaner.library_meets_disk_space_threshold", return_value=True
+        ):
+            _space, deleted, preview, _saved, _prior, _foreign = (
+                deleterr_instance._process_death_row(library, radarr_instance, "movie")
+            )
+
+        assert deleted == []
+        radarr_instance.del_movie.assert_not_called()
+        assert [item["title"] for item in preview] == ["New Movie"]
+
+
 class TestLeavingSoonNotifications:
     """Tests for leaving_soon notification functionality."""
 
