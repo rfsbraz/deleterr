@@ -333,6 +333,61 @@ class TestGetActivity:
         history_calls = [c for c in session.calls if c["url"].endswith("/history")]
         assert history_calls[0]["params"]["server_id"] == SERVER_ID
 
+    def test_server_name_still_keeps_foreign_provider_ref_plays(self):
+        """History must not be limited to server_id, or newer Jellyfin plays are lost."""
+        jellyfin_play = history_record(
+            server_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            server_name="Jellyfin",
+            server_type="jellyfin",
+            rating_key="jf-99",
+            library_id="not-a-plex-section",
+            media_title="Inception",
+            tmdb_id=27205,
+            imdb_id="tt1375666",
+            media_id="00000000-0000-4000-8000-000000000099",
+            stopped_at="2026-10-01T12:00:00.000Z",
+            started_at="2026-10-01T10:00:00.000Z",
+        )
+        plex_item = MagicMock()
+        plex_item.guid = "plex://movie/abc"
+        plex_item.ratingKey = 12345
+        plex_item.title = "Inception"
+        plex_item.year = 2010
+        plex_item.type = "movie"
+        plex_item.guids = [MagicMock(id="tmdb://27205")]
+
+        def respond(path, params):
+            if path.endswith("/servers"):
+                return SERVERS_RESPONSE
+            if path.endswith("/history"):
+                if params.get("server_id") == SERVER_ID:
+                    return history_response([MOVIE_HISTORY])
+                if params.get("server_id"):
+                    return history_response([])
+                return history_response([MOVIE_HISTORY, jellyfin_play])
+            raise AssertionError(path)
+
+        provider, session, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/servers"), respond),
+                (_path_is("/api/v2/public/history"), respond),
+            ],
+            server_name="Attic",
+        )
+        try:
+            result = provider.get_activity("1", library_items=[plex_item])
+        finally:
+            patcher.stop()
+
+        assert "12345" in result
+        assert "jf-99" not in result
+        assert result["movie:tmdb:27205"]["last_watched"] == _iso_to_local(
+            jellyfin_play["stopped_at"]
+        )
+        history_calls = [c for c in session.calls if c["url"].endswith("/history")]
+        assert history_calls
+        assert "server_id" not in history_calls[0]["params"]
+
     def test_empty_history_returns_empty_dict(self):
         provider, _, patcher = _provider(
             [(_path_is("/api/v2/public/history"), history_response([]))]
