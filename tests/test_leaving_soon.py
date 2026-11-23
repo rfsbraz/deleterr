@@ -1015,6 +1015,58 @@ class TestManualRemovalFromLeavingSoon:
         radarr_instance.del_movie.assert_not_called()
         assert [item["title"] for item in preview] == ["New Movie"]
 
+    def test_emptying_only_the_collection_does_not_clear_a_labeled_duration_batch(
+        self, deleterr_instance
+    ):
+        """If a label remains, an empty collection does not start a new duration batch."""
+        from datetime import datetime, timedelta
+
+        waiting = self._plex_item(1001, "Waiting Movie")
+        waiting_movie = {"id": 101, "title": "Waiting Movie", "tmdbId": 550}
+        new_movie = {"id": 103, "title": "New Movie", "tmdbId": 552, "sizeOnDisk": 3000}
+
+        collection = MagicMock()
+        collection.items.return_value = []
+        deleterr_instance.media_server.get_library.return_value = MagicMock()
+        deleterr_instance.media_server.get_collection.return_value = collection
+        deleterr_instance.media_server.get_items_with_label.return_value = [waiting]
+        deleterr_instance.state_manager.get_tagged_dates.return_value = {
+            "1001": (datetime.now() - timedelta(days=2)).isoformat(),
+        }
+        deleterr_instance._get_deletion_candidates = MagicMock(
+            return_value=[waiting_movie, new_movie]
+        )
+
+        radarr_instance = MagicMock()
+        radarr_instance.get_movies.return_value = [waiting_movie, new_movie]
+        deleterr_instance.media_server.get_guids.side_effect = lambda item: {
+            "tmdb_id": 550 if item.ratingKey == 1001 else 552,
+            "tvdb_id": None,
+            "imdb_id": None,
+        }
+
+        library = {
+            "name": "Movies",
+            "leaving_soon": {
+                "collection": {"name": "Leaving Soon"},
+                "labels": {"name": "leaving-soon"},
+                "duration": "7d",
+            },
+            "preview_next": 10,
+        }
+
+        with patch(
+            "app.media_cleaner.library_meets_disk_space_threshold", return_value=True
+        ):
+            _space, deleted, preview, _saved, _prior, _foreign = (
+                deleterr_instance._process_death_row(library, radarr_instance, "movie")
+            )
+
+        assert deleted == []
+        assert preview is None
+        deleterr_instance._get_deletion_candidates.assert_not_called()
+        radarr_instance.del_movie.assert_not_called()
+
 
 class TestLeavingSoonNotifications:
     """Tests for leaving_soon notification functionality."""

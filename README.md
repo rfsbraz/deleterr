@@ -160,7 +160,7 @@ The **Leaving Soon** feature implements a "death row" pattern that warns users b
 
 This creates a Netflix-like experience where users see what's leaving and can prioritize their watchlist.
 
-You can also keep an item by removing it from the Leaving Soon collection or label in Plex before the next run. That is not a permanent exclusion. The [Leaving Soon](https://rfsbraz.github.io/deleterr/features/leaving-soon/) docs describe when Deleterr can tag the item again.
+You can also keep an item by removing it from Leaving Soon in Plex before the next run. If you configured both a collection and a label, remove the item from both. That is not a permanent exclusion. The [Leaving Soon](https://rfsbraz.github.io/deleterr/features/leaving-soon/) docs describe when Deleterr can tag the item again.
 
 ```yaml
 # Example: Enable Leaving Soon with notifications
