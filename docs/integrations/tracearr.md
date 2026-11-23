@@ -18,6 +18,8 @@ tracearr:
 
 Set `server_name` to the managed Plex server whenever Deleterr is cleaning Plex libraries. When it is set, Deleterr only uses rating keys from that server, and plays from other servers still match through provider ids (so a Jellyfin or Emby play can protect the same Plex title).
 
+When `server_name` is set, an unresolvable play from another server fails the library run closed (the library is skipped) rather than that play being dropped. This is intentional.
+
 When `server_name` is omitted, rating keys are not used. Plays can still match through provider ids, with two limits for Plex:
 
 - The requester-watched exclusion never applies, because that lookup needs a verified Plex server.
