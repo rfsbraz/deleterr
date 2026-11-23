@@ -10,8 +10,13 @@ from app.modules.tautulli import Tautulli
 class WatchDataProvider(Protocol):
     """Protocol for watch data providers (Tautulli, Tracearr, Plex, etc.)."""
 
-    def get_activity(self, section: str) -> Dict[str, Dict]:
-        """Get watch activity for a library section."""
+    def get_activity(self, section: str, library_items=None) -> Dict[str, Dict]:
+        """Get watch activity for a library section.
+
+        library_items is an optional iterable of Plex items in that section.
+        Tracearr uses it to keep only plays that belong to the library;
+        Tautulli and Plex ignore it.
+        """
         ...
 
     def test_connection(self) -> None:

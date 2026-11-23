@@ -480,10 +480,16 @@ class MediaCleaner:
         return self.plex.library.section(library.get("name"))
 
     def get_show_activity(self, library, plex_library):
-        return self.watch_provider.get_activity(plex_library.key)
+        return self.watch_provider.get_activity(
+            plex_library.key,
+            library_items=list(plex_library.all()),
+        )
 
     def get_movie_activity(self, library, movies_library):
-        return self.watch_provider.get_activity(movies_library.key)
+        return self.watch_provider.get_activity(
+            movies_library.key,
+            library_items=list(movies_library.all()),
+        )
 
     @staticmethod
     def _library_uses_watch_rules(library):
@@ -2304,28 +2310,39 @@ def check_excluded_seerr_requester_watch(
 
 
 def find_watched_data(plex_media_item, activity_data):
+    """Return the most recent matching history entry for a Plex item.
+
+    A title, rating-key, or GUID alias can be older than a provider-ref
+    play of the same item. Collect every match and keep the newest
+    last_watched so a later Tracearr key cannot be hidden by an earlier
+    alias. Tautulli and Plex still resolve to the same entry they did
+    before when every alias shares one timestamp.
+    """
+    matches = []
+
     if resp := activity_data.get(plex_media_item.guid):
-        return resp
+        matches.append(resp)
 
     # Match by Plex rating key - needed for TV shows where the activity data
     # GUID is the episode GUID, not the show GUID
     rating_key = getattr(plex_media_item, "ratingKey", None)
     if rating_key and (resp := activity_data.get(str(rating_key))):
-        return resp
+        matches.append(resp)
 
     for guid, history in activity_data.items():
         if guid_matches(plex_media_item, guid) or title_and_year_match(
                 plex_media_item, history
         ):
-            return history
+            matches.append(history)
 
-    # Tracearr keys plays by provider refs (movie:tmdb:27205). Run after the
-    # guid/rating-key/title lookups so Tautulli and Plex activity is unchanged.
+    # Tracearr keys plays by provider refs (movie:tmdb:27205).
     for ref in provider_refs_from_plex(plex_media_item):
         if resp := activity_data.get(ref):
-            return resp
+            matches.append(resp)
 
-    return None
+    if not matches:
+        return None
+    return max(matches, key=lambda item: item.get("last_watched") or datetime.min)
 
 
 _PROVIDER_GUID = re.compile(

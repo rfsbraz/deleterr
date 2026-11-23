@@ -63,7 +63,7 @@ class Tracearr:
             section_id,
         )
 
-    def get_activity(self, section):
+    def get_activity(self, section, library_items=None):
         raw_data = self._fetch_history(section)
         if not raw_data:
             return {}
@@ -78,12 +78,15 @@ class Tracearr:
                 len(self._local_server_ids),
                 section,
             )
+        allowed = self._library_identity_keys(library_items)
         last_activity = {}
         for entry in raw_data:
             activity_entry = self._prepare_activity_entry(entry)
             if activity_entry is None:
                 continue
             local = self._is_local_plex_record(entry, section)
+            if not self._relates_to_library(entry, local, allowed):
+                continue
             for key in self._activity_keys(entry, local=local):
                 existing = last_activity.get(key)
                 if (
@@ -106,7 +109,7 @@ class Tracearr:
 
         try:
             ref = self._refs_by_key.get(str(key)) or self._resolve_ref_from_history(
-                str(key)
+                str(key), section
             )
             if not ref:
                 return False
@@ -207,17 +210,85 @@ class Tracearr:
                 value = entry.get(field)
                 if value:
                     keys.append(str(value))
+        keys.extend(self._identity_keys(entry, required=not local))
+        return keys
+
+    @staticmethod
+    def _library_identity_keys(library_items):
+        if library_items is None:
+            return None
+        from app.media_cleaner import provider_refs_from_plex
+
+        allowed = set()
+        for item in library_items:
+            rating_key = getattr(item, "ratingKey", None)
+            if rating_key:
+                allowed.add(str(rating_key))
+            guid = getattr(item, "guid", None)
+            if guid:
+                allowed.add(str(guid))
+            allowed.update(provider_refs_from_plex(item))
+        return allowed
+
+    def _relates_to_library(self, entry, local, allowed):
+        if local:
+            return True
+        # None means the caller did not provide the library; keep only local
+        # plays so unrelated history cannot bypass the empty-history guard.
+        if not allowed:
+            return False
+        for key in self._identity_keys(entry, required=True):
+            if key in allowed:
+                return True
+        return False
+
+    def _identity_keys(self, entry, required=False):
+        keys = []
         media_type = entry.get("media_type")
         if media_type == "movie":
             keys.extend(self._provider_refs("movie", entry))
         elif media_type == "episode":
             keys.extend(self._provider_refs("episode", entry))
-            if entry.get("show_media_id"):
-                keys.append(str(entry["show_media_id"]))
-                keys.extend(self._show_provider_refs(entry["show_media_id"]))
+            keys.extend(self._show_identity_keys(entry, required=required))
         if entry.get("media_id"):
             keys.append(str(entry["media_id"]))
         return keys
+
+    def _show_identity_keys(self, entry, required=False):
+        """Map an episode to its show UUID and show:* provider refs."""
+        show_media_id = entry.get("show_media_id")
+        if not show_media_id and entry.get("media_id"):
+            show_media_id = self._show_media_id_from_ref(entry["media_id"])
+        if not show_media_id:
+            for ref in self._provider_refs("episode", entry):
+                show_media_id = self._show_media_id_from_ref(ref)
+                if show_media_id:
+                    break
+        keys = []
+        if show_media_id:
+            keys.append(str(show_media_id))
+            keys.extend(self._show_provider_refs(show_media_id))
+        if required and not any(key.startswith("show:") for key in keys):
+            target = show_media_id or entry.get("media_id") or "episode"
+            raise TracearrApiError(
+                "Tracearr did not resolve a canonical show identity "
+                f"for {target}; incomplete history cannot be used for "
+                "deletion decisions."
+            )
+        return keys
+
+    def _show_media_id_from_ref(self, ref):
+        body = self._get(
+            f"{API_PREFIX}/media/{quote(str(ref), safe=':')}",
+            allow_404=True,
+        )
+        if not isinstance(body, dict):
+            return None
+        if body.get("show_media_id"):
+            return str(body["show_media_id"])
+        if body.get("media_type") == "show" and body.get("id"):
+            return str(body["id"])
+        return None
 
     def _show_provider_refs(self, show_media_id):
         """Resolve a show uuid to show:tvdb:/show:tmdb:/show:imdb: refs."""
@@ -299,44 +370,79 @@ class Tracearr:
         if ref:
             self._refs_by_key[str(rating_key)] = str(ref)
 
-    def _resolve_ref_from_history(self, rating_key):
-        params = {"pageSize": 1, "rating_key": rating_key}
-        server_id = self._cached_server_id()
+    def _resolve_ref_from_history(self, rating_key, section=None):
+        params = {"pageSize": HISTORY_PAGE_SIZE, "rating_key": rating_key}
+        server_id = self._managed_server_id()
         if self.server_name and not server_id:
             try:
                 server_id = self._resolve_server_id()
             except TracearrApiError:
-                server_id = None
+                return None
         if server_id:
             params["server_id"] = server_id
         try:
-            body = self._get(f"{API_PREFIX}/history", params=params)
+            records = []
+            cursor = None
+            while True:
+                page_params = dict(params)
+                if cursor:
+                    page_params["cursor"] = cursor
+                body = self._get(f"{API_PREFIX}/history", params=page_params)
+                page = body.get("data") if isinstance(body, dict) else None
+                if not page:
+                    break
+                records.extend(page)
+                cursor = (body.get("meta") or {}).get("nextCursor")
+                if not cursor:
+                    break
         except TracearrApiError:
             return None
-        records = body.get("data") if isinstance(body, dict) else None
-        if not records:
+
+        candidates = [
+            entry
+            for entry in records
+            if self._is_managed_plex_history(entry, section, server_id)
+        ]
+        if not candidates:
             return None
-        entry = records[0]
-        local = (
-            entry.get("server_type") == "plex"
-            and (
-                (self._server_id and entry.get("server_id") == self._server_id)
-                or (
-                    len(self._local_server_ids) == 1
-                    and entry.get("server_id") in self._local_server_ids
-                )
-            )
-        )
-        self._remember_refs(entry, local=local)
+        if not server_id:
+            servers = {
+                entry.get("server_id")
+                for entry in candidates
+                if entry.get("server_id")
+            }
+            if len(servers) != 1:
+                return None
+
+        entry = candidates[0]
+        self._remember_refs(entry, local=True)
         if str(entry.get("grandparent_rating_key") or "") == str(rating_key) and entry.get(
             "show_media_id"
         ):
             return str(entry["show_media_id"])
-        if local:
-            cached = self._refs_by_key.get(str(rating_key))
-            if cached:
-                return cached
+        cached = self._refs_by_key.get(str(rating_key))
+        if cached:
+            return cached
         return self._preferred_ref(entry)
+
+    def _managed_server_id(self):
+        if self._server_id:
+            return self._server_id
+        if len(self._local_server_ids) == 1:
+            return next(iter(self._local_server_ids))
+        return None
+
+    def _is_managed_plex_history(self, entry, section, server_id=None):
+        if entry.get("server_type") != "plex":
+            return False
+        if section is not None:
+            library_id = entry.get("library_id")
+            if library_id is None or str(library_id) != str(section):
+                return False
+        managed = server_id or self._managed_server_id()
+        if managed:
+            return entry.get("server_id") == managed
+        return True
 
     def _cached_server_id(self):
         return self._server_id
