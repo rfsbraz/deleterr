@@ -786,3 +786,144 @@ class TestUnresolvedShowIdentity:
                 )
         finally:
             patcher.stop()
+
+
+class TestUnparseableTimestamps:
+    def test_unparseable_timestamp_among_valid_records_raises(self):
+        """A skipped bad timestamp must not leave other titles looking unwatched."""
+        broken = history_record(
+            id="ffffffff-0000-4000-8000-333333333333",
+            reference_id="ffffffff-0000-4000-8000-333333333333",
+            rating_key="67890",
+            media_title="Heat",
+            tmdb_id=949,
+            imdb_id="tt0113270",
+            media_id="00000000-0000-4000-8000-000000000002",
+            stopped_at="not-a-timestamp",
+            started_at="also-not-a-timestamp",
+        )
+        provider, _, patcher = _provider(
+            [
+                (
+                    _path_is("/api/v2/public/history"),
+                    history_response([MOVIE_HISTORY, broken]),
+                )
+            ]
+        )
+        try:
+            with pytest.raises(TracearrApiError, match="unparseable watch timestamp"):
+                provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+
+class TestUnverifiedRatingKeys:
+    def test_unique_library_id_without_server_name_does_not_use_rating_keys(self):
+        """Library IDs and rating keys are server-local and commonly reused."""
+        other_plex = history_record(
+            server_id="bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+            server_name="Someone Else's Plex",
+            server_type="plex",
+            rating_key="12345",
+            library_id="1",
+            media_title="Some Other Film",
+            tmdb_id=1,
+            imdb_id="tt0000001",
+            media_id="00000000-0000-4000-8000-000000000001",
+        )
+        plex_item = MagicMock()
+        plex_item.guid = "plex://movie/abc"
+        plex_item.ratingKey = 12345
+        plex_item.title = "Inception"
+        plex_item.year = 2010
+        plex_item.type = "movie"
+        plex_item.guids = [MagicMock(id="tmdb://27205")]
+
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/history"), history_response([other_plex]))]
+        )
+        try:
+            result = provider.get_activity("1", library_items=[plex_item])
+        finally:
+            patcher.stop()
+
+        assert "12345" not in result
+        assert "movie:tmdb:1" not in result
+
+        from app.media_cleaner import find_watched_data
+
+        assert find_watched_data(plex_item, result) is None
+
+    def test_unverified_plex_play_matches_by_provider_ref_only(self):
+        plex_item = MagicMock()
+        plex_item.guid = "plex://movie/abc"
+        plex_item.ratingKey = 12345
+        plex_item.title = "Inception"
+        plex_item.year = 2010
+        plex_item.type = "movie"
+        plex_item.guids = [MagicMock(id="tmdb://27205")]
+
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/history"), history_response([MOVIE_HISTORY]))]
+        )
+        try:
+            result = provider.get_activity("1", library_items=[plex_item])
+        finally:
+            patcher.stop()
+
+        assert "12345" not in result
+        assert result["movie:tmdb:27205"]["title"] == "Inception"
+
+        from app.media_cleaner import find_watched_data
+
+        assert find_watched_data(plex_item, result) is not None
+
+    def test_uncached_rating_key_is_not_resolved_without_a_verified_server(self):
+        def respond(path, params):
+            if path.endswith("/history"):
+                return history_response([MOVIE_HISTORY])
+            if "/media/" in path and path.endswith("/watchers"):
+                return watchers_response(["john_doe"])
+            raise AssertionError(path)
+
+        provider, session, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/history"), respond),
+                (lambda path, params: "/media/" in path, respond),
+            ]
+        )
+        try:
+            watched = provider.has_user_watched("1", "12345", None, "john_doe")
+        finally:
+            patcher.stop()
+
+        assert watched is False
+        assert not any(c["url"].rstrip("/").endswith("/watchers") for c in session.calls)
+
+
+class TestWatcherUsernameOnly:
+    def test_has_user_watched_ignores_identity_display_name(self):
+        def respond(path, params):
+            if path.endswith("/servers"):
+                return SERVERS_RESPONSE
+            if path.endswith("/history"):
+                return history_response([MOVIE_HISTORY])
+            if "/media/" in path and path.endswith("/watchers"):
+                return watchers_response(
+                    [{"username": "alice", "identity_name": "john_doe"}]
+                )
+            raise AssertionError(path)
+
+        provider, _, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/servers"), respond),
+                (_path_is("/api/v2/public/history"), respond),
+                (lambda path, params: "/media/" in path, respond),
+            ],
+            server_name="Attic",
+        )
+        try:
+            assert provider.has_user_watched("1", "12345", None, "john_doe") is False
+            assert provider.has_user_watched("1", "12345", None, "alice") is True
+        finally:
+            patcher.stop()
