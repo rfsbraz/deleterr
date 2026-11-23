@@ -90,6 +90,12 @@ def provider_factory():
     return factory
 
 
+
+def _with_managed_server(routes):
+    """Prefix the official /servers payload so server_name can be resolved."""
+    return [(_path_is("/api/v2/public/servers"), SERVERS_RESPONSE), *routes]
+
+
 def _provider(routes, **kwargs):
     session = FakeSession(routes)
     patcher = patch("app.modules.tracearr.requests.get", session.get)
@@ -164,12 +170,15 @@ class TestTestConnection:
 class TestGetActivity:
     def test_movies_keyed_by_rating_key_and_provider_ref(self):
         provider, session, patcher = _provider(
-            [
-                (
-                    _path_is("/api/v2/public/history"),
-                    history_response([MOVIE_HISTORY]),
-                )
-            ]
+            _with_managed_server(
+                [
+                    (
+                        _path_is("/api/v2/public/history"),
+                        history_response([MOVIE_HISTORY]),
+                    )
+                ]
+            ),
+            server_name="Attic",
         )
         try:
             result = provider.get_activity("1")
@@ -183,19 +192,22 @@ class TestGetActivity:
         assert result["movie:tmdb:27205"]["title"] == "Inception"
         assert result["movie:imdb:tt1375666"]["title"] == "Inception"
         assert result[MOVIE_MEDIA_ID]["title"] == "Inception"
-        call = session.calls[0]
-        assert call["url"] == "http://tracearr.example.com/api/v2/public/history"
-        assert call["params"]["pageSize"] == 100
+        history_calls = [c for c in session.calls if c["url"].endswith("/history")]
+        assert history_calls[0]["url"] == "http://tracearr.example.com/api/v2/public/history"
+        assert history_calls[0]["params"]["pageSize"] == 100
 
     def test_tv_episodes_roll_up_to_show_rating_key(self):
         provider, _, patcher = _provider(
-            [
-                (
-                    _path_is("/api/v2/public/history"),
-                    history_response([EPISODE_HISTORY]),
-                ),
-                (_is_show_media, SHOW_MEDIA),
-            ]
+            _with_managed_server(
+                [
+                    (
+                        _path_is("/api/v2/public/history"),
+                        history_response([EPISODE_HISTORY]),
+                    ),
+                    (_is_show_media, SHOW_MEDIA),
+                ]
+            ),
+            server_name="Attic",
         )
         try:
             result = provider.get_activity("2")
@@ -219,12 +231,15 @@ class TestGetActivity:
             media_id="00000000-0000-4000-8000-000000000001",
         )
         provider, _, patcher = _provider(
-            [
-                (
-                    _path_is("/api/v2/public/history"),
-                    history_response([MOVIE_HISTORY, other_library]),
-                )
-            ]
+            _with_managed_server(
+                [
+                    (
+                        _path_is("/api/v2/public/history"),
+                        history_response([MOVIE_HISTORY, other_library]),
+                    )
+                ]
+            ),
+            server_name="Attic",
         )
         try:
             result = provider.get_activity("1")
@@ -246,7 +261,10 @@ class TestGetActivity:
             started_at="2026-09-15T10:00:00.000Z",
         )
         provider, _, patcher = _provider(
-            [(_path_is("/api/v2/public/history"), history_response([newer, older]))]
+            _with_managed_server(
+                [(_path_is("/api/v2/public/history"), history_response([newer, older]))]
+            ),
+            server_name="Attic",
         )
         try:
             result = provider.get_activity("1")
@@ -275,7 +293,10 @@ class TestGetActivity:
             return history_response([first], next_cursor="page-2")
 
         provider, session, patcher = _provider(
-            [(_path_is("/api/v2/public/history"), respond)]
+            _with_managed_server(
+                [(_path_is("/api/v2/public/history"), respond)]
+            ),
+            server_name="Attic",
         )
         try:
             result = provider.get_activity("1")
@@ -285,8 +306,9 @@ class TestGetActivity:
         assert "12345" in result
         assert "67890" in result
         assert result["67890"]["title"] == "Heat"
-        assert session.calls[0]["params"].get("cursor") is None
-        assert session.calls[1]["params"]["cursor"] == "page-2"
+        history_calls = [c for c in session.calls if c["url"].endswith("/history")]
+        assert history_calls[0]["params"].get("cursor") is None
+        assert history_calls[1]["params"]["cursor"] == "page-2"
 
     def test_filters_by_server_name(self):
         def respond(path, params):
@@ -366,10 +388,13 @@ class TestHasUserWatched:
             raise AssertionError(path)
 
         provider, session, patcher = _provider(
-            [
-                (_path_is("/api/v2/public/history"), respond),
-                (lambda path, params: "/media/" in path and path.endswith("/watchers"), respond),
-            ]
+            _with_managed_server(
+                [
+                    (_path_is("/api/v2/public/history"), respond),
+                    (lambda path, params: "/media/" in path and path.endswith("/watchers"), respond),
+                ]
+            ),
+            server_name="Attic",
         )
         try:
             provider.get_activity("1")
@@ -394,11 +419,14 @@ class TestHasUserWatched:
             raise AssertionError(path)
 
         provider, _, patcher = _provider(
-            [
-                (_path_is("/api/v2/public/history"), respond),
-                (_is_show_media, respond),
-                (lambda path, params: "/media/" in path and path.endswith("/watchers"), respond),
-            ]
+            _with_managed_server(
+                [
+                    (_path_is("/api/v2/public/history"), respond),
+                    (_is_show_media, respond),
+                    (lambda path, params: "/media/" in path and path.endswith("/watchers"), respond),
+                ]
+            ),
+            server_name="Attic",
         )
         try:
             provider.get_activity("2")
@@ -418,10 +446,13 @@ class TestHasUserWatched:
             raise AssertionError(path)
 
         provider, session, patcher = _provider(
-            [
-                (_path_is("/api/v2/public/history"), respond),
-                (lambda path, params: "/media/" in path and path.endswith("/watchers"), respond),
-            ]
+            _with_managed_server(
+                [
+                    (_path_is("/api/v2/public/history"), respond),
+                    (lambda path, params: "/media/" in path and path.endswith("/watchers"), respond),
+                ]
+            ),
+            server_name="Attic",
         )
         try:
             assert provider.has_user_watched("1", "12345", None, "john_doe") is True
@@ -460,7 +491,10 @@ class TestFindWatchedDataProviderRefs:
         from app.media_cleaner import find_watched_data
 
         provider, _, patcher = _provider(
-            [(_path_is("/api/v2/public/history"), history_response([MOVIE_HISTORY]))]
+            _with_managed_server(
+                [(_path_is("/api/v2/public/history"), history_response([MOVIE_HISTORY]))]
+            ),
+            server_name="Attic",
         )
         try:
             activity = provider.get_activity("1")
@@ -503,12 +537,15 @@ class TestFindWatchedDataProviderRefs:
         )
         # Older Plex play of a different title sharing no provider ids
         provider, _, patcher = _provider(
-            [
-                (
-                    _path_is("/api/v2/public/history"),
-                    history_response([MOVIE_HISTORY, jellyfin_play]),
-                )
-            ]
+            _with_managed_server(
+                [
+                    (
+                        _path_is("/api/v2/public/history"),
+                        history_response([MOVIE_HISTORY, jellyfin_play]),
+                    )
+                ]
+            ),
+            server_name="Attic",
         )
         plex_item = MagicMock()
         plex_item.guid = "plex://movie/abc"
@@ -543,7 +580,15 @@ class TestFindWatchedDataProviderRefs:
             started_at="2026-10-01T10:00:00.000Z",
         )
         provider, _, patcher = _provider(
-            [(_path_is("/api/v2/public/history"), history_response([MOVIE_HISTORY, foreign]))]
+            _with_managed_server(
+                [
+                    (
+                        _path_is("/api/v2/public/history"),
+                        history_response([MOVIE_HISTORY, foreign]),
+                    )
+                ]
+            ),
+            server_name="Attic",
         )
         try:
             result = provider.get_activity("1")

@@ -83,7 +83,11 @@ class Tracearr:
         for entry in raw_data:
             activity_entry = self._prepare_activity_entry(entry)
             if activity_entry is None:
-                continue
+                raise TracearrApiError(
+                    "Tracearr returned a history record with an unparseable "
+                    "watch timestamp; incomplete history cannot be used for "
+                    "deletion decisions."
+                )
             local = self._is_local_plex_record(entry, section)
             if not self._relates_to_library(entry, local, allowed):
                 continue
@@ -141,9 +145,12 @@ class Tracearr:
         needle = user.strip().lower()
         for watcher in watchers:
             account = watcher.get("user") or {}
-            for name in (account.get("username"), account.get("identity_name")):
-                if name and name.strip().lower() == needle:
-                    return True
+            # identity_name is a user-defined display name, not the
+            # server-account username. A colliding display name must not
+            # un-protect a requester who has not watched the title.
+            name = account.get("username")
+            if name and name.strip().lower() == needle:
+                return True
         return False
 
     def _fetch_history(self, section):
@@ -319,12 +326,18 @@ class Tracearr:
         }
 
     def _is_local_plex_record(self, entry, section):
-        """True when this play can safely be keyed by a Plex rating key."""
+        """True when this play can safely be keyed by a Plex rating key.
+
+        Library IDs and rating keys are server-local and commonly reused
+        (1, 2, 3...). Only a verified managed Plex server (server_name, or
+        another resolved identity in _server_id) may publish rating keys.
+        Otherwise plays match through provider refs only, as they already
+        do when more than one Plex server shares that library id.
+        """
         if entry.get("server_type") != "plex":
             return False
-        if len(self._local_server_ids) != 1:
-            return False
-        if entry.get("server_id") not in self._local_server_ids:
+        managed = self._managed_server_id()
+        if not managed or entry.get("server_id") != managed:
             return False
         library_id = entry.get("library_id")
         return library_id is not None and str(library_id) == str(section)
@@ -378,8 +391,11 @@ class Tracearr:
                 server_id = self._resolve_server_id()
             except TracearrApiError:
                 return None
-        if server_id:
-            params["server_id"] = server_id
+        # Without a verified managed server, a unique library-id match is
+        # not enough: rating keys are server-local and commonly reused.
+        if not server_id:
+            return None
+        params["server_id"] = server_id
         try:
             records = []
             cursor = None
@@ -426,11 +442,12 @@ class Tracearr:
         return self._preferred_ref(entry)
 
     def _managed_server_id(self):
-        if self._server_id:
-            return self._server_id
-        if len(self._local_server_ids) == 1:
-            return next(iter(self._local_server_ids))
-        return None
+        """The verified managed Plex server, or None.
+
+        A unique library-id match is not a verified identity: library IDs
+        are server-local and commonly reused.
+        """
+        return self._server_id
 
     def _is_managed_plex_history(self, entry, section, server_id=None):
         if entry.get("server_type") != "plex":
