@@ -792,6 +792,55 @@ class TestResolveRefScoping:
         assert watched is False
         assert not any(c["url"].rstrip("/").endswith("/watchers") for c in session.calls)
 
+    def test_uncached_rating_key_with_server_name_ignores_a_foreign_first_record(self):
+        """With server_name set, a foreign first history hit must still be ignored."""
+        foreign = history_record(
+            server_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            server_name="Jellyfin",
+            server_type="jellyfin",
+            rating_key="12345",
+            library_id="1",
+            media_title="Some Other Film",
+            tmdb_id=1,
+            imdb_id="tt0000001",
+            media_id="00000000-0000-4000-8000-000000000001",
+        )
+
+        def respond(path, params):
+            if path.endswith("/servers"):
+                return SERVERS_RESPONSE
+            if path.endswith("/history"):
+                return history_response([foreign, MOVIE_HISTORY])
+            if "/media/" in path and path.endswith("/watchers"):
+                if "000000000001" in path or "movie:tmdb:1" in path:
+                    return watchers_response(
+                        ["john_doe"],
+                        media_id=foreign["media_id"],
+                    )
+                return watchers_response(["someone_else"])
+            raise AssertionError(path)
+
+        provider, session, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/servers"), respond),
+                (_path_is("/api/v2/public/history"), respond),
+                (lambda path, params: "/media/" in path, respond),
+            ],
+            server_name="Attic",
+        )
+        try:
+            watched = provider.has_user_watched("1", "12345", None, "john_doe")
+        finally:
+            patcher.stop()
+
+        assert watched is False
+        watcher_calls = [c for c in session.calls if c["url"].rstrip("/").endswith("/watchers")]
+        assert watcher_calls
+        assert all(
+            "000000000001" not in c["url"] and "movie:tmdb:1" not in c["url"]
+            for c in watcher_calls
+        )
+
 
 class TestUnresolvedShowIdentity:
     def test_unresolved_show_identity_raises(self):
