@@ -37,7 +37,7 @@ Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files ba
 | Disk-space-aware deletion | Yes | Yes | Yes |
 | Trakt, MDBList, or JustWatch list exclusions | Yes | No | No |
 | Actions other than delete | No | Yes (unmonitor, quality profile, overlays) | No |
-| Watch history | Tautulli | Tautulli, Streamystats, or Tracearr | Optional, via Jellystat, Streamystats, or janitorr-stats |
+| Watch history | Tautulli or Plex | Tautulli, Streamystats, or Tracearr | Optional, via Jellystat, Streamystats, or janitorr-stats |
 
 Janitorr's README says Emby is implemented and tested, but the author does not use Emby and relies on bug reports for it. The README also says Janitorr does not delete items after they were watched.
 
