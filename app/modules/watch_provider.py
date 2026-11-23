@@ -74,11 +74,20 @@ def create_watch_provider(config, ssl_verify=False) -> WatchDataProvider:
         from app.modules.tracearr import Tracearr
 
         logger.debug("Using Tracearr as watch data provider")
+        server_name = (tracearr_config.get("server_name") or "").strip()
+        if not server_name and config.settings.get("plex"):
+            logger.warning(
+                "Tracearr is configured for Plex without server_name. The "
+                "requester-watched exclusion will never apply, and items with no "
+                "tmdb, tvdb, or imdb GUIDs cannot be matched to Tracearr plays, so "
+                "they look unwatched. Set tracearr.server_name to the managed Plex "
+                "server."
+            )
         return Tracearr(
             tracearr_config["url"],
             tracearr_config["api_key"],
             ssl_verify=ssl_verify,
-            server_name=tracearr_config.get("server_name"),
+            server_name=server_name or None,
         )
 
     plex_config = config.settings.get("plex")
