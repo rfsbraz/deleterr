@@ -24,10 +24,21 @@ sonarr:
     api_key: "YOUR_SONARR_API_KEY2"
 
 # Tautulli connection details (optional)
-# If configured, Tautulli is used for watch history. Otherwise, Plex API is used directly.
+# If configured, Tautulli is used for watch history. Otherwise Tracearr is used
+# when configured, or the Plex API as a final fallback.
 tautulli:
   url: "http://localhost:8181"  # Replace with your Tautulli server URL
   api_key: "YOUR_TAUTULLI_API_KEY"  # Replace with your Tautulli API key
+
+# Tracearr connection details (optional)
+# Alternative to Tautulli for watch history (Plex, Jellyfin, or Emby).
+# Used only when tautulli is not configured. Requires Tracearr 2.0 or later.
+# Public API v2 docs: https://docs.tracearr.com/api
+# Generate an API key in Tracearr Settings > Data & API > API (trr_pub_...).
+# tracearr:
+#   url: "http://localhost:3000"
+#   api_key: "trr_pub_YOUR_TRACEARR_API_KEY"
+#   server_name: "Plex"  # Optional: which Tracearr-monitored server to query
 
 # Trakt application, created on https://trakt.tv/oauth/applications
 trakt:

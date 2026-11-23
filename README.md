@@ -8,7 +8,7 @@
 
 **Intelligent media library cleanup for Plex.**
 
-Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files based on user-specified criteria like watch history, age, and streaming availability.
+Deleterr uses Radarr, Sonarr, and Tautulli or Tracearr to identify and delete media files based on user-specified criteria like watch history, age, and streaming availability.
 
 ## Key Features
 

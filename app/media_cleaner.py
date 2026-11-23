@@ -2315,7 +2315,68 @@ def find_watched_data(plex_media_item, activity_data):
         ):
             return history
 
+    # Tracearr keys plays by provider refs (movie:tmdb:27205). Run after the
+    # guid/rating-key/title lookups so Tautulli and Plex activity is unchanged.
+    for ref in provider_refs_from_plex(plex_media_item):
+        if resp := activity_data.get(ref):
+            return resp
+
     return None
+
+
+_PROVIDER_GUID = re.compile(
+    r"(?:com\.plexapp\.agents\.)?(themoviedb|tmdb|thetvdb|tvdb|imdb)://([^/?]+)",
+    re.IGNORECASE,
+)
+_PROVIDER_MAP = {
+    "themoviedb": "tmdb",
+    "tmdb": "tmdb",
+    "thetvdb": "tvdb",
+    "tvdb": "tvdb",
+    "imdb": "imdb",
+}
+
+
+def _tracearr_kind(plex_type):
+    if plex_type in ("movie", "show", "episode"):
+        return plex_type
+    return None
+
+
+def _plex_guid_strings(plex_media_item):
+    values = []
+    guid = getattr(plex_media_item, "guid", None)
+    if guid:
+        values.append(guid)
+    for entry in getattr(plex_media_item, "guids", None) or []:
+        value = entry.id if hasattr(entry, "id") else entry
+        if value:
+            values.append(value)
+    return values
+
+
+def _parse_provider_guid(raw):
+    match = _PROVIDER_GUID.search(str(raw))
+    if not match:
+        return None
+    return _PROVIDER_MAP[match.group(1).lower()], match.group(2)
+
+
+def provider_refs_from_plex(plex_media_item):
+    kind = _tracearr_kind(getattr(plex_media_item, "type", None))
+    if not kind:
+        return []
+    refs = []
+    seen = set()
+    for raw in _plex_guid_strings(plex_media_item):
+        parsed = _parse_provider_guid(raw)
+        if not parsed:
+            continue
+        ref = f"{kind}:{parsed[0]}:{parsed[1]}"
+        if ref not in seen:
+            seen.add(ref)
+            refs.append(ref)
+    return refs
 
 
 def guid_matches(plex_media_item, guid):
