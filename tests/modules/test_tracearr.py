@@ -1,0 +1,474 @@
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+import requests
+
+from app.modules.tautulli import TautulliApiError
+from app.modules.tracearr import Tracearr, TracearrApiError
+from app.modules.watch_provider import WatchDataProvider
+from tests.modules.fixtures.tracearr_v2 import (
+    EPISODE_HISTORY,
+    MOVIE_HISTORY,
+    MOVIE_MEDIA_ID,
+    SERVER_ID,
+    SERVERS_RESPONSE,
+    SHOW_MEDIA_ID,
+    history_record,
+    history_response,
+    watchers_response,
+)
+
+
+def _iso_to_local(value):
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone().replace(
+        tzinfo=None
+    )
+
+
+class FakeResponse:
+    def __init__(self, payload, status_code=200):
+        self.status_code = status_code
+        self._payload = payload
+        self.content = b"{}" if payload is not None else b""
+
+    def json(self):
+        if self._payload is None or isinstance(self._payload, str):
+            raise ValueError("No JSON")
+        return self._payload
+
+
+class FakeSession:
+    """Records requests and returns canned Tracearr v2 payloads by path."""
+
+    def __init__(self, routes):
+        # routes: list of (method, path_suffix_or_callable, response_or_callable)
+        self.routes = list(routes)
+        self.calls = []
+
+    def get(self, url, headers=None, params=None, verify=True, timeout=None):
+        self.calls.append(
+            {"url": url, "headers": headers or {}, "params": params or {}, "verify": verify, "timeout": timeout}
+        )
+        parsed = urlparse(url)
+        path = parsed.path
+        for matcher, responder in self.routes:
+            if matcher(path, params or {}):
+                result = responder(path, params or {}) if callable(responder) else responder
+                if isinstance(result, FakeResponse):
+                    return result
+                return FakeResponse(result)
+        raise AssertionError(f"No fake route for GET {path} params={params}")
+
+
+def _path_is(suffix):
+    return lambda path, params: path.endswith(suffix)
+
+
+@pytest.fixture
+def provider_factory():
+    def factory(routes, server_name=None, ssl_verify=False):
+        session = FakeSession(routes)
+        with patch("app.modules.tracearr.requests.get", session.get):
+            provider = Tracearr(
+                "http://tracearr.example.com",
+                "trr_pub_test",
+                ssl_verify=ssl_verify,
+                server_name=server_name,
+            )
+            # Keep the patch active for the returned object's lifetime by
+            # attaching the session; tests should use the context themselves.
+        return provider, session
+
+    return factory
+
+
+def _provider(routes, **kwargs):
+    session = FakeSession(routes)
+    patcher = patch("app.modules.tracearr.requests.get", session.get)
+    patcher.start()
+    provider = Tracearr(
+        "http://tracearr.example.com",
+        "trr_pub_test",
+        ssl_verify=kwargs.get("ssl_verify", False),
+        server_name=kwargs.get("server_name"),
+    )
+    return provider, session, patcher
+
+
+class TestTracearrProtocol:
+    def test_class_satisfies_protocol(self):
+        assert issubclass(Tracearr, WatchDataProvider)
+
+    def test_error_is_handled_like_tautulli(self):
+        assert issubclass(TracearrApiError, TautulliApiError)
+
+
+class TestTestConnection:
+    def test_servers_endpoint_and_bearer_auth(self):
+        provider, session, patcher = _provider(
+            [(_path_is("/api/v2/public/servers"), SERVERS_RESPONSE)]
+        )
+        try:
+            provider.test_connection()
+        finally:
+            patcher.stop()
+
+        assert len(session.calls) == 1
+        call = session.calls[0]
+        assert call["url"] == "http://tracearr.example.com/api/v2/public/servers"
+        assert call["headers"]["Authorization"] == "Bearer trr_pub_test"
+        assert call["timeout"] == 30
+        assert call["verify"] is False
+
+    def test_unknown_server_name_raises(self):
+        provider, session, patcher = _provider(
+            [(_path_is("/api/v2/public/servers"), SERVERS_RESPONSE)],
+            server_name="Not A Server",
+        )
+        try:
+            with pytest.raises(TracearrApiError, match="Not A Server"):
+                provider.test_connection()
+        finally:
+            patcher.stop()
+
+    def test_http_error_raises_without_leaking_key(self):
+        provider, session, patcher = _provider(
+            [(_path_is("/api/v2/public/servers"), FakeResponse(None, status_code=401))]
+        )
+        try:
+            with pytest.raises(TracearrApiError, match="401") as raised:
+                provider.test_connection()
+        finally:
+            patcher.stop()
+        assert "trr_pub_test" not in str(raised.value)
+
+    def test_v1_only_instance_404s_as_error(self):
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/servers"), FakeResponse(None, status_code=404))]
+        )
+        try:
+            with pytest.raises(TracearrApiError, match="404"):
+                provider.test_connection()
+        finally:
+            patcher.stop()
+
+
+class TestGetActivity:
+    def test_movies_keyed_by_rating_key_and_provider_ref(self):
+        provider, session, patcher = _provider(
+            [
+                (
+                    _path_is("/api/v2/public/history"),
+                    history_response([MOVIE_HISTORY]),
+                )
+            ]
+        )
+        try:
+            result = provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+        expected_watched = _iso_to_local(MOVIE_HISTORY["stopped_at"])
+        assert result["12345"]["title"] == "Inception"
+        assert result["12345"]["year"] == 2010
+        assert result["12345"]["last_watched"] == expected_watched
+        assert result["movie:tmdb:27205"]["title"] == "Inception"
+        assert result["movie:imdb:tt1375666"]["title"] == "Inception"
+        assert result[MOVIE_MEDIA_ID]["title"] == "Inception"
+        call = session.calls[0]
+        assert call["url"] == "http://tracearr.example.com/api/v2/public/history"
+        assert call["params"]["pageSize"] == 100
+
+    def test_tv_episodes_roll_up_to_show_rating_key(self):
+        provider, _, patcher = _provider(
+            [
+                (
+                    _path_is("/api/v2/public/history"),
+                    history_response([EPISODE_HISTORY]),
+                )
+            ]
+        )
+        try:
+            result = provider.get_activity("2")
+        finally:
+            patcher.stop()
+
+        assert result["456"]["title"] == "Breaking Bad"
+        assert result["456"]["year"] == 2008
+        assert result[SHOW_MEDIA_ID]["title"] == "Breaking Bad"
+        assert result["9001"]["title"] == "Breaking Bad"
+
+    def test_filters_to_library_section(self):
+        other_library = history_record(
+            rating_key="999",
+            library_id="2",
+            media_title="Other Movie",
+            tmdb_id=1,
+            imdb_id="tt0000001",
+            media_id="00000000-0000-4000-8000-000000000001",
+        )
+        provider, _, patcher = _provider(
+            [
+                (
+                    _path_is("/api/v2/public/history"),
+                    history_response([MOVIE_HISTORY, other_library]),
+                )
+            ]
+        )
+        try:
+            result = provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+        assert "12345" in result
+        assert "999" not in result
+
+    def test_keeps_most_recent_play(self):
+        older = history_record(
+            stopped_at="2026-01-01T12:00:00.000Z",
+            started_at="2026-01-01T10:00:00.000Z",
+        )
+        newer = history_record(
+            id="dddddddd-eeee-4fff-8000-111111111111",
+            reference_id="dddddddd-eeee-4fff-8000-111111111111",
+            stopped_at="2026-09-15T12:00:00.000Z",
+            started_at="2026-09-15T10:00:00.000Z",
+        )
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/history"), history_response([newer, older]))]
+        )
+        try:
+            result = provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+        assert result["12345"]["last_watched"] == _iso_to_local(newer["stopped_at"])
+
+    def test_paginates_with_next_cursor(self):
+        first = history_record()
+        second = history_record(
+            id="eeeeeeee-ffff-4000-8000-222222222222",
+            reference_id="eeeeeeee-ffff-4000-8000-222222222222",
+            rating_key="67890",
+            media_title="Heat",
+            tmdb_id=949,
+            imdb_id="tt0113270",
+            media_id="00000000-0000-4000-8000-000000000002",
+            stopped_at="2026-05-01T20:00:00.000Z",
+            started_at="2026-05-01T18:00:00.000Z",
+        )
+
+        def respond(path, params):
+            if params.get("cursor") == "page-2":
+                return history_response([second])
+            return history_response([first], next_cursor="page-2")
+
+        provider, session, patcher = _provider(
+            [(_path_is("/api/v2/public/history"), respond)]
+        )
+        try:
+            result = provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+        assert "12345" in result
+        assert "67890" in result
+        assert result["67890"]["title"] == "Heat"
+        assert session.calls[0]["params"].get("cursor") is None
+        assert session.calls[1]["params"]["cursor"] == "page-2"
+
+    def test_filters_by_server_name(self):
+        def respond(path, params):
+            if path.endswith("/servers"):
+                return SERVERS_RESPONSE
+            assert params.get("server_id") == SERVER_ID
+            return history_response([MOVIE_HISTORY])
+
+        provider, session, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/servers"), respond),
+                (_path_is("/api/v2/public/history"), respond),
+            ],
+            server_name="Attic",
+        )
+        try:
+            result = provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+        assert "12345" in result
+        history_calls = [c for c in session.calls if c["url"].endswith("/history")]
+        assert history_calls[0]["params"]["server_id"] == SERVER_ID
+
+    def test_empty_history_returns_empty_dict(self):
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/history"), history_response([]))]
+        )
+        try:
+            assert provider.get_activity("1") == {}
+        finally:
+            patcher.stop()
+
+    def test_invalid_history_response_raises(self):
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/history"), {"error": "boom"})]
+        )
+        try:
+            with pytest.raises(TracearrApiError, match="data"):
+                provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+    def test_failure_mid_pagination_raises_instead_of_returning_partial(self):
+        def respond(path, params):
+            if params.get("cursor") == "page-2":
+                return FakeResponse(None, status_code=500)
+            return history_response([MOVIE_HISTORY], next_cursor="page-2")
+
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/history"), respond)]
+        )
+        try:
+            with pytest.raises(TracearrApiError, match="incomplete history"):
+                provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+    def test_refresh_library_is_a_noop(self):
+        provider, session, patcher = _provider([])
+        try:
+            provider.refresh_library("1")
+        finally:
+            patcher.stop()
+        assert session.calls == []
+
+
+class TestHasUserWatched:
+    def test_uses_media_scoped_watchers_endpoint(self):
+        def respond(path, params):
+            if path.endswith("/history"):
+                return history_response([MOVIE_HISTORY])
+            if "/media/" in path and path.endswith("/watchers"):
+                assert "movie:tmdb:27205" in path or MOVIE_MEDIA_ID in path
+                assert params.get("window") == "all_time"
+                return watchers_response(["john_doe"])
+            raise AssertionError(path)
+
+        provider, session, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/history"), respond),
+                (lambda path, params: "/media/" in path and path.endswith("/watchers"), respond),
+            ]
+        )
+        try:
+            provider.get_activity("1")
+            assert provider.has_user_watched("1", "12345", None, "john_doe") is True
+            assert provider.has_user_watched("1", "12345", None, "someone_else") is False
+        finally:
+            patcher.stop()
+
+        watcher_calls = [c for c in session.calls if c["url"].rstrip("/").endswith("/watchers")]
+        assert watcher_calls
+        assert watcher_calls[0]["params"]["window"] == "all_time"
+
+    def test_show_uses_show_media_ref(self):
+        def respond(path, params):
+            if path.endswith("/history"):
+                return history_response([EPISODE_HISTORY])
+            if "/media/" in path and path.endswith("/watchers"):
+                assert SHOW_MEDIA_ID in path
+                return watchers_response(["john_doe"], media_id=SHOW_MEDIA_ID, media_type="show")
+            raise AssertionError(path)
+
+        provider, _, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/history"), respond),
+                (lambda path, params: "/media/" in path and path.endswith("/watchers"), respond),
+            ]
+        )
+        try:
+            provider.get_activity("2")
+            assert (
+                provider.has_user_watched("2", None, "456", "john_doe") is True
+            )
+        finally:
+            patcher.stop()
+
+    def test_resolves_ref_from_history_when_activity_was_not_fetched(self):
+        def respond(path, params):
+            if path.endswith("/history"):
+                assert params.get("rating_key") == "12345"
+                return history_response([MOVIE_HISTORY])
+            if "/media/" in path and path.endswith("/watchers"):
+                return watchers_response(["john_doe"])
+            raise AssertionError(path)
+
+        provider, session, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/history"), respond),
+                (lambda path, params: "/media/" in path and path.endswith("/watchers"), respond),
+            ]
+        )
+        try:
+            assert provider.has_user_watched("1", "12345", None, "john_doe") is True
+        finally:
+            patcher.stop()
+
+    def test_unknown_media_returns_false(self):
+        def respond(path, params):
+            if path.endswith("/history"):
+                return history_response([])
+            return FakeResponse(None, status_code=404)
+
+        provider, _, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/history"), respond),
+                (lambda path, params: "/media/" in path, respond),
+            ]
+        )
+        try:
+            assert provider.has_user_watched("1", "12345", None, "john_doe") is False
+        finally:
+            patcher.stop()
+
+    def test_empty_user_returns_false_without_request(self):
+        provider, session, patcher = _provider([])
+        try:
+            assert provider.has_user_watched("1", "12345", None, "") is False
+            assert provider.has_user_watched("1", "12345", None, None) is False
+        finally:
+            patcher.stop()
+        assert session.calls == []
+
+
+class TestFindWatchedDataProviderRefs:
+    def test_matches_plex_item_by_tmdb_guid_when_rating_key_is_absent(self):
+        from app.media_cleaner import find_watched_data
+
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/history"), history_response([MOVIE_HISTORY]))]
+        )
+        try:
+            activity = provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+        # Drop rating-key entries so the new provider-ref lookup is what matches.
+        activity_without_keys = {
+            key: value
+            for key, value in activity.items()
+            if not str(key).isdigit()
+        }
+        plex_item = MagicMock()
+        plex_item.guid = "plex://movie/5d77682a594b2b001c64d4e8"
+        plex_item.ratingKey = 99999
+        plex_item.title = "Some Other Title"
+        plex_item.year = 1999
+        plex_item.type = "movie"
+        plex_item.guids = [MagicMock(id="tmdb://27205"), MagicMock(id="imdb://tt1375666")]
+
+        watched = find_watched_data(plex_item, activity_without_keys)
+        assert watched is not None
+        assert watched["title"] == "Inception"
