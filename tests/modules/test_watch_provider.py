@@ -233,3 +233,5 @@ class TestTracearrIntegrationDocs:
             "so they look unwatched"
         ) in text
         assert "Set `server_name`" in text or "set `server_name`" in text
+        assert "unresolvable play from another server" in text
+        assert "fails the library run closed" in text or "fail the library run closed" in text

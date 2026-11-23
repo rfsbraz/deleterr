@@ -1221,3 +1221,135 @@ class TestIncompatibleHistoryDoesNotAbortLibrary:
             patcher.stop()
 
         assert result["movie:tmdb:27205"]["title"] == "Inception"
+
+
+class TestLocalIdentityMustFailClosed:
+    def test_local_episode_without_grandparent_key_raises_when_show_identity_is_unresolved(self):
+        """A local Plex episode missing grandparent_rating_key and show_media_id
+        must not look unwatched when show:* refs cannot be resolved."""
+        episode = dict(EPISODE_HISTORY)
+        episode.update(
+            {
+                "grandparent_rating_key": None,
+                "show_media_id": None,
+                "year": 2012,
+            }
+        )
+        plex_show = MagicMock()
+        plex_show.guid = "plex://show/abc"
+        plex_show.ratingKey = 456
+        plex_show.title = "Breaking Bad"
+        plex_show.year = 2008
+        plex_show.type = "show"
+        plex_show.guids = [MagicMock(id="tvdb://81189")]
+
+        def respond(path, params):
+            if path.endswith("/servers"):
+                return SERVERS_RESPONSE
+            if path.endswith("/history"):
+                return history_response([episode])
+            if "/media/" in path:
+                return FakeResponse(None, status_code=404)
+            raise AssertionError(path)
+
+        provider, _, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/servers"), respond),
+                (_path_is("/api/v2/public/history"), respond),
+                (lambda path, params: "/media/" in path, respond),
+            ],
+            server_name="Attic",
+        )
+        try:
+            with pytest.raises(TracearrApiError, match="canonical show identity"):
+                provider.get_activity("2", library_items=[plex_show])
+        finally:
+            patcher.stop()
+
+        # Current fail-open behaviour (documented for the revert proof):
+        # keys would be rating_key, media_id, and episode:tvdb, and
+        # find_watched_data would miss the show. The assertion above is the
+        # required fail-closed contract.
+
+    def test_local_movie_without_rating_key_raises_when_identity_is_unresolved(self):
+        movie = history_record(
+            rating_key=None,
+            tmdb_id=None,
+            imdb_id=None,
+            tvdb_id=None,
+            media_id="33333333-4444-4555-8666-777777777777",
+            media_title="Orphan Film",
+            year=1999,
+        )
+        plex_item = MagicMock()
+        plex_item.guid = "plex://movie/orphan"
+        plex_item.ratingKey = 55555
+        plex_item.title = "Orphan Film"
+        plex_item.year = 1998
+        plex_item.type = "movie"
+        plex_item.guids = []
+
+        def respond(path, params):
+            if path.endswith("/servers"):
+                return SERVERS_RESPONSE
+            if path.endswith("/history"):
+                return history_response([movie])
+            if "/media/" in path:
+                return FakeResponse(None, status_code=404)
+            raise AssertionError(path)
+
+        provider, _, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/servers"), respond),
+                (_path_is("/api/v2/public/history"), respond),
+                (lambda path, params: "/media/" in path, respond),
+            ],
+            server_name="Attic",
+        )
+        try:
+            with pytest.raises(TracearrApiError, match="canonical movie identity"):
+                provider.get_activity("1", library_items=[plex_item])
+        finally:
+            patcher.stop()
+
+
+class TestManagedServerWarning:
+    WARNING_SNIPPET = "rating keys will not be used as activity keys"
+
+    def test_does_not_warn_about_unused_rating_keys_when_server_name_is_set(self, caplog):
+        import logging
+
+        other_plex = history_record(
+            server_id="bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+            server_name="Someone Else's Plex",
+            server_type="plex",
+            rating_key="99999",
+            library_id="1",
+            media_title="Some Other Film",
+            tmdb_id=1,
+            imdb_id="tt0000001",
+            media_id="00000000-0000-4000-8000-000000000001",
+        )
+
+        def respond(path, params):
+            if path.endswith("/servers"):
+                return SERVERS_RESPONSE
+            if path.endswith("/history"):
+                return history_response([MOVIE_HISTORY, other_plex])
+            raise AssertionError(path)
+
+        provider, _, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/servers"), respond),
+                (_path_is("/api/v2/public/history"), respond),
+            ],
+            server_name="Attic",
+        )
+        try:
+            with caplog.at_level(logging.WARNING, logger="deleterr"):
+                result = provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+        assert "12345" in result
+        assert all(self.WARNING_SNIPPET not in r.getMessage() for r in caplog.records)
