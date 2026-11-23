@@ -158,11 +158,11 @@ class Tracearr:
 
     def _fetch_history(self, section):
         params = {"pageSize": HISTORY_PAGE_SIZE}
-        server_id = self._cached_server_id()
-        if self.server_name and not server_id:
-            server_id = self._resolve_server_id()
-        if server_id:
-            params["server_id"] = server_id
+        # Resolve the managed server so rating keys can be scoped, but do
+        # not pass server_id here. A newer Jellyfin or Emby play of the
+        # same title must still be able to match through provider refs.
+        if self.server_name and not self._cached_server_id():
+            self._resolve_server_id()
 
         raw_data = []
         cursor = None

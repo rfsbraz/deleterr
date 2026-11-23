@@ -314,7 +314,6 @@ class TestGetActivity:
         def respond(path, params):
             if path.endswith("/servers"):
                 return SERVERS_RESPONSE
-            assert params.get("server_id") == SERVER_ID
             return history_response([MOVIE_HISTORY])
 
         provider, session, patcher = _provider(
@@ -330,8 +329,9 @@ class TestGetActivity:
             patcher.stop()
 
         assert "12345" in result
+        assert provider._server_id == SERVER_ID
         history_calls = [c for c in session.calls if c["url"].endswith("/history")]
-        assert history_calls[0]["params"]["server_id"] == SERVER_ID
+        assert "server_id" not in history_calls[0]["params"]
 
     def test_server_name_still_keeps_foreign_provider_ref_plays(self):
         """History must not be limited to server_id, or newer Jellyfin plays are lost."""
