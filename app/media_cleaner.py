@@ -1456,9 +1456,13 @@ class MediaCleaner:
                 and self._collection_membership is not COLLECTIONS_UNAVAILABLE
         ):
             logger.debug("Gathering collection watched status")
-            for guid, watched_data in activity_data.items():
-                plex_media_item = self.get_plex_item(plex_guid_item_pair, guid=guid, index=plex_index)
-                if plex_media_item is None:
+            # Walk Plex items through find_watched_data so Tracearr keys
+            # (rating keys, movie:tmdb:..., show:tvdb:...) match the same
+            # way deletion rules do. Looking up activity keys as Plex GUIDs
+            # misses those entries and can fail to protect a collection.
+            for _guids, plex_media_item in plex_guid_item_pair:
+                watched_data = find_watched_data(plex_media_item, activity_data)
+                if watched_data is None:
                     continue
                 last_watched = (datetime.now() - watched_data["last_watched"]).days
                 item_collections = self.get_item_collections(plex_media_item)

@@ -192,3 +192,27 @@ EPISODE_HISTORY = history_record(
     grandparent_rating_key="456",
     library_id="2",
 )
+
+
+def media_resource(**overrides):
+    """A complete MediaResource, as returned by GET /api/v2/public/media/{ref}."""
+    resource = {
+        "id": SHOW_MEDIA_ID,
+        "media_type": "show",
+        "title": "Breaking Bad",
+        "year": 2008,
+        "imdb_id": "tt0903747",
+        "tmdb_id": 1396,
+        "tvdb_id": 81189,
+        "genres": ["Drama"],
+        "show_media_id": None,
+        "merged_ids": [],
+        "availability": [],
+        "season_count": 5,
+        "episode_count": 62,
+    }
+    resource.update(overrides)
+    return resource
+
+
+SHOW_MEDIA = media_resource()

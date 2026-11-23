@@ -14,9 +14,11 @@ from tests.modules.fixtures.tracearr_v2 import (
     MOVIE_MEDIA_ID,
     SERVER_ID,
     SERVERS_RESPONSE,
+    SHOW_MEDIA,
     SHOW_MEDIA_ID,
     history_record,
     history_response,
+    media_resource,
     watchers_response,
 )
 
@@ -64,6 +66,10 @@ class FakeSession:
 
 def _path_is(suffix):
     return lambda path, params: path.endswith(suffix)
+
+
+def _is_show_media(path, params):
+    return path.endswith(f"/media/{SHOW_MEDIA_ID}") and not path.endswith("/watchers")
 
 
 @pytest.fixture
@@ -187,7 +193,8 @@ class TestGetActivity:
                 (
                     _path_is("/api/v2/public/history"),
                     history_response([EPISODE_HISTORY]),
-                )
+                ),
+                (_is_show_media, SHOW_MEDIA),
             ]
         )
         try:
@@ -199,6 +206,8 @@ class TestGetActivity:
         assert result["456"]["year"] == 2008
         assert result[SHOW_MEDIA_ID]["title"] == "Breaking Bad"
         assert result["9001"]["title"] == "Breaking Bad"
+        assert result["show:tvdb:81189"]["title"] == "Breaking Bad"
+        assert result["show:tmdb:1396"]["title"] == "Breaking Bad"
 
     def test_filters_to_library_section(self):
         other_library = history_record(
@@ -377,6 +386,8 @@ class TestHasUserWatched:
         def respond(path, params):
             if path.endswith("/history"):
                 return history_response([EPISODE_HISTORY])
+            if path.endswith(f"/media/{SHOW_MEDIA_ID}") and not path.endswith("/watchers"):
+                return SHOW_MEDIA
             if "/media/" in path and path.endswith("/watchers"):
                 assert SHOW_MEDIA_ID in path
                 return watchers_response(["john_doe"], media_id=SHOW_MEDIA_ID, media_type="show")
@@ -385,6 +396,7 @@ class TestHasUserWatched:
         provider, _, patcher = _provider(
             [
                 (_path_is("/api/v2/public/history"), respond),
+                (_is_show_media, respond),
                 (lambda path, params: "/media/" in path and path.endswith("/watchers"), respond),
             ]
         )
@@ -472,3 +484,130 @@ class TestFindWatchedDataProviderRefs:
         watched = find_watched_data(plex_item, activity_without_keys)
         assert watched is not None
         assert watched["title"] == "Inception"
+
+
+    def test_foreign_server_play_is_kept_by_provider_ref_only(self):
+        """Jellyfin plays of the same title count, but their rating keys do not."""
+        jellyfin_play = history_record(
+            server_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            server_name="Jellyfin",
+            server_type="jellyfin",
+            rating_key="jf-99",
+            library_id="not-a-plex-section",
+            media_title="Inception",
+            tmdb_id=27205,
+            imdb_id="tt1375666",
+            media_id="00000000-0000-4000-8000-000000000099",
+            stopped_at="2026-10-01T12:00:00.000Z",
+            started_at="2026-10-01T10:00:00.000Z",
+        )
+        # Older Plex play of a different title sharing no provider ids
+        provider, _, patcher = _provider(
+            [
+                (
+                    _path_is("/api/v2/public/history"),
+                    history_response([MOVIE_HISTORY, jellyfin_play]),
+                )
+            ]
+        )
+        try:
+            result = provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+        assert "12345" in result
+        assert "jf-99" not in result
+        assert result["movie:tmdb:27205"]["last_watched"] == _iso_to_local(
+            jellyfin_play["stopped_at"]
+        )
+
+    def test_foreign_rating_key_does_not_collide_with_local_plex_key(self):
+        foreign = history_record(
+            server_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            server_name="Jellyfin",
+            server_type="jellyfin",
+            rating_key="12345",
+            library_id="1",
+            media_title="Some Other Film",
+            tmdb_id=1,
+            imdb_id="tt0000001",
+            media_id="00000000-0000-4000-8000-000000000001",
+            stopped_at="2026-10-01T12:00:00.000Z",
+            started_at="2026-10-01T10:00:00.000Z",
+        )
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/history"), history_response([MOVIE_HISTORY, foreign]))]
+        )
+        try:
+            result = provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+        assert result["12345"]["title"] == "Inception"
+        assert result["movie:tmdb:1"]["title"] == "Some Other Film"
+
+    def test_episode_without_plex_key_matches_show_provider_ref(self):
+        episode = dict(EPISODE_HISTORY)
+        episode.update(
+            {
+                "rating_key": None,
+                "parent_rating_key": None,
+                "grandparent_rating_key": None,
+                "year": 2009,
+                "server_type": "jellyfin",
+                "server_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                "library_id": "other",
+            }
+        )
+        provider, _, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/history"), history_response([episode])),
+                (_is_show_media, SHOW_MEDIA),
+            ]
+        )
+        try:
+            activity = provider.get_activity("2")
+        finally:
+            patcher.stop()
+
+        plex_show = MagicMock()
+        plex_show.guid = "plex://show/abc"
+        plex_show.ratingKey = 99999
+        plex_show.title = "Breaking Bad"
+        plex_show.year = 2008
+        plex_show.type = "show"
+        plex_show.guids = [MagicMock(id="tvdb://81189")]
+
+        from app.media_cleaner import find_watched_data
+
+        watched = find_watched_data(plex_show, activity)
+        assert watched is not None
+        assert watched["title"] == "Breaking Bad"
+
+
+class TestTransientErrors:
+    def test_http_503_is_transient_for_startup_retry(self):
+        from app.config import is_transient_exception
+
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/servers"), FakeResponse(None, status_code=503))]
+        )
+        try:
+            with pytest.raises(TracearrApiError) as raised:
+                provider.test_connection()
+        finally:
+            patcher.stop()
+        assert is_transient_exception(raised.value) is True
+
+    def test_http_401_is_not_transient(self):
+        from app.config import is_transient_exception
+
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/servers"), FakeResponse(None, status_code=401))]
+        )
+        try:
+            with pytest.raises(TracearrApiError) as raised:
+                provider.test_connection()
+        finally:
+            patcher.stop()
+        assert is_transient_exception(raised.value) is False

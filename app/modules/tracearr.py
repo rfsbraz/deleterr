@@ -48,6 +48,8 @@ class Tracearr:
         self.server_name = server_name
         self._server_id = None
         self._refs_by_key = {}
+        self._local_server_ids = set()
+        self._show_ref_cache = {}
 
     def test_connection(self):
         body = self._get(f"{API_PREFIX}/servers")
@@ -67,19 +69,29 @@ class Tracearr:
             return {}
 
         self._refs_by_key = {}
+        self._local_server_ids = self._unique_local_plex_servers(raw_data, section)
+        if len(self._local_server_ids) > 1:
+            logger.warning(
+                "Tracearr history includes %d Plex servers with library id %s; "
+                "rating keys will not be used as activity keys. Set "
+                "tracearr.server_name to choose one server.",
+                len(self._local_server_ids),
+                section,
+            )
         last_activity = {}
         for entry in raw_data:
             activity_entry = self._prepare_activity_entry(entry)
             if activity_entry is None:
                 continue
-            for key in self._activity_keys(entry):
+            local = self._is_local_plex_record(entry, section)
+            for key in self._activity_keys(entry, local=local):
                 existing = last_activity.get(key)
                 if (
                     existing is None
                     or activity_entry["last_watched"] > existing["last_watched"]
                 ):
                     last_activity[key] = activity_entry
-            self._remember_refs(entry)
+            self._remember_refs(entry, local=local)
 
         logger.debug("Processed %d unique items from Tracearr history", len(last_activity))
         return last_activity
@@ -141,7 +153,6 @@ class Tracearr:
 
         raw_data = []
         cursor = None
-        section_id = str(section) if section is not None else None
         while True:
             page_params = dict(params)
             if cursor:
@@ -167,15 +178,7 @@ class Tracearr:
                     "reachable and running 2.0 or later before retrying."
                 )
 
-            for entry in body["data"]:
-                library_id = entry.get("library_id")
-                if (
-                    section_id
-                    and library_id is not None
-                    and str(library_id) != section_id
-                ):
-                    continue
-                raw_data.append(entry)
+            raw_data.extend(body["data"])
 
             cursor = (body.get("meta") or {}).get("nextCursor")
             if not cursor or not body["data"]:
@@ -197,12 +200,13 @@ class Tracearr:
             "year": int(entry.get("year") or 0),
         }
 
-    def _activity_keys(self, entry):
+    def _activity_keys(self, entry, local=False):
         keys = []
-        for field in ("rating_key", "grandparent_rating_key"):
-            value = entry.get(field)
-            if value:
-                keys.append(str(value))
+        if local:
+            for field in ("rating_key", "grandparent_rating_key"):
+                value = entry.get(field)
+                if value:
+                    keys.append(str(value))
         media_type = entry.get("media_type")
         if media_type == "movie":
             keys.extend(self._provider_refs("movie", entry))
@@ -210,9 +214,49 @@ class Tracearr:
             keys.extend(self._provider_refs("episode", entry))
             if entry.get("show_media_id"):
                 keys.append(str(entry["show_media_id"]))
+                keys.extend(self._show_provider_refs(entry["show_media_id"]))
         if entry.get("media_id"):
             keys.append(str(entry["media_id"]))
         return keys
+
+    def _show_provider_refs(self, show_media_id):
+        """Resolve a show uuid to show:tvdb:/show:tmdb:/show:imdb: refs."""
+        cache_key = str(show_media_id)
+        if cache_key in self._show_ref_cache:
+            return self._show_ref_cache[cache_key]
+        body = self._get(
+            f"{API_PREFIX}/media/{quote(cache_key, safe=':')}",
+            allow_404=True,
+        )
+        refs = []
+        if isinstance(body, dict) and body.get("media_type") == "show":
+            refs = self._provider_refs("show", body)
+        self._show_ref_cache[cache_key] = refs
+        return refs
+
+    @staticmethod
+    def _unique_local_plex_servers(records, section):
+        section_id = str(section) if section is not None else None
+        return {
+            entry.get("server_id")
+            for entry in records
+            if entry.get("server_type") == "plex"
+            and entry.get("server_id")
+            and entry.get("library_id") is not None
+            and section_id is not None
+            and str(entry.get("library_id")) == section_id
+        }
+
+    def _is_local_plex_record(self, entry, section):
+        """True when this play can safely be keyed by a Plex rating key."""
+        if entry.get("server_type") != "plex":
+            return False
+        if len(self._local_server_ids) != 1:
+            return False
+        if entry.get("server_id") not in self._local_server_ids:
+            return False
+        library_id = entry.get("library_id")
+        return library_id is not None and str(library_id) == str(section)
 
     @staticmethod
     def _provider_refs(kind, entry):
@@ -237,7 +281,9 @@ class Tracearr:
             return refs[0] if refs else None
         return entry.get("media_id")
 
-    def _remember_refs(self, entry):
+    def _remember_refs(self, entry, local=False):
+        if not local:
+            return
         show_ref = entry.get("show_media_id")
         grandparent = entry.get("grandparent_rating_key")
         if grandparent and show_ref:
@@ -271,12 +317,26 @@ class Tracearr:
         if not records:
             return None
         entry = records[0]
-        self._remember_refs(entry)
+        local = (
+            entry.get("server_type") == "plex"
+            and (
+                (self._server_id and entry.get("server_id") == self._server_id)
+                or (
+                    len(self._local_server_ids) == 1
+                    and entry.get("server_id") in self._local_server_ids
+                )
+            )
+        )
+        self._remember_refs(entry, local=local)
         if str(entry.get("grandparent_rating_key") or "") == str(rating_key) and entry.get(
             "show_media_id"
         ):
             return str(entry["show_media_id"])
-        return self._refs_by_key.get(str(rating_key)) or self._preferred_ref(entry)
+        if local:
+            cached = self._refs_by_key.get(str(rating_key))
+            if cached:
+                return cached
+        return self._preferred_ref(entry)
 
     def _cached_server_id(self):
         return self._server_id
@@ -339,9 +399,13 @@ class Tracearr:
         if response.status_code == 404 and allow_404:
             return None
         if response.status_code >= 400:
+            http_error = requests.HTTPError(
+                f"{response.status_code} Error",
+                response=response,
+            )
             raise TracearrApiError(
                 f"Tracearr returned HTTP {response.status_code} for {path}."
-            )
+            ) from http_error
         try:
             return response.json()
         except ValueError as exc:
