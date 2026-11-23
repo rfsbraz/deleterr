@@ -79,6 +79,7 @@ class Tracearr:
                 section,
             )
         allowed = self._library_identity_keys(library_items)
+        library_types = self._library_media_types(library_items)
         last_activity = {}
         for entry in raw_data:
             activity_entry = self._prepare_activity_entry(entry)
@@ -89,7 +90,9 @@ class Tracearr:
                     "deletion decisions."
                 )
             local = self._is_local_plex_record(entry, section)
-            if not self._relates_to_library(entry, local, allowed):
+            if not self._relates_to_library(
+                entry, local, allowed, library_types
+            ):
                 continue
             for key in self._activity_keys(entry, local=local):
                 existing = last_activity.get(key)
@@ -237,29 +240,72 @@ class Tracearr:
             allowed.update(provider_refs_from_plex(item))
         return allowed
 
-    def _relates_to_library(self, entry, local, allowed):
+    def _relates_to_library(self, entry, local, allowed, library_types=None):
         if local:
             return True
         # None means the caller did not provide the library; keep only local
         # plays so unrelated history cannot bypass the empty-history guard.
         if not allowed:
             return False
+        # Skip incompatible types before resolving identity, so a 404 for
+        # an unrelated TV episode cannot abort a Movies library run.
+        if not self._entry_compatible_with_library(entry, library_types):
+            return False
         for key in self._identity_keys(entry, required=True):
             if key in allowed:
                 return True
         return False
 
+    @staticmethod
+    def _library_media_types(library_items):
+        types = set()
+        for item in library_items or []:
+            media_type = getattr(item, "type", None)
+            if media_type:
+                types.add(media_type)
+        return types
+
+    @staticmethod
+    def _entry_compatible_with_library(entry, library_types):
+        if not library_types:
+            return True
+        media_type = entry.get("media_type")
+        if media_type == "movie":
+            return "movie" in library_types
+        if media_type in ("episode", "show"):
+            return bool(library_types & {"show", "episode"})
+        return True
+
     def _identity_keys(self, entry, required=False):
         keys = []
         media_type = entry.get("media_type")
         if media_type == "movie":
-            keys.extend(self._provider_refs("movie", entry))
+            keys.extend(self._movie_identity_keys(entry, required=required))
         elif media_type == "episode":
             keys.extend(self._provider_refs("episode", entry))
             keys.extend(self._show_identity_keys(entry, required=required))
         if entry.get("media_id"):
             keys.append(str(entry["media_id"]))
         return keys
+
+    def _movie_identity_keys(self, entry, required=False):
+        """Resolve movie:* refs, including via GET /media/{media_id}."""
+        refs = self._provider_refs("movie", entry)
+        if not refs and entry.get("media_id"):
+            body = self._get(
+                f"{API_PREFIX}/media/{quote(str(entry['media_id']), safe=':')}",
+                allow_404=True,
+            )
+            if isinstance(body, dict) and body.get("media_type") == "movie":
+                refs = self._provider_refs("movie", body)
+        if required and not any(key.startswith("movie:") for key in refs):
+            target = entry.get("media_id") or "movie"
+            raise TracearrApiError(
+                "Tracearr did not resolve a canonical movie identity "
+                f"for {target}; incomplete history cannot be used for "
+                "deletion decisions."
+            )
+        return refs
 
     def _show_identity_keys(self, entry, required=False):
         """Map an episode to its show UUID and show:* provider refs."""
