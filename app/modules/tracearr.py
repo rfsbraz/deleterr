@@ -220,7 +220,16 @@ class Tracearr:
                 value = entry.get(field)
                 if value:
                     keys.append(str(value))
-        keys.extend(self._identity_keys(entry, required=not local))
+        required = not local
+        if local:
+            media_type = entry.get("media_type")
+            if media_type == "episode" and not entry.get("grandparent_rating_key"):
+                # Rating-key protection for the show is unavailable; the
+                # show:* mapping must be resolved or the library skipped.
+                required = True
+            elif media_type == "movie" and not entry.get("rating_key"):
+                required = True
+        keys.extend(self._identity_keys(entry, required=required))
         return keys
 
     @staticmethod
