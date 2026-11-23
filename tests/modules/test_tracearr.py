@@ -510,8 +510,15 @@ class TestFindWatchedDataProviderRefs:
                 )
             ]
         )
+        plex_item = MagicMock()
+        plex_item.guid = "plex://movie/abc"
+        plex_item.ratingKey = 12345
+        plex_item.title = "Inception"
+        plex_item.year = 2010
+        plex_item.type = "movie"
+        plex_item.guids = [MagicMock(id="tmdb://27205")]
         try:
-            result = provider.get_activity("1")
+            result = provider.get_activity("1", library_items=[plex_item])
         finally:
             patcher.stop()
 
@@ -544,7 +551,7 @@ class TestFindWatchedDataProviderRefs:
             patcher.stop()
 
         assert result["12345"]["title"] == "Inception"
-        assert result["movie:tmdb:1"]["title"] == "Some Other Film"
+        assert "movie:tmdb:1" not in result
 
     def test_episode_without_plex_key_matches_show_provider_ref(self):
         episode = dict(EPISODE_HISTORY)
@@ -565,11 +572,6 @@ class TestFindWatchedDataProviderRefs:
                 (_is_show_media, SHOW_MEDIA),
             ]
         )
-        try:
-            activity = provider.get_activity("2")
-        finally:
-            patcher.stop()
-
         plex_show = MagicMock()
         plex_show.guid = "plex://show/abc"
         plex_show.ratingKey = 99999
@@ -577,12 +579,50 @@ class TestFindWatchedDataProviderRefs:
         plex_show.year = 2008
         plex_show.type = "show"
         plex_show.guids = [MagicMock(id="tvdb://81189")]
+        try:
+            activity = provider.get_activity("2", library_items=[plex_show])
+        finally:
+            patcher.stop()
 
         from app.media_cleaner import find_watched_data
 
         watched = find_watched_data(plex_show, activity)
         assert watched is not None
         assert watched["title"] == "Breaking Bad"
+
+
+
+    def test_prefers_newer_provider_ref_over_older_rating_key_or_title(self):
+        """A stale rating-key or title match must not hide a newer provider-ref play."""
+        from datetime import timedelta
+
+        from app.media_cleaner import find_watched_data
+
+        older = {
+            "title": "Inception",
+            "year": 2010,
+            "last_watched": datetime.now() - timedelta(days=90),
+        }
+        newer = {
+            "title": "Inception",
+            "year": 2010,
+            "last_watched": datetime.now() - timedelta(days=2),
+        }
+        activity = {
+            "12345": older,
+            "other-key": older,
+            "movie:tmdb:27205": newer,
+        }
+        plex_item = MagicMock()
+        plex_item.guid = "plex://movie/abc"
+        plex_item.ratingKey = 12345
+        plex_item.title = "Inception"
+        plex_item.year = 2010
+        plex_item.type = "movie"
+        plex_item.guids = [MagicMock(id="tmdb://27205")]
+
+        watched = find_watched_data(plex_item, activity)
+        assert watched is newer
 
 
 class TestTransientErrors:
@@ -611,3 +651,138 @@ class TestTransientErrors:
         finally:
             patcher.stop()
         assert is_transient_exception(raised.value) is False
+
+class TestActivityScoping:
+    def test_unrelated_foreign_play_leaves_activity_empty(self):
+        """A play from another library must not populate activity for this section."""
+        foreign = history_record(
+            server_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            server_name="Jellyfin",
+            server_type="jellyfin",
+            rating_key="jf-99",
+            library_id="other",
+            media_title="Some Other Film",
+            tmdb_id=1,
+            imdb_id="tt0000001",
+            media_id="00000000-0000-4000-8000-000000000001",
+        )
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/history"), history_response([foreign]))]
+        )
+        try:
+            result = provider.get_activity("1")
+        finally:
+            patcher.stop()
+        assert result == {}
+
+    def test_foreign_play_is_kept_only_when_it_matches_a_library_item(self):
+        foreign = history_record(
+            server_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            server_name="Jellyfin",
+            server_type="jellyfin",
+            rating_key="jf-99",
+            library_id="other",
+            media_title="Inception",
+            tmdb_id=27205,
+            imdb_id="tt1375666",
+            media_id="00000000-0000-4000-8000-000000000099",
+            stopped_at="2026-10-01T12:00:00.000Z",
+            started_at="2026-10-01T10:00:00.000Z",
+        )
+        plex_item = MagicMock()
+        plex_item.guid = "plex://movie/abc"
+        plex_item.ratingKey = 12345
+        plex_item.title = "Inception"
+        plex_item.year = 2010
+        plex_item.type = "movie"
+        plex_item.guids = [MagicMock(id="tmdb://27205")]
+
+        provider, _, patcher = _provider(
+            [(_path_is("/api/v2/public/history"), history_response([foreign]))]
+        )
+        try:
+            kept = provider.get_activity("1", library_items=[plex_item])
+            omitted = provider.get_activity("1")
+        finally:
+            patcher.stop()
+
+        assert "jf-99" not in kept
+        assert kept["movie:tmdb:27205"]["title"] == "Inception"
+        assert omitted == {}
+
+
+class TestResolveRefScoping:
+    def test_uncached_rating_key_ignores_a_foreign_first_record(self):
+        """has_user_watched must not use a non-local history hit for a Plex rating key."""
+        foreign = history_record(
+            server_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            server_name="Jellyfin",
+            server_type="jellyfin",
+            rating_key="12345",
+            library_id="1",
+            media_title="Some Other Film",
+            tmdb_id=1,
+            imdb_id="tt0000001",
+            media_id="00000000-0000-4000-8000-000000000001",
+        )
+
+        def respond(path, params):
+            if path.endswith("/history"):
+                return history_response([foreign])
+            if "/media/" in path and path.endswith("/watchers"):
+                return watchers_response(["john_doe"], media_id=foreign["media_id"])
+            raise AssertionError(path)
+
+        provider, session, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/history"), respond),
+                (lambda path, params: "/media/" in path, respond),
+            ]
+        )
+        try:
+            watched = provider.has_user_watched("1", "12345", None, "john_doe")
+        finally:
+            patcher.stop()
+
+        assert watched is False
+        assert not any(c["url"].rstrip("/").endswith("/watchers") for c in session.calls)
+
+
+class TestUnresolvedShowIdentity:
+    def test_unresolved_show_identity_raises(self):
+        episode = dict(EPISODE_HISTORY)
+        episode.update(
+            {
+                "rating_key": None,
+                "parent_rating_key": None,
+                "grandparent_rating_key": None,
+                "year": 2009,
+                "server_type": "jellyfin",
+                "server_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                "library_id": "other",
+            }
+        )
+        provider, _, patcher = _provider(
+            [
+                (_path_is("/api/v2/public/history"), history_response([episode])),
+                (
+                    _is_show_media,
+                    FakeResponse(None, status_code=404),
+                ),
+            ]
+        )
+        try:
+            with pytest.raises(TracearrApiError, match="canonical show identity"):
+                provider.get_activity(
+                    "2",
+                    library_items=[MagicMock(
+                        guid="plex://show/abc",
+                        ratingKey=99999,
+                        title="Breaking Bad",
+                        year=2008,
+                        type="show",
+                        guids=[MagicMock(id="tvdb://81189")],
+                    )],
+                )
+        finally:
+            patcher.stop()
