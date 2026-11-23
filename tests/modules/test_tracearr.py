@@ -972,3 +972,148 @@ class TestWatcherUsernameOnly:
             assert provider.has_user_watched("1", "12345", None, "alice") is True
         finally:
             patcher.stop()
+
+
+HEAT_MEDIA_ID = "22222222-3333-4444-8555-666666666666"
+
+
+class TestMovieIdentityWithoutProviderIds:
+    def _heat_item(self):
+        plex_item = MagicMock()
+        plex_item.guid = "plex://movie/heat"
+        plex_item.ratingKey = 67890
+        plex_item.title = "Heat"
+        plex_item.year = 1995
+        plex_item.type = "movie"
+        plex_item.guids = [MagicMock(id="tmdb://949")]
+        return plex_item
+
+    def _inception_item(self):
+        plex_item = MagicMock()
+        plex_item.guid = "plex://movie/abc"
+        plex_item.ratingKey = 12345
+        plex_item.title = "Inception"
+        plex_item.year = 2010
+        plex_item.type = "movie"
+        plex_item.guids = [MagicMock(id="tmdb://27205")]
+        return plex_item
+
+    def _heat_history(self):
+        return history_record(
+            id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeee0001",
+            reference_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeee0001",
+            rating_key="heat-99",
+            library_id="other",
+            server_type="jellyfin",
+            server_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            server_name="Jellyfin",
+            media_title="Heat",
+            year=1995,
+            tmdb_id=None,
+            imdb_id=None,
+            tvdb_id=None,
+            media_id=HEAT_MEDIA_ID,
+        )
+
+    def test_resolves_missing_movie_provider_ids_via_media_id(self):
+        heat = self._heat_history()
+        movie_resource = media_resource(
+            id=HEAT_MEDIA_ID,
+            media_type="movie",
+            title="Heat",
+            year=1995,
+            imdb_id="tt0113270",
+            tmdb_id=949,
+            tvdb_id=None,
+            show_media_id=None,
+            season_count=None,
+            episode_count=None,
+        )
+        provider, _, patcher = _provider(
+            [
+                (
+                    _path_is("/api/v2/public/history"),
+                    history_response([MOVIE_HISTORY, heat]),
+                ),
+                (
+                    lambda path, params: path.endswith(f"/media/{HEAT_MEDIA_ID}"),
+                    movie_resource,
+                ),
+            ]
+        )
+        try:
+            result = provider.get_activity(
+                "1",
+                library_items=[self._inception_item(), self._heat_item()],
+            )
+        finally:
+            patcher.stop()
+
+        assert "movie:tmdb:949" in result
+        from app.media_cleaner import find_watched_data
+
+        assert find_watched_data(self._heat_item(), result) is not None
+
+    def test_unresolved_movie_identity_raises(self):
+        heat = self._heat_history()
+        provider, _, patcher = _provider(
+            [
+                (
+                    _path_is("/api/v2/public/history"),
+                    history_response([MOVIE_HISTORY, heat]),
+                ),
+                (
+                    lambda path, params: path.endswith(f"/media/{HEAT_MEDIA_ID}"),
+                    FakeResponse(None, status_code=404),
+                ),
+            ]
+        )
+        try:
+            with pytest.raises(TracearrApiError, match="canonical movie identity"):
+                provider.get_activity(
+                    "1",
+                    library_items=[self._inception_item(), self._heat_item()],
+                )
+        finally:
+            patcher.stop()
+
+
+class TestIncompatibleHistoryDoesNotAbortLibrary:
+    def test_unresolved_episode_does_not_abort_a_movie_library(self):
+        episode = dict(EPISODE_HISTORY)
+        episode.update(
+            {
+                "rating_key": None,
+                "parent_rating_key": None,
+                "grandparent_rating_key": None,
+                "library_id": "2",
+                "server_type": "jellyfin",
+                "server_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            }
+        )
+        plex_item = MagicMock()
+        plex_item.guid = "plex://movie/abc"
+        plex_item.ratingKey = 12345
+        plex_item.title = "Inception"
+        plex_item.year = 2010
+        plex_item.type = "movie"
+        plex_item.guids = [MagicMock(id="tmdb://27205")]
+
+        provider, _, patcher = _provider(
+            [
+                (
+                    _path_is("/api/v2/public/history"),
+                    history_response([MOVIE_HISTORY, episode]),
+                ),
+                (
+                    _is_show_media,
+                    FakeResponse(None, status_code=404),
+                ),
+            ]
+        )
+        try:
+            result = provider.get_activity("1", library_items=[plex_item])
+        finally:
+            patcher.stop()
+
+        assert result["movie:tmdb:27205"]["title"] == "Inception"
