@@ -70,7 +70,9 @@ class Tracearr:
 
         self._refs_by_key = {}
         self._local_server_ids = self._unique_local_plex_servers(raw_data, section)
-        if len(self._local_server_ids) > 1:
+        # With server_name set, rating keys from the managed server are
+        # still used even if other Plex servers share this library id.
+        if len(self._local_server_ids) > 1 and not self._managed_server_id():
             logger.warning(
                 "Tracearr history includes %d Plex servers with library id %s; "
                 "rating keys will not be used as activity keys. Set "
