@@ -222,9 +222,11 @@ class TestTracearrIntegrationDocs:
     def test_documents_plex_limits_without_server_name(self):
         text = Path("docs/integrations/tracearr.md").read_text()
         assert (
+            "Deleterr still manages Plex libraries through Radarr and Sonarr. "
             "Tracearr history is matched to those Plex items by rating key "
             "first, then by provider ids"
         ) not in text
+        assert "When `server_name` is set, Tracearr history is matched" in text
         assert "requester-watched exclusion never applies" in text
         assert (
             "no tmdb, tvdb, or imdb GUIDs cannot be matched to Tracearr plays, "

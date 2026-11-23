@@ -16,11 +16,16 @@ tracearr:
   server_name: "Plex"  # Optional: which Tracearr-monitored server to query
 ```
 
-`server_name` is optional. When it is set, Deleterr only uses plays from that server. When it is omitted, plays from every server Tracearr monitors are included, which can protect a Plex item that was watched on Jellyfin or Emby.
+Set `server_name` to the managed Plex server whenever Deleterr is cleaning Plex libraries. When it is set, Deleterr only uses rating keys from that server, and plays from other servers still match through provider ids (so a Jellyfin or Emby play can protect the same Plex title).
+
+When `server_name` is omitted, rating keys are not used. Plays can still match through provider ids, with two limits for Plex:
+
+- The requester-watched exclusion never applies, because that lookup needs a verified Plex server.
+- Plex items with no tmdb, tvdb, or imdb GUIDs cannot be matched to Tracearr plays, so they look unwatched.
 
 ## How it maps onto Deleterr
 
-Deleterr still manages Plex libraries through Radarr and Sonarr. Tracearr history is matched to those Plex items by rating key first, then by provider ids such as `movie:tmdb:27205` or `show:tvdb:81189`, using the media-scoped v2 endpoints documented by Tracearr:
+Deleterr still manages Plex libraries through Radarr and Sonarr. When `server_name` is set, Tracearr history is matched to those Plex items by rating key first, then by provider ids such as `movie:tmdb:27205` or `show:tvdb:81189`. Without `server_name`, only the provider ids are used. Matching uses the media-scoped v2 endpoints documented by Tracearr:
 
 - `GET /api/v2/public/history` loads last-watched times for a library
 - `GET /api/v2/public/media/{ref}/watchers` answers whether a specific user has watched a title
