@@ -200,6 +200,54 @@ class TestFindWatchedData(unittest.TestCase):
         plex_media_item.year = 2004
         self.assertIsNone(find_watched_data(plex_media_item, self.activity_data))
 
+    def test_numeric_rating_key_does_not_substring_match_plex_guid(self):
+        """Numeric activity keys must not match as a substring of a Plex GUID.
+
+        Issue #406: Tautulli history for another title stored under rating key
+        "40" was applied to The Batman because its GUID ends in ...7be040.
+        """
+        activity_data = {
+            "40": {"title": "2012", "year": 2009},
+        }
+        plex_media_item = Mock()
+        plex_media_item.guid = "plex://movie/5d776c8fad5437001f7be040"
+        plex_media_item.ratingKey = 144005
+        plex_media_item.title = "The Batman"
+        plex_media_item.year = 2022
+        self.assertIsNone(find_watched_data(plex_media_item, activity_data))
+
+    def test_exact_rating_key_match_still_works_for_tv_show(self):
+        """Exact rating-key matches still work for TV shows (issue #406)."""
+        activity_data = {
+            "plex://episode/abc123": {"title": "The Simpsons", "year": 2026},
+            "12345": {"title": "The Simpsons", "year": 2026},
+        }
+        plex_media_item = Mock()
+        plex_media_item.guid = "plex://show/def456"
+        plex_media_item.ratingKey = 12345
+        plex_media_item.title = "The Simpsons"
+        plex_media_item.year = 1989
+        self.assertEqual(
+            find_watched_data(plex_media_item, activity_data),
+            activity_data["12345"],
+        )
+
+    def test_real_guid_substring_match_still_works(self):
+        """A non-numeric GUID fragment may still match as a substring (issue #406)."""
+        guid_fragment = "5d776c8fad5437001f7be040"
+        activity_data = {
+            guid_fragment: {"title": "2012", "year": 2009},
+        }
+        plex_media_item = Mock()
+        plex_media_item.guid = f"plex://movie/{guid_fragment}"
+        plex_media_item.ratingKey = 144005
+        plex_media_item.title = "The Batman"
+        plex_media_item.year = 2022
+        self.assertEqual(
+            find_watched_data(plex_media_item, activity_data),
+            activity_data[guid_fragment],
+        )
+
 
 @patch("app.media_cleaner.library_meets_disk_space_threshold", return_value=True)
 @patch("app.media_cleaner._get_config_value", return_value=10)
