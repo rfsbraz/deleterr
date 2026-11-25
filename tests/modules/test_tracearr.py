@@ -1353,3 +1353,40 @@ class TestManagedServerWarning:
 
         assert "12345" in result
         assert all(self.WARNING_SNIPPET not in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("body", [None, {"media_type": "show", "tmdb_id": 42}, {"media_type": "movie"}])
+def test_unresolved_movie_cache_keeps_required_identity_error(body):
+    provider = Tracearr("http://tracearr.example.com", "test")
+    provider._get = MagicMock(return_value=body)
+    entry = {"media_id": "missing"}
+    assert provider._movie_identity_keys(entry) == []
+    with pytest.raises(TracearrApiError, match="canonical movie identity"):
+        provider._movie_identity_keys(entry, required=True)
+    provider._get.assert_called_once()
+
+
+def test_movie_refs_are_reused_across_plays_and_libraries():
+    entry = dict(MOVIE_HISTORY, server_type="jellyfin", rating_key=None,
+                 tmdb_id=None, imdb_id=None, tvdb_id=None)
+    provider = Tracearr("http://tracearr.example.com", "test")
+    provider._fetch_history = lambda section: [entry, dict(entry)]
+    provider._get = MagicMock(return_value={"media_type": "movie", "tmdb_id": 27205})
+    item = MagicMock(type="movie", guid="plex://movie/example", ratingKey="123")
+    item.guids = ["tmdb://27205"]
+    for section in ["1", "2"]:
+        assert "movie:tmdb:27205" in provider.get_activity(section, library_items=[item])
+    provider._get.assert_called_once()
+    other = Tracearr("http://tracearr.example.com", "test")
+    assert other._movie_ref_cache == {}
+
+
+def test_movie_cache_does_not_hide_request_errors_or_override_record_refs():
+    provider = Tracearr("http://tracearr.example.com", "test")
+    provider._get = MagicMock(side_effect=[TracearrApiError("HTTP 429"), {"media_type": "movie", "tmdb_id": 42}])
+    entry = {"media_id": "movie-id"}
+    with pytest.raises(TracearrApiError, match="HTTP 429"):
+        provider._movie_identity_keys(entry, required=True)
+    assert provider._movie_identity_keys(entry, required=True) == ["movie:tmdb:42"]
+    assert provider._movie_identity_keys(dict(entry, tmdb_id=43), required=True) == ["movie:tmdb:43"]
+    assert provider._get.call_count == 2
