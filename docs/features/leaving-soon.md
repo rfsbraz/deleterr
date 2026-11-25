@@ -136,6 +136,24 @@ If a user watches a movie that's in the "Leaving Soon" collection:
 3. The movie is **removed** from the "Leaving Soon" collection
 4. The movie survives deletion
 
+### Keep an item that is leaving soon
+
+Deleterr only deletes an item that is still in the Leaving Soon collection or still has the Leaving Soon label. The item must also still match your deletion rules.
+
+To keep an item after it has been tagged:
+
+1. Open the Leaving Soon collection in Plex.
+2. Remove the item from the collection.
+3. If you also configured a Leaving Soon label, remove that label from the item. Deleterr still treats the item as leaving soon if either the collection or the label remains.
+
+The next run does not delete that item.
+
+This is not a permanent exclusion. If the item still matches your deletion rules, Deleterr can add it back when it next looks for new candidates. If you have not set `duration`, that can happen in the same run. If you have set `duration`, it happens after the current batch is cleared.
+
+If you clear every Leaving Soon marker while a duration batch is still waiting, Deleterr treats the batch as cleared and can tag a new batch on that run. When both a collection and a label are configured, emptying only the collection is not enough. The items stay in the batch until the label is removed too.
+
+To keep the item permanently, add an [exclusion](exclusions.md). The most direct option is a Plex label listed under `exclude.plex_labels`.
+
 ## Tips
 
 ### Adjust Thresholds for Your Schedule
@@ -189,6 +207,7 @@ libraries:
 2. Check that items still match deletion criteria
 3. Verify `action_mode: "delete"` is set
 4. Look for exclusion rules that might be protecting the content
+5. Check whether someone removed the item from the Leaving Soon collection or removed its Leaving Soon label
 
 ### Notifications Not Sending
 
