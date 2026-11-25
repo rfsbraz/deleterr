@@ -48,6 +48,26 @@ class TautulliConfig(BaseModel):
     )
 
 
+class TracearrConfig(BaseModel):
+    """Tracearr connection settings for watch history tracking."""
+
+    url: str = Field(
+        ...,
+        description="URL of your Tracearr server",
+        json_schema_extra={"example": "http://localhost:3000"},
+    )
+    api_key: str = Field(
+        ...,
+        description="Tracearr API key (trr_pub_...). Generate it in Settings > Data & API > API.",
+        json_schema_extra={"example": "trr_pub_YOUR_TRACEARR_API_KEY"},
+    )
+    server_name: Optional[str] = Field(
+        default=None,
+        description="Optional name of the Tracearr-monitored server to query. If omitted, plays from every monitored server are included",
+        json_schema_extra={"example": "Plex"},
+    )
+
+
 class RadarrInstance(BaseModel):
     """Radarr instance connection settings."""
 
@@ -872,7 +892,7 @@ class DeleterrConfig(BaseModel):
     """
     Root configuration for Deleterr.
 
-    Deleterr uses Radarr, Sonarr, and Tautulli to identify and delete media files
+    Deleterr uses Radarr, Sonarr, and Tautulli or Tracearr to identify and delete media files
     based on user-specified criteria.
     """
 
@@ -905,7 +925,11 @@ class DeleterrConfig(BaseModel):
     )
     tautulli: Optional[TautulliConfig] = Field(
         default=None,
-        description="Tautulli connection settings. If not configured, Plex API is used for watch history instead",
+        description="Tautulli connection settings. If configured, Tautulli is used for watch history. Otherwise Tracearr is used when configured, or the Plex API as a final fallback",
+    )
+    tracearr: Optional[TracearrConfig] = Field(
+        default=None,
+        description="Tracearr connection settings. Used for watch history when Tautulli is not configured. Requires Tracearr 2.0 or later (public API v2)",
     )
     radarr: list[RadarrInstance] = Field(
         default_factory=list,

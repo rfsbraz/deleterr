@@ -66,5 +66,6 @@ nav:
     - MDBList: integrations/mdblist.md
     - JustWatch: integrations/justwatch.md
     - Seerr / Overseerr: integrations/overseerr.md
+    - Tracearr: integrations/tracearr.md
   - Operations:
     - Troubleshooting: troubleshooting.md

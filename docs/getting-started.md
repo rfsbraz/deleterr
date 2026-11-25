@@ -99,10 +99,18 @@ plex:
   url: "http://plex:32400"
   token: "YOUR_PLEX_TOKEN"
 
-# Tautulli is optional - if not configured, Plex API is used for watch history
+# Tautulli is optional. If it is not configured, Tracearr is used when
+# configured, otherwise the Plex API is used for watch history.
 tautulli:
   url: "http://tautulli:8181"
   api_key: "YOUR_TAUTULLI_API_KEY"
+
+# Optional alternative to Tautulli (requires Tracearr 2.0+). Used only when
+# tautulli above is omitted. See docs/integrations/tracearr.md.
+# tracearr:
+#   url: "http://tracearr:3000"
+#   api_key: "trr_pub_YOUR_TRACEARR_API_KEY"
+#   server_name: "Plex"
 
 radarr:
   - name: "Radarr"

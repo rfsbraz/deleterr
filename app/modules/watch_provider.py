@@ -8,10 +8,15 @@ from app.modules.tautulli import Tautulli
 
 @runtime_checkable
 class WatchDataProvider(Protocol):
-    """Protocol for watch data providers (Tautulli, Plex, etc.)."""
+    """Protocol for watch data providers (Tautulli, Tracearr, Plex, etc.)."""
 
-    def get_activity(self, section: str) -> Dict[str, Dict]:
-        """Get watch activity for a library section."""
+    def get_activity(self, section: str, library_items=None) -> Dict[str, Dict]:
+        """Get watch activity for a library section.
+
+        library_items is an optional iterable of Plex items in that section.
+        Tracearr uses it to keep only plays that belong to the library;
+        Tautulli and Plex ignore it.
+        """
         ...
 
     def test_connection(self) -> None:
@@ -36,8 +41,9 @@ class WatchDataProvider(Protocol):
 def create_watch_provider(config, ssl_verify=False) -> WatchDataProvider:
     """Create a watch data provider from config.
 
-    If 'tautulli' is configured, uses Tautulli. Otherwise falls back to
-    Plex's built-in watch history API.
+    If 'tautulli' is configured, uses Tautulli. Else if 'tracearr' is
+    configured, uses Tracearr. Otherwise falls back to Plex's built-in
+    watch history API.
 
     Args:
         config: Application config object with settings dict
@@ -47,10 +53,15 @@ def create_watch_provider(config, ssl_verify=False) -> WatchDataProvider:
         A WatchDataProvider instance
 
     Raises:
-        KeyError: If neither tautulli nor plex is configured
+        KeyError: If neither tautulli, tracearr, nor plex is configured
     """
     tautulli_config = config.settings.get("tautulli")
     if tautulli_config:
+        if config.settings.get("tracearr"):
+            logger.info(
+                "Both Tautulli and Tracearr are configured; using Tautulli "
+                "for watch history and ignoring Tracearr."
+            )
         logger.debug("Using Tautulli as watch data provider")
         return Tautulli(
             tautulli_config["url"],
@@ -58,11 +69,32 @@ def create_watch_provider(config, ssl_verify=False) -> WatchDataProvider:
             ssl_verify=ssl_verify,
         )
 
+    tracearr_config = config.settings.get("tracearr")
+    if tracearr_config:
+        from app.modules.tracearr import Tracearr
+
+        logger.debug("Using Tracearr as watch data provider")
+        server_name = (tracearr_config.get("server_name") or "").strip()
+        if not server_name and config.settings.get("plex"):
+            logger.warning(
+                "Tracearr is configured for Plex without server_name. The "
+                "requester-watched exclusion will never apply, and items with no "
+                "tmdb, tvdb, or imdb GUIDs cannot be matched to Tracearr plays, so "
+                "they look unwatched. Set tracearr.server_name to the managed Plex "
+                "server."
+            )
+        return Tracearr(
+            tracearr_config["url"],
+            tracearr_config["api_key"],
+            ssl_verify=ssl_verify,
+            server_name=server_name or None,
+        )
+
     plex_config = config.settings.get("plex")
     if plex_config:
         from app.modules.plex_watch_provider import PlexWatchProvider
 
-        logger.debug("Using Plex as watch data provider (no Tautulli configured)")
+        logger.debug("Using Plex as watch data provider (no Tautulli or Tracearr configured)")
         return PlexWatchProvider(
             plex_config["url"],
             plex_config["token"],
@@ -71,6 +103,7 @@ def create_watch_provider(config, ssl_verify=False) -> WatchDataProvider:
 
     raise KeyError(
         "No watch data provider configured. "
-        "Add 'tautulli' section with 'url' and 'api_key', or configure "
-        "'plex' with 'url' and 'token' to use Plex directly."
+        "Add a 'tautulli' section with 'url' and 'api_key', a 'tracearr' "
+        "section with 'url' and 'api_key', or configure 'plex' with 'url' "
+        "and 'token' to use Plex directly."
     )
