@@ -480,10 +480,16 @@ class MediaCleaner:
         return self.plex.library.section(library.get("name"))
 
     def get_show_activity(self, library, plex_library):
-        return self.watch_provider.get_activity(plex_library.key)
+        return self.watch_provider.get_activity(
+            plex_library.key,
+            library_items=list(plex_library.all()),
+        )
 
     def get_movie_activity(self, library, movies_library):
-        return self.watch_provider.get_activity(movies_library.key)
+        return self.watch_provider.get_activity(
+            movies_library.key,
+            library_items=list(movies_library.all()),
+        )
 
     @staticmethod
     def _library_uses_watch_rules(library):
@@ -1456,9 +1462,13 @@ class MediaCleaner:
                 and self._collection_membership is not COLLECTIONS_UNAVAILABLE
         ):
             logger.debug("Gathering collection watched status")
-            for guid, watched_data in activity_data.items():
-                plex_media_item = self.get_plex_item(plex_guid_item_pair, guid=guid, index=plex_index)
-                if plex_media_item is None:
+            # Walk Plex items through find_watched_data so Tracearr keys
+            # (rating keys, movie:tmdb:..., show:tvdb:...) match the same
+            # way deletion rules do. Looking up activity keys as Plex GUIDs
+            # misses those entries and can fail to protect a collection.
+            for _guids, plex_media_item in plex_guid_item_pair:
+                watched_data = find_watched_data(plex_media_item, activity_data)
+                if watched_data is None:
                     continue
                 last_watched = (datetime.now() - watched_data["last_watched"]).days
                 item_collections = self.get_item_collections(plex_media_item)
@@ -2300,22 +2310,94 @@ def check_excluded_seerr_requester_watch(
 
 
 def find_watched_data(plex_media_item, activity_data):
+    """Return the most recent matching history entry for a Plex item.
+
+    A title, rating-key, or GUID alias can be older than a provider-ref
+    play of the same item. Collect every match and keep the newest
+    last_watched so a later Tracearr key cannot be hidden by an earlier
+    alias. Tautulli and Plex still resolve to the same entry they did
+    before when every alias shares one timestamp.
+    """
+    matches = []
+
     if resp := activity_data.get(plex_media_item.guid):
-        return resp
+        matches.append(resp)
 
     # Match by Plex rating key - needed for TV shows where the activity data
     # GUID is the episode GUID, not the show GUID
     rating_key = getattr(plex_media_item, "ratingKey", None)
     if rating_key and (resp := activity_data.get(str(rating_key))):
-        return resp
+        matches.append(resp)
 
     for guid, history in activity_data.items():
         if guid_matches(plex_media_item, guid) or title_and_year_match(
                 plex_media_item, history
         ):
-            return history
+            matches.append(history)
 
+    # Tracearr keys plays by provider refs (movie:tmdb:27205).
+    for ref in provider_refs_from_plex(plex_media_item):
+        if resp := activity_data.get(ref):
+            matches.append(resp)
+
+    if not matches:
+        return None
+    return max(matches, key=lambda item: item.get("last_watched") or datetime.min)
+
+
+_PROVIDER_GUID = re.compile(
+    r"(?:com\.plexapp\.agents\.)?(themoviedb|tmdb|thetvdb|tvdb|imdb)://([^/?]+)",
+    re.IGNORECASE,
+)
+_PROVIDER_MAP = {
+    "themoviedb": "tmdb",
+    "tmdb": "tmdb",
+    "thetvdb": "tvdb",
+    "tvdb": "tvdb",
+    "imdb": "imdb",
+}
+
+
+def _tracearr_kind(plex_type):
+    if plex_type in ("movie", "show", "episode"):
+        return plex_type
     return None
+
+
+def _plex_guid_strings(plex_media_item):
+    values = []
+    guid = getattr(plex_media_item, "guid", None)
+    if guid:
+        values.append(guid)
+    for entry in getattr(plex_media_item, "guids", None) or []:
+        value = entry.id if hasattr(entry, "id") else entry
+        if value:
+            values.append(value)
+    return values
+
+
+def _parse_provider_guid(raw):
+    match = _PROVIDER_GUID.search(str(raw))
+    if not match:
+        return None
+    return _PROVIDER_MAP[match.group(1).lower()], match.group(2)
+
+
+def provider_refs_from_plex(plex_media_item):
+    kind = _tracearr_kind(getattr(plex_media_item, "type", None))
+    if not kind:
+        return []
+    refs = []
+    seen = set()
+    for raw in _plex_guid_strings(plex_media_item):
+        parsed = _parse_provider_guid(raw)
+        if not parsed:
+            continue
+        ref = f"{kind}:{parsed[0]}:{parsed[1]}"
+        if ref not in seen:
+            seen.add(ref)
+            refs.append(ref)
+    return refs
 
 
 def guid_matches(plex_media_item, guid):

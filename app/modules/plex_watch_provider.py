@@ -57,7 +57,7 @@ class PlexWatchProvider:
     def refresh_library(self, section_id):
         self.plex.library.sectionByID(int(section_id)).refresh()
 
-    def get_activity(self, section) -> Dict[str, Dict]:
+    def get_activity(self, section, library_items=None) -> Dict[str, Dict]:
         """Get watch activity for a library section.
 
         Fetches history from Plex and transforms into the same format as

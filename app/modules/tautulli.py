@@ -41,7 +41,7 @@ class Tautulli:
     def refresh_library(self, section_id):
         self.api.get_library_media_info(section_id=section_id, refresh=True)
 
-    def get_activity(self, section):
+    def get_activity(self, section, library_items=None):
         """
         Get watch activity for a library section.
 
