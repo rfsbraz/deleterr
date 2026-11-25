@@ -13,6 +13,7 @@ from app.media_cleaner import (
     DEFAULT_MAX_ACTIONS_PER_RUN,
     MediaCleaner,
     PlexLibraryIndex,
+    WatchActivityIndex,
     PartialDeletionError,
     check_excluded_radarr_fields,
     find_watched_data,
@@ -3128,3 +3129,53 @@ class TestGuardEmptyWatchActivity:
         with pytest.raises(WatchDataError):
             media_cleaner.get_ordered_candidates(library, MagicMock(), media_type, all_data=[])
         media_cleaner.process_library_rules.assert_not_called()
+
+
+@pytest.mark.parametrize("match_kind", ["exact", "fragment", "rating", "provider", "title", "none"])
+def test_watch_index_matches_legacy_newest_alias_resolution(match_kind):
+    from types import SimpleNamespace
+    item = SimpleNamespace(guid="plex://movie/abcdef40", ratingKey=123,
+                           type="movie", guids=["tmdb://42"], title="Film", year=2000)
+    old = {"title": "Other", "year": 1990, "last_watched": datetime(2020, 1, 1)}
+    recent = dict(old, last_watched=datetime(2026, 1, 1))
+    key = {"exact": item.guid, "fragment": "abcdef", "rating": "123",
+           "provider": "movie:tmdb:42", "title": "unrelated", "none": "40"}[match_kind]
+    if match_kind == "title":
+        recent = dict(recent, title="Film", year=2001)
+    activity = {"unrelated-old": old, key: recent}
+    if match_kind != "none":
+        activity[item.guid] = old if match_kind != "exact" else recent
+    index = WatchActivityIndex(activity)
+    assert find_watched_data(item, index) == find_watched_data(item, activity)
+    assert find_watched_data(item, index) == (None if match_kind == "none" else recent)
+
+
+def test_watch_index_uses_all_title_year_aliases_and_provider_refs():
+    from types import SimpleNamespace
+    item = SimpleNamespace(guid="plex://movie/abc", ratingKey=123, type="movie",
+                           guids=["imdb://tt42", "tmdb://42"], title="Film", year=2000)
+    activity = {}
+    for year in [1999, 2000, 2001, 2002]:
+        activity[f"history-{year}"] = {"title": "Film", "year": year, "last_watched": datetime(year, 1, 1)}
+    activity["movie:imdb:tt42"] = {"title": "Different", "year": 0, "last_watched": datetime(2026, 1, 1)}
+    index = WatchActivityIndex(activity)
+    assert find_watched_data(item, index) == find_watched_data(item, activity)
+    assert find_watched_data(item, index) is activity["movie:imdb:tt42"]
+
+
+def test_watch_index_does_not_rescan_activity_during_repeated_lookups():
+    from types import SimpleNamespace
+    activity = {f"unrelated-{n}": {"title": f"Other {n}", "year": 2000} for n in range(10000)}
+    activity["movie:tmdb:42"] = {"title": "Film", "year": 2000}
+    index = WatchActivityIndex(activity)
+    # Poison iteration after construction. Rules and sorting must use indexes.
+    class NoScan(dict):
+        def items(self):
+            raise AssertionError("Activity was rescanned")
+        def __iter__(self):
+            raise AssertionError("Activity was rescanned")
+    index.by_key = NoScan(index.by_key)
+    item = SimpleNamespace(guid="plex://movie/abc", ratingKey=123, type="movie",
+                           guids=["tmdb://42"], title="Film", year=2000)
+    for _ in range(100):
+        assert find_watched_data(item, index) == activity["movie:tmdb:42"]
