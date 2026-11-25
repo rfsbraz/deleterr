@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3](https://github.com/rfsbraz/deleterr/compare/v0.3.2...v0.3.3) (2026-11-25)
+
+
+### Features
+
+* **scheduler:** write run counts and add a Docker HEALTHCHECK ([#395](https://github.com/rfsbraz/deleterr/issues/395)) ([adf0b23](https://github.com/rfsbraz/deleterr/commit/adf0b2311faeed1673c18e49611a9409595dcaf3))
+* **watch:** add Tracearr as an optional watch-history source ([#402](https://github.com/rfsbraz/deleterr/issues/402)) ([0d5e930](https://github.com/rfsbraz/deleterr/commit/0d5e930e6d114b8cc158f12ca36d3f376e837007))
+
+
+### Bug Fixes
+
+* don't substring-match numeric rating keys against Plex GUIDs ([#406](https://github.com/rfsbraz/deleterr/issues/406)) ([#407](https://github.com/rfsbraz/deleterr/issues/407)) ([6ae500e](https://github.com/rfsbraz/deleterr/commit/6ae500e466c336cedb55bc1ab5a5322cd9bf4682))
+
 ## [0.3.2](https://github.com/rfsbraz/deleterr/compare/v0.3.1...v0.3.2) (2026-11-09)
 
 
