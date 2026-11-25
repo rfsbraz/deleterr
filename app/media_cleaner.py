@@ -2310,9 +2310,11 @@ def find_watched_data(plex_media_item, activity_data):
         return resp
 
     for guid, history in activity_data.items():
-        if guid_matches(plex_media_item, guid) or title_and_year_match(
-                plex_media_item, history
-        ):
+        # Numeric keys are rating keys, matched exactly above. A substring test
+        # would find "40" inside an unrelated item's hex GUID.
+        if (
+                not guid.isdigit() and guid_matches(plex_media_item, guid)
+        ) or title_and_year_match(plex_media_item, history):
             return history
 
     return None
