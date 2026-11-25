@@ -19,15 +19,33 @@ Deleterr uses Radarr, Sonarr, and Tautulli or Tracearr to identify and delete me
 - **Leaving Soon Collections** - Warn users before content is removed with Plex collections and notifications
 - **Built-in Scheduler** - Runs on a schedule automatically (daily, weekly, or custom cron)
 
-## deleterr or Maintainerr?
+## deleterr, Maintainerr, or Janitorr?
 
-[Maintainerr](https://github.com/Maintainerr/Maintainerr) does the same job. This section was checked against Maintainerr v3.30.2 (its README and [docs](https://docs.maintainerr.info/)).
+[Maintainerr](https://github.com/Maintainerr/Maintainerr) and [Janitorr](https://github.com/Schaka/janitorr) do the same job. Maintainerr facts were checked against Maintainerr v3.30.2 (its README and [docs](https://docs.maintainerr.info/)). Janitorr facts were checked against its [README on main](https://github.com/Schaka/janitorr/blob/main/README.md) on 23 November 2026, at commit [30e8f8f](https://github.com/Schaka/janitorr/commit/30e8f8f9c813c4b87313a8e81256d5bb858eceb2), which matches release [v2.2.2](https://github.com/Schaka/janitorr/releases/tag/v2.2.2).
+
+| Feature | Deleterr | Maintainerr | Janitorr |
+| --- | --- | --- | --- |
+| Plex | Yes | Yes | No |
+| Jellyfin | No | Yes | Yes |
+| Emby | No | Yes | Yes |
+| Web UI | No | Yes | No |
+| YAML config | Yes, the whole setup | Rule import and export | Yes, the whole setup |
+| Dry run | Yes, on by default | No dedicated switch | Yes, on by default |
+| Leaving soon | Yes, Plex collections | Yes, including a Plex home shelf | Yes, on the Jellyfin home screen |
+| Seerr | Yes | Yes | Yes |
+| Ombi | No | Yes | No |
+| Disk-space-aware deletion | Yes | Yes | Yes |
+| Trakt, MDBList, or JustWatch list exclusions | Yes | No | No |
+| Actions other than delete | No | Yes (unmonitor, quality profile, overlays) | No |
+| Watch history | Tautulli, Tracearr, or Plex | Media server, plus Tautulli, Streamystats, or Tracearr | Optional, via Jellystat, Streamystats, or janitorr-stats |
+
+Janitorr's README says Emby is implemented and tested, but the author does not use Emby and relies on bug reports for it. The README also says Janitorr does not delete items after they were watched.
 
 Pick **Maintainerr** if you:
 
 - want a web UI to build rules, browse collections and test a rule against a title
-- run Jellyfin or Emby (Deleterr only works with Plex)
-- use Ombi, or want rules based on Sportarr, Streamystats or Tracearr
+- run Jellyfin or Emby and want a web UI (Deleterr only works with Plex)
+- use Ombi, or want rules based on Sportarr or Streamystats
 - want actions other than delete, such as unmonitor or a quality profile change, or poster overlays
 
 Pick **Deleterr** if you:
@@ -36,7 +54,13 @@ Pick **Deleterr** if you:
 - want exclusions from Trakt lists, MDBList lists or JustWatch streaming availability
 - want a dry run switch: `dry_run` is on by default and logs what would be deleted without deleting anything
 
-Both can put titles in a Plex collection for a grace period before removing them, and both work with Seerr.
+Pick **Janitorr** if you:
+
+- run Jellyfin or Emby and want the setup in a YAML file, without a web UI
+- want disk-space-aware deletion, tag-based delete schedules, or season-by-season TV cleanup
+- want a Leaving Soon collection on the Jellyfin home screen
+
+Deleterr and Maintainerr can put titles in a Plex collection for a grace period before removing them. Janitorr can show a Leaving Soon collection on the Jellyfin home screen. All three work with Seerr.
 
 ## Documentation
 
