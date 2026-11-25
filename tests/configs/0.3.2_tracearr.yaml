@@ -1,0 +1,35 @@
+# Config that uses Tracearr instead of Tautulli for watch history
+plex:
+  url: "http://localhost:32400"
+  token: "YOUR_PLEX_TOKEN"
+
+radarr:
+  - name: "Radarr"
+    url: "http://localhost:7878"
+    api_key: "YOUR_RADARR_API_KEY"
+
+sonarr:
+  - name: "Sonarr"
+    url: "http://localhost:8989"
+    api_key: "YOUR_SONARR_API_KEY"
+
+tracearr:
+  url: "http://localhost:3000"
+  api_key: "trr_pub_YOUR_TRACEARR_API_KEY"
+  server_name: "Plex"
+
+dry_run: true
+
+libraries:
+  - name: "Movies"
+    radarr: "Radarr"
+    action_mode: "delete"
+    last_watched_threshold: 90
+    added_at_threshold: 180
+    max_actions_per_run: 10
+  - name: "TV Shows"
+    sonarr: "Sonarr"
+    action_mode: "delete"
+    last_watched_threshold: 365
+    added_at_threshold: 180
+    max_actions_per_run: 10

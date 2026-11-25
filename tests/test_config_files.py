@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from app.config import Config
 from app.deleterr import load_config
-from app.modules import tautulli, trakt, radarr, seerr
+from app.modules import tautulli, trakt, radarr, seerr, tracearr
 
 
 class TestConfigFiles(unittest.TestCase):
@@ -16,9 +16,11 @@ class TestConfigFiles(unittest.TestCase):
     @patch("app.modules.tautulli.RawAPI")
     @patch("app.modules.radarr.RadarrAPI")
     @patch("app.modules.plex_watch_provider.PlexServer")
+    @patch.object(tracearr.Tracearr, "test_connection")
     def validate(
         self,
         filename,
+        mock_tracearr_test_connection,
         mock_plex_server,
         mock_radarr_api,
         mock_tautulli_rawapi,

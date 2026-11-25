@@ -167,3 +167,24 @@ def test_watched_collection_does_not_protect_items_in_another_library(media_clea
     ))
 
     assert _titles(candidates) == ["My Neighbor Totoro"]
+
+
+def test_tracearr_provider_ref_protects_collection(media_cleaner):
+    """Activity keyed only the way Tracearr does (no Plex GUID) still protects."""
+    plex_library, radarr = _setup(media_cleaner)
+    watched, candidate = plex_library.all.return_value
+    watched.guid = "plex://movie/abc"
+    watched.guids = [MagicMock(id="tmdb://27205")]
+    watched.type = "movie"
+    watched.ratingKey = 99
+    media_cleaner.watch_provider.get_activity.return_value = {
+        "movie:tmdb:27205": {
+            "last_watched": datetime.now() - timedelta(days=5),
+            "title": "Castle in the Sky",
+            "year": 2001,
+        }
+    }
+
+    candidates = media_cleaner.get_ordered_candidates(LIBRARY, radarr, "movie")
+
+    assert _titles(candidates) == []

@@ -533,14 +533,57 @@ class Config:
         if tautulli_config:
             return self._validate_tautulli_watch_provider()
 
+        if self.settings.get("tracearr"):
+            return self._validate_tracearr_watch_provider()
+
         return self._validate_plex_watch_provider()
+
+    def _validate_tracearr_watch_provider(self):
+        tracearr_config = self.settings.get("tracearr")
+        try:
+            from app.modules.tracearr import Tracearr
+
+            ssl_verify = self.settings.get("ssl_verify", False)
+            provider = Tracearr(
+                tracearr_config["url"],
+                tracearr_config["api_key"],
+                ssl_verify=ssl_verify,
+                server_name=tracearr_config.get("server_name"),
+            )
+            provider.test_connection()
+            logger.info("Using Tracearr as watch data provider (no Tautulli configured)")
+            return True
+        except KeyError:
+            logger.error(
+                "Tracearr configuration is incomplete. "
+                "Add a 'tracearr' section with 'url' and 'api_key' to your config."
+            )
+            return False
+        except Exception as err:
+            url = (tracearr_config or {}).get("url", "unknown")
+            error_msg = str(err).lower()
+            if "401" in error_msg or "403" in error_msg or "unauthorized" in error_msg:
+                logger.error(
+                    f"Tracearr authentication failed at {url}: {err}. "
+                    "Verify your API key is an owner key from Settings > Data & API > API."
+                )
+            elif is_transient_exception(err):
+                logger.error(
+                    f"Cannot reach Tracearr at {url}: {err}. "
+                    "Check the URL and ensure Tracearr 2.0 or later is running."
+                )
+                self._last_failure_transient = True
+            else:
+                logger.error(f"Tracearr connection failed at {url}: {err}")
+            return False
 
     def _validate_plex_watch_provider(self):
         plex_config = self.settings.get("plex")
         if not plex_config:
             logger.error(
                 "No watch data provider configured. "
-                "Add 'tautulli' section with 'url' and 'api_key', or configure "
+                "Add a 'tautulli' section with 'url' and 'api_key', a 'tracearr' "
+                "section with 'url' and 'api_key', or configure "
                 "'plex' with 'url' and 'token' to use Plex directly."
             )
             return False
@@ -553,7 +596,7 @@ class Config:
                 plex_config["url"], plex_config["token"], ssl_verify=ssl_verify
             )
             plex_provider.test_connection()
-            logger.info("Using Plex as watch data provider (no Tautulli configured)")
+            logger.info("Using Plex as watch data provider (no Tautulli or Tracearr configured)")
             return True
         except Exception as err:
             url = plex_config.get("url", "unknown")
