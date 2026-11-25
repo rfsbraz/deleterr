@@ -1353,3 +1353,26 @@ class TestManagedServerWarning:
 
         assert "12345" in result
         assert all(self.WARNING_SNIPPET not in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("media_type", ["unknown", "live", "trailer", "show", None])
+@pytest.mark.parametrize("local", [False, True])
+def test_unclassified_play_without_safe_rating_key_fails_closed(media_type, local):
+    entry = dict(MOVIE_HISTORY, media_type=media_type, rating_key=None)
+    provider = Tracearr("http://tracearr.example.com", "test")
+    provider._server_id = SERVER_ID
+    provider._fetch_history = lambda section: [MOVIE_HISTORY, entry]
+    if not local:
+        entry["server_id"] = "another-server"
+    item = MagicMock(type="show" if media_type == "show" else "movie",
+                     guid="plex://movie/example", ratingKey="123")
+    item.guids = []
+    with pytest.raises(TracearrApiError, match="canonical identity"):
+        provider.get_activity("1", library_items=[item])
+
+
+@pytest.mark.parametrize("media_type", ["unknown", "live", "trailer"])
+def test_local_unclassified_play_with_rating_key_is_protected(media_type):
+    provider = Tracearr("http://tracearr.example.com", "test")
+    keys = provider._activity_keys(dict(MOVIE_HISTORY, media_type=media_type), local=True)
+    assert str(MOVIE_HISTORY["rating_key"]) in keys

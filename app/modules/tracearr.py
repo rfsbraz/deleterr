@@ -229,7 +229,7 @@ class Tracearr:
                 # Rating-key protection for the show is unavailable; the
                 # show:* mapping must be resolved or the library skipped.
                 required = True
-            elif media_type == "movie" and not entry.get("rating_key"):
+            elif media_type != "episode" and not entry.get("rating_key"):
                 required = True
         keys.extend(self._identity_keys(entry, required=required))
         return keys
@@ -295,6 +295,11 @@ class Tracearr:
         elif media_type == "episode":
             keys.extend(self._provider_refs("episode", entry))
             keys.extend(self._show_identity_keys(entry, required=required))
+        elif required:
+            raise TracearrApiError(
+                f"Tracearr cannot resolve a canonical identity for media type {media_type!r}; "
+                "incomplete history cannot be used for deletion decisions."
+            )
         if entry.get("media_id"):
             keys.append(str(entry["media_id"]))
         return keys
