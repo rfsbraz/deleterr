@@ -37,7 +37,7 @@ Deleterr uses Radarr, Sonarr, and Tautulli or Tracearr to identify and delete me
 | Disk-space-aware deletion | Yes | Yes | Yes |
 | Trakt, MDBList, or JustWatch list exclusions | Yes | No | No |
 | Actions other than delete | No | Yes (unmonitor, quality profile, overlays) | No |
-| Watch history | Tautulli or Plex | Media server, plus Tautulli, Streamystats, or Tracearr | Optional, via Jellystat, Streamystats, or janitorr-stats |
+| Watch history | Tautulli, Tracearr, or Plex | Media server, plus Tautulli, Streamystats, or Tracearr | Optional, via Jellystat, Streamystats, or janitorr-stats |
 
 Janitorr's README says Emby is implemented and tested, but the author does not use Emby and relies on bug reports for it. The README also says Janitorr does not delete items after they were watched.
 
@@ -45,7 +45,7 @@ Pick **Maintainerr** if you:
 
 - want a web UI to build rules, browse collections and test a rule against a title
 - run Jellyfin or Emby and want a web UI (Deleterr only works with Plex)
-- use Ombi, or want rules based on Sportarr, Streamystats or Tracearr
+- use Ombi, or want rules based on Sportarr or Streamystats
 - want actions other than delete, such as unmonitor or a quality profile change, or poster overlays
 
 Pick **Deleterr** if you:
