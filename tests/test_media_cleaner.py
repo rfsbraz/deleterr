@@ -3157,6 +3157,14 @@ def test_watch_index_uses_all_title_year_aliases_and_provider_refs():
     activity = {}
     for year in [1999, 2000, 2001, 2002]:
         activity[f"history-{year}"] = {"title": "Film", "year": year, "last_watched": datetime(year, 1, 1)}
+    # The newer 2002 entry must not beat the in-tolerance 2001 title alias.
+    assert find_watched_data(item, WatchActivityIndex(activity)) is activity["history-2001"]
+    assert find_watched_data(item, WatchActivityIndex(activity)) == find_watched_data(item, activity)
+    # A later insertion for the same title/year must not overwrite a newer watch.
+    activity["same-year-newest"] = {"title": "Film", "year": 2000, "last_watched": datetime(2025, 1, 1)}
+    activity["same-year-older"] = {"title": "Film", "year": 2000, "last_watched": datetime(2024, 1, 1)}
+    assert find_watched_data(item, WatchActivityIndex(activity)) is activity["same-year-newest"]
+    assert find_watched_data(item, WatchActivityIndex(activity)) == find_watched_data(item, activity)
     activity["movie:imdb:tt42"] = {"title": "Different", "year": 0, "last_watched": datetime(2026, 1, 1)}
     index = WatchActivityIndex(activity)
     assert find_watched_data(item, index) == find_watched_data(item, activity)
