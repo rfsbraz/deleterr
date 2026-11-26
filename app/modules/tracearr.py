@@ -50,6 +50,7 @@ class Tracearr:
         self._refs_by_key = {}
         self._local_server_ids = set()
         self._show_ref_cache = {}
+        self._movie_ref_cache = {}
 
     def test_connection(self):
         body = self._get(f"{API_PREFIX}/servers")
@@ -308,12 +309,17 @@ class Tracearr:
         """Resolve movie:* refs, including via GET /media/{media_id}."""
         refs = self._provider_refs("movie", entry)
         if not refs and entry.get("media_id"):
-            body = self._get(
-                f"{API_PREFIX}/media/{quote(str(entry['media_id']), safe=':')}",
-                allow_404=True,
-            )
-            if isinstance(body, dict) and body.get("media_type") == "movie":
-                refs = self._provider_refs("movie", body)
+            cache_key = str(entry["media_id"])
+            if cache_key not in self._movie_ref_cache:
+                body = self._get(
+                    f"{API_PREFIX}/media/{quote(cache_key, safe=':')}",
+                    allow_404=True,
+                )
+                resolved = []
+                if isinstance(body, dict) and body.get("media_type") == "movie":
+                    resolved = self._provider_refs("movie", body)
+                self._movie_ref_cache[cache_key] = resolved
+            refs = self._movie_ref_cache[cache_key]
         if required and not any(key.startswith("movie:") for key in refs):
             target = entry.get("media_id") or "movie"
             raise TracearrApiError(

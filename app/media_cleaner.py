@@ -1427,6 +1427,9 @@ class MediaCleaner:
             self, library_config, plex_library, all_data, activity_data, trakt_movies,
             radarr_instance=None, sonarr_instance=None, mdblist_items=None
     ):
+        # One immutable snapshot serves collection protection, sorting and rules.
+        activity_data = WatchActivityIndex(activity_data)
+
         # get the time thresholds from the config
         last_watched_threshold = library_config.get("last_watched_threshold", None)
         added_at_threshold = library_config.get("added_at_threshold", None)
@@ -2309,6 +2312,56 @@ def check_excluded_seerr_requester_watch(
     return True  # Allow: requester has watched
 
 
+class WatchActivityIndex:
+    """Index a library's activity snapshot without scanning it for each item.
+
+    Candidate substring lengths preserve legacy GUID alias matching without
+    storing a dictionary per character. Numeric keys remain exact-only.
+    Lookup work depends on the Plex GUID length, not the watch history size.
+    """
+
+    def __init__(self, activity_data):
+        self.by_key = dict(activity_data)
+        self.by_title_year = {}
+        self.guid_key_lengths = set()
+        for key, history in self.by_key.items():
+            title_year = (history["title"], history["year"])
+            if history["year"]:
+                self._remember(self.by_title_year, title_year, history)
+            if not key.isdigit():
+                self.guid_key_lengths.add(len(key))
+
+    @staticmethod
+    def _remember(mapping, key, history):
+        previous = mapping.get(key)
+        if previous is None or (history.get("last_watched") or datetime.min) > (
+            previous.get("last_watched") or datetime.min
+        ):
+            mapping[key] = history
+
+    def find(self, item):
+        matches = []
+        for key in [item.guid, str(getattr(item, "ratingKey", "")), *provider_refs_from_plex(item)]:
+            if history := self.by_key.get(key):
+                matches.append(history)
+        if item.year:
+            for year in (item.year - 1, item.year, item.year + 1):
+                if history := self.by_title_year.get((item.title, year)):
+                    matches.append(history)
+        matches.extend(self._guid_matches(item.guid))
+        return max(matches, key=lambda history: history.get("last_watched") or datetime.min, default=None)
+
+    def _guid_matches(self, guid):
+        # Probe only lengths that can occur in this GUID, never the history keys.
+        for length in range(len(guid) + 1):
+            if length not in self.guid_key_lengths:
+                continue
+            for start in range(len(guid) - length + 1):
+                fragment = guid[start:start + length]
+                if not fragment.isdigit() and (history := self.by_key.get(fragment)):
+                    yield history
+
+
 def find_watched_data(plex_media_item, activity_data):
     """Return the most recent matching history entry for a Plex item.
 
@@ -2318,6 +2371,8 @@ def find_watched_data(plex_media_item, activity_data):
     alias. Tautulli and Plex still resolve to the same entry they did
     before when every alias shares one timestamp.
     """
+    if isinstance(activity_data, WatchActivityIndex):
+        return activity_data.find(plex_media_item)
     matches = []
 
     if resp := activity_data.get(plex_media_item.guid):
