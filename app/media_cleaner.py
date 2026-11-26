@@ -2315,25 +2315,21 @@ def check_excluded_seerr_requester_watch(
 class WatchActivityIndex:
     """Index a library's activity snapshot without scanning it for each item.
 
-    A trie preserves legacy GUID substring matching, including fragments that
-    are not provider refs. Numeric keys remain exact-only. Lookup work depends
-    on the Plex GUID length, not the size of the watch history.
+    Candidate substring lengths preserve legacy GUID alias matching without
+    storing a dictionary per character. Numeric keys remain exact-only.
+    Lookup work depends on the Plex GUID length, not the watch history size.
     """
 
     def __init__(self, activity_data):
         self.by_key = dict(activity_data)
         self.by_title_year = {}
-        self.guid_trie = {}
-        self._terminal = object()
+        self.guid_key_lengths = set()
         for key, history in self.by_key.items():
             title_year = (history["title"], history["year"])
             if history["year"]:
                 self._remember(self.by_title_year, title_year, history)
             if not key.isdigit():
-                node = self.guid_trie
-                for char in key:
-                    node = node.setdefault(char, {})
-                self._remember(node, self._terminal, history)
+                self.guid_key_lengths.add(len(key))
 
     @staticmethod
     def _remember(mapping, key, history):
@@ -2356,17 +2352,14 @@ class WatchActivityIndex:
         return max(matches, key=lambda history: history.get("last_watched") or datetime.min, default=None)
 
     def _guid_matches(self, guid):
-        # Start at every GUID position to retain arbitrary substring aliases.
-        for start in range(len(guid) + 1):
-            node = self.guid_trie
-            if self._terminal in node:
-                yield node[self._terminal]
-            for position in range(start, len(guid)):
-                node = node.get(guid[position])
-                if node is None:
-                    break
-                if self._terminal in node:
-                    yield node[self._terminal]
+        # Probe only lengths that can occur in this GUID, never the history keys.
+        for length in range(len(guid) + 1):
+            if length not in self.guid_key_lengths:
+                continue
+            for start in range(len(guid) - length + 1):
+                fragment = guid[start:start + length]
+                if not fragment.isdigit() and (history := self.by_key.get(fragment)):
+                    yield history
 
 
 def find_watched_data(plex_media_item, activity_data):
