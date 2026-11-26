@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4](https://github.com/rfsbraz/deleterr/compare/v0.3.3...v0.3.4) (2026-11-26)
+
+
+### Bug Fixes
+
+* **tracearr:** require safe identity for unclassified plays ([#411](https://github.com/rfsbraz/deleterr/issues/411)) ([dc663b8](https://github.com/rfsbraz/deleterr/commit/dc663b8ae00ce0e55a2e6cb1685daae7f1f8cb4d))
+
+
+### Performance
+
+* **history:** index watch activity once per library ([#413](https://github.com/rfsbraz/deleterr/issues/413)) ([7a81637](https://github.com/rfsbraz/deleterr/commit/7a8163751db43812cc8e310268e6d3233230631a))
+* **tracearr:** cache movie provider refs by media id ([#412](https://github.com/rfsbraz/deleterr/issues/412)) ([a45d57d](https://github.com/rfsbraz/deleterr/commit/a45d57d4e843dd496c66478b965db2e6456c1840))
+
 ## [0.3.3](https://github.com/rfsbraz/deleterr/compare/v0.3.2...v0.3.3) (2026-11-25)
 
 
